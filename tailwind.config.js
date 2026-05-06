@@ -2,8 +2,14 @@
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        border: "oklch(var(--border))",
+        background: "oklch(var(--background))",
+        foreground: "oklch(var(--foreground))",
+        ring: "oklch(var(--ring))",
+      },
+    },
   },
   plugins: [],
 }
-
