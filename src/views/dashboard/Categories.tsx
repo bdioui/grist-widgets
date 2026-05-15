@@ -1,6 +1,5 @@
-import { useState } from 'react'
 
-export default function Categories(props) {
+export default function Categories() {
     return (
         <div>
             Categories

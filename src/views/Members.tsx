@@ -1,6 +1,5 @@
-import { useState } from 'react'
 
-export default function Members(props) {
+export default function Members() {
     
     return (
         <div>

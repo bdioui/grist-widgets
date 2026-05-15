@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import {} from 'react'
 
-export default function Partners(props) {
+export default function Partners() {
     
     return (
         <div>

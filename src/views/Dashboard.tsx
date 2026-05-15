@@ -4,7 +4,7 @@ import Calendar from './dashboard/Calendar'
 import Categories from './dashboard/Categories'
 import Tasks from './dashboard/Tasks'
 
-export default function Dashboard(props) {
+export default function Dashboard() {
 
     const [viewMode, setViewMode] = useState('Categories')
 
