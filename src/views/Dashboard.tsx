@@ -6,7 +6,7 @@ import Tasks from './dashboard/Tasks'
 
 export default function Dashboard() {
 
-    const [viewMode, setViewMode] = useState('Categories')
+    const [viewMode, setViewMode] = useState<'Categories' | 'Tâches' | 'Calendrier'>('Categories')
 
     const categoriesIcons = {
         'Categories':<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-tag" viewBox="0 0 16 16">
@@ -28,7 +28,7 @@ export default function Dashboard() {
 
         <div className="m-5 min-h-screen">
             <div className="border-b border-b-gray-200 flex items-center gap-2">
-                {['Categories', 'Tâches', 'Calendrier'].map((mode) => (
+                {(['Categories', 'Tâches', 'Calendrier'] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
