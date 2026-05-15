@@ -3,7 +3,7 @@ import type {
     ActionCard, ProjectCall, Project, FinancialAgreement,
     Phd, MobilityGrant, ToDoList, ToDoItem,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
-    MemberActionCard, ProjectActionCard,
+    MemberActionCard, AxisActionCard, ProjectActionCard,
 } from '@/lib/types'
 
 export const mockStatuses: Status[] = [
@@ -129,6 +129,19 @@ export const mockMemberActionCards: MemberActionCard[] = [
     { id: 7, member_id: 2, action_card_id: 9,  role: 'Responsable'  },
     { id: 8, member_id: 4, action_card_id: 9,  role: 'Contributeur' },
     { id: 9, member_id: 3, action_card_id: 10, role: 'Responsable'  },
+]
+
+export const mockAxisActionCards: AxisActionCard[] = [
+    { id: 1, axis_id: 1, action_card_id: 1  },
+    { id: 2, axis_id: 1, action_card_id: 2  },
+    { id: 3, axis_id: 1, action_card_id: 3  },
+    { id: 4, axis_id: 2, action_card_id: 4  },
+    { id: 5, axis_id: 2, action_card_id: 5  },
+    { id: 6, axis_id: 2, action_card_id: 9  },
+    { id: 7, axis_id: 3, action_card_id: 8  },
+    { id: 8, axis_id: 1, action_card_id: 7  },
+    { id: 9, axis_id: 2, action_card_id: 10 },
+    { id: 10, axis_id: 2, action_card_id: 11 },
 ]
 
 export const mockProjectActionCards: ProjectActionCard[] = [

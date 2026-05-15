@@ -5,6 +5,7 @@ import DraggableCard from './DraggableCard'
 import DroppableColumn from './DroppableColumn'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
     DropdownMenu,
@@ -13,10 +14,11 @@ import {
     DropdownMenuCheckboxItem,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { SlidersHorizontal, Plus } from 'lucide-react'
-import { getActionCardsFull, updateActionCard } from '@/lib/api'
-import type { ActionCardFull } from '@/lib/types'
+import { SlidersHorizontal, Plus, Pencil, Search, X, Users } from 'lucide-react'
+import { getActionCardsFull, updateActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards } from '@/lib/api'
+import type { ActionCardFull, Category, Axis, Member, Partner, AxisActionCard, MemberActionCard } from '@/lib/types'
 import ActionCardSheet from './ActionCardSheet'
+import CategorySheet from './CategorySheet'
 
 // --- Mapping API → ActionCardData ---
 
@@ -25,7 +27,6 @@ function toCardData(card: ActionCardFull): ActionCardData {
         id:          card.id,
         title:       card.title,
         description: card.description || undefined,
-        color:       card.color || undefined,
         status: {
             id:      card.status.id,
             label:   card.status.label,
@@ -82,6 +83,125 @@ function buildColumnGroups(cards: ActionCardData[]): ColumnGroup[] {
     return Array.from(groups.values())
 }
 
+// --- Filtre membres : dropdown avec recherche et groupement par établissement ---
+
+type MemberFilterProps = {
+    allMembers: Member[]
+    allPartners: Partner[]
+    selectedIds: number[]
+    onChangeIds: (ids: number[]) => void
+}
+
+function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: MemberFilterProps) {
+    const [query, setQuery] = useState('')
+    const partnerMap = new Map(allPartners.map(p => [p.id, p]))
+
+    const filtered = query.trim() === ''
+        ? allMembers
+        : allMembers.filter(m =>
+            `${m.first_name} ${m.last_name}`.toLowerCase().includes(query.toLowerCase())
+        )
+
+    // Grouper par établissement
+    const groupMap = new Map<number, { partner: Partner; members: Member[] }>()
+    for (const m of filtered) {
+        const partner = partnerMap.get(m.partner_id)
+        if (!partner) continue
+        if (!groupMap.has(partner.id)) groupMap.set(partner.id, { partner, members: [] })
+        groupMap.get(partner.id)!.members.push(m)
+    }
+    const groups = Array.from(groupMap.values())
+
+    function toggle(id: number) {
+        onChangeIds(selectedIds.includes(id)
+            ? selectedIds.filter(i => i !== id)
+            : [...selectedIds, id]
+        )
+    }
+
+    function toggleGroup(members: Member[]) {
+        const ids = members.map(m => m.id)
+        const allChecked = ids.every(id => selectedIds.includes(id))
+        onChangeIds(allChecked
+            ? selectedIds.filter(id => !ids.includes(id))
+            : [...new Set([...selectedIds, ...ids])]
+        )
+    }
+
+    function groupState(members: Member[]): boolean | 'indeterminate' {
+        const count = members.filter(m => selectedIds.includes(m.id)).length
+        if (count === 0) return false
+        if (count === members.length) return true
+        return 'indeterminate'
+    }
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant={selectedIds.length > 0 ? 'default' : 'outline'}
+                    size="sm"
+                    className="gap-2 rounded-md"
+                >
+                    <Users size={14} />
+                    Membres
+                    {selectedIds.length > 0 && (
+                        <span className="text-xs opacity-75">{selectedIds.length}</span>
+                    )}
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-60">
+                <div className="px-2 py-1.5">
+                    <Input
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Rechercher un membre..."
+                        className="h-7 text-xs"
+                    />
+                </div>
+                <DropdownMenuSeparator />
+                {groups.map((group, i) => {
+                    const state = groupState(group.members)
+                    return (
+                        <div key={group.partner.id}>
+                            {i > 0 && <DropdownMenuSeparator />}
+                            <DropdownMenuCheckboxItem
+                                checked={state === true}
+                                onCheckedChange={() => toggleGroup(group.members)}
+                                className="font-medium gap-2"
+                            >
+                                <span
+                                    className="w-2.5 h-2.5 rounded-full shrink-0 border border-border"
+                                    style={group.partner.color ? { backgroundColor: group.partner.color } : {}}
+                                />
+                                {group.partner.name}
+                            </DropdownMenuCheckboxItem>
+                            {group.members.map(m => (
+                                <DropdownMenuCheckboxItem
+                                    key={m.id}
+                                    checked={selectedIds.includes(m.id)}
+                                    onCheckedChange={() => toggle(m.id)}
+                                    className="pl-7"
+                                >
+                                    {m.first_name} {m.last_name}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                        </div>
+                    )
+                })}
+                {selectedIds.length > 0 && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem checked={false} onCheckedChange={() => onChangeIds([])}>
+                            Tout effacer
+                        </DropdownMenuCheckboxItem>
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
 // --- Composant ---
 
 export default function Categories() {
@@ -92,15 +212,36 @@ export default function Categories() {
     const [columnGroups, setColumnGroups] = useState<ColumnGroup[]>([])
     const [activeCard, setActiveCard]     = useState<ActionCardData | null>(null)
     const [overId, setOverId]             = useState<string | null>(null)
-    const [sheetOpen, setSheetOpen]       = useState(false)
+    const [sheetOpen, setSheetOpen]             = useState(false)
+    const [catSheetOpen, setCatSheetOpen]       = useState(false)
+    const [editingCategory, setEditingCategory] = useState<Category | undefined>()
+
+    // Données de filtre
+    const [allAxes,    setAllAxes]    = useState<Axis[]>([])
+    const [allMembers, setAllMembers] = useState<Member[]>([])
+    const [allPartners, setAllPartners] = useState<Partner[]>([])
+    const [axisLinks,  setAxisLinks]  = useState<AxisActionCard[]>([])
+    const [memberLinks, setMemberLinks] = useState<MemberActionCard[]>([])
+
+    // États des filtres
+    const [selectedAxeIds,    setSelectedAxeIds]    = useState<number[]>([])
+    const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([])
+    const [searchQuery,       setSearchQuery]       = useState('')
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
     )
 
     useEffect(() => {
-        getActionCardsFull()
-            .then(data => {
+        Promise.all([
+            getActionCardsFull(),
+            getAxes(),
+            getMembers(),
+            getPartners(),
+            getAllAxisActionCards(),
+            getAllMemberActionCards(),
+        ])
+            .then(([data, axes, members, partners, axLinks, memLinks]) => {
                 const mapped = data.map(toCardData)
                 const groups = buildColumnGroups(mapped)
                 const allIds = mapped.map(c => c.category.id)
@@ -108,6 +249,11 @@ export default function Categories() {
                 setCards(mapped)
                 setColumnGroups(groups)
                 setVisibleIds([...new Set(allIds)])
+                setAllAxes(axes)
+                setAllMembers(members)
+                setAllPartners(partners)
+                setAxisLinks(axLinks)
+                setMemberLinks(memLinks)
             })
             .catch(err => setError(err.message))
             .finally(() => setLoading(false))
@@ -189,6 +335,78 @@ export default function Categories() {
             })
     }
 
+    function toggleAxe(id: number) {
+        setSelectedAxeIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
+    }
+
+    function toggleMember(id: number) {
+        setSelectedMemberIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
+    }
+
+    // Cartes filtrées selon les 3 critères
+    const filteredCards = cards.filter(card => {
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase()
+            if (!card.title.toLowerCase().includes(q) && !(card.description ?? '').toLowerCase().includes(q)) return false
+        }
+        if (selectedAxeIds.length > 0) {
+            const cardAxes = axisLinks.filter(l => l.action_card_id === card.id).map(l => l.axis_id)
+            if (!selectedAxeIds.some(id => cardAxes.includes(id))) return false
+        }
+        if (selectedMemberIds.length > 0) {
+            const cardMembers = memberLinks.filter(l => l.action_card_id === card.id).map(l => l.member_id)
+            const isOwner = card.owner && selectedMemberIds.includes(card.owner.id)
+            const isMember = selectedMemberIds.some(id => cardMembers.includes(id))
+            if (!isOwner && !isMember) return false
+        }
+        return true
+    })
+
+    function openEditCategory(cat: Category) {
+        setEditingCategory(cat)
+        setCatSheetOpen(true)
+    }
+
+    function onCategorySaved(saved: Category) {
+        setColumnGroups(prev => {
+            // Édition : renommer group ou child
+            if (editingCategory) {
+                return prev.map(group => {
+                    if (group.id === saved.id) return { ...group, title: saved.title }
+                    return {
+                        ...group,
+                        children: group.children.map(c =>
+                            c.id === saved.id ? { ...c, title: saved.title } : c
+                        ),
+                    }
+                })
+            }
+            // Création sans parent → nouvelle colonne racine
+            if (!saved.parent_category_id) {
+                const newGroup = { id: saved.id, title: saved.title, children: [{ id: saved.id, title: saved.title }] }
+                setVisibleIds(prev => [...prev, saved.id])
+                return [...prev, newGroup]
+            }
+            // Création avec parent → ajouter child au groupe parent existant
+            return prev.map(group => {
+                if (group.id !== saved.parent_category_id) return group
+                setVisibleIds(ids => [...ids, saved.id])
+                return { ...group, children: [...group.children, { id: saved.id, title: saved.title }] }
+            })
+        })
+        // Mettre à jour aussi les titres dans les cartes existantes
+        if (editingCategory) {
+            setCards(prev => prev.map(card => {
+                if (card.category.id === saved.id)
+                    return { ...card, category: { ...card.category, title: saved.title } }
+                if (card.category.parent?.id === saved.id)
+                    return { ...card, category: { ...card.category, parent: { ...card.category.parent!, title: saved.title } } }
+                return card
+            }))
+        }
+        setEditingCategory(undefined)
+    }
+
     const visibleGroups = columnGroups
         .map(group => ({
             ...group,
@@ -225,8 +443,9 @@ export default function Categories() {
         <div className="mt-4 flex flex-col gap-4">
 
             {/* Barre d'actions */}
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
 
+                {/* Filtre catégories */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-2 rounded-md">
@@ -251,7 +470,7 @@ export default function Categories() {
                                     >
                                         {group.title}
                                         <span className="ml-auto text-xs text-muted-foreground">
-                                            {cards.filter(c => group.children.some(ch => ch.id === c.category.id)).length}
+                                            {filteredCards.filter(c => group.children.some(ch => ch.id === c.category.id)).length}
                                         </span>
                                     </DropdownMenuCheckboxItem>
                                     {hasChildren && group.children.map(child => (
@@ -263,7 +482,7 @@ export default function Categories() {
                                         >
                                             {child.title}
                                             <span className="ml-auto text-xs text-muted-foreground">
-                                                {cards.filter(c => c.category.id === child.id).length}
+                                                {filteredCards.filter(c => c.category.id === child.id).length}
                                             </span>
                                         </DropdownMenuCheckboxItem>
                                     ))}
@@ -273,36 +492,115 @@ export default function Categories() {
                     </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Button size="sm" className="gap-2 rounded-md" onClick={() => setSheetOpen(true)}>
-                    <Plus size={14} />
-                    Nouvelle carte
-                </Button>
+                {/* Filtre axes */}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant={selectedAxeIds.length > 0 ? 'default' : 'outline'}
+                            size="sm"
+                            className="gap-2 rounded-md"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-columns-gap" viewBox="0 0 16 16">
+                            <path d="M6 1v3H1V1zM1 0a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm14 12v3h-5v-3zm-5-1a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1zM6 8v7H1V8zM1 7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm14-6v7h-5V1zm-5-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1z"/>
+                            </svg>
+                            Axe
+                            {selectedAxeIds.length > 0 && (
+                                <span className="text-xs opacity-75">{selectedAxeIds.length}</span>
+                            )}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-52">
+                        {allAxes.map(axe => (
+                            <DropdownMenuCheckboxItem
+                                key={axe.id}
+                                checked={selectedAxeIds.includes(axe.id)}
+                                onCheckedChange={() => toggleAxe(axe.id)}
+                            >
+                                {axe.name}
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                        {selectedAxeIds.length > 0 && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuCheckboxItem checked={false} onCheckedChange={() => setSelectedAxeIds([])}>
+                                    Tout effacer
+                                </DropdownMenuCheckboxItem>
+                            </>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Filtre membres */}
+                <MemberFilter
+                    allMembers={allMembers}
+                    allPartners={allPartners}
+                    selectedIds={selectedMemberIds}
+                    onChangeIds={setSelectedMemberIds}
+                />
+
+                {/* Barre de recherche */}
+                <div className="relative">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <Input
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder="Rechercher..."
+                        className="h-8 pl-7 w-48 text-xs rounded-md"
+                    />
+                </div>
+
+                <div className="ml-auto flex items-center gap-2">
+                    <Button size="sm" variant="outline" className="gap-2 rounded-md" onClick={() => { setEditingCategory(undefined); setCatSheetOpen(true) }}>
+                        <Plus size={14} />
+                        Catégorie
+                    </Button>
+                    <Button size="sm" className="gap-2 rounded-md" onClick={() => setSheetOpen(true)}>
+                        <Plus size={14} />
+                        Nouvelle carte
+                    </Button>
+                </div>
             </div>
 
             {/* Colonnes */}
             <ScrollArea className="w-full">
                 <div className="flex gap-4 pb-4" style={{ minWidth: `${visibleGroups.length * 280}px` }}>
                     {visibleGroups.map(group => {
-                        const totalCards = cards.filter(c =>
+                        const totalCards = filteredCards.filter(c =>
                             group.children.some(ch => ch.id === c.category.id)
                         ).length
                         return (
                             <div key={group.id} className="flex flex-col gap-3 w-[260px] shrink-0">
-                                <div className="flex items-center justify-between px-1">
+                                <div className="flex items-center justify-between px-1 group/col">
                                     <span className="text-sm font-medium text-gray-700">{group.title}</span>
-                                    <span className="text-xs text-muted-foreground bg-gray-100 rounded-full px-2 py-0.5">
-                                        {totalCards}
-                                    </span>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => openEditCategory({ id: group.id, title: group.title, parent_category_id: null })}
+                                            className="opacity-0 group-hover/col:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                                        >
+                                            <Pencil size={12} />
+                                        </button>
+                                        <span className="text-xs text-muted-foreground bg-gray-100 rounded-full px-2 py-0.5">
+                                            {totalCards}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="flex flex-col gap-4">
                                     {group.children.map((child, i) => {
-                                        const childCards = cards.filter(c => c.category.id === child.id)
+                                        const childCards = filteredCards.filter(c => c.category.id === child.id)
                                         return (
                                             <div key={child.id} className="flex flex-col gap-2">
-                                                <div className={`flex items-center gap-2 ${i > 0 ? 'mt-1' : ''}`}>
+                                                <div className={`flex items-center gap-1 ${i > 0 ? 'mt-1' : ''} group/child`}>
                                                     <span className={`text-xs text-muted-foreground ${group.children.length <= 1 ? 'invisible' : ''}`}>
                                                         {child.title}
                                                     </span>
+                                                    {group.children.length > 1 && (
+                                                        <button
+                                                            onClick={() => openEditCategory({ id: child.id, title: child.title, parent_category_id: group.id })}
+                                                            className="opacity-0 group-hover/child:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                                                        >
+                                                            <Pencil size={10} />
+                                                        </button>
+                                                    )}
                                                     <div className="flex-1 h-px bg-gray-100" />
                                                 </div>
                                                 <DroppableColumn
@@ -344,6 +642,13 @@ export default function Categories() {
                 setColumnGroups(buildColumnGroups([...cards, newCard]))
                 setVisibleIds(prev => [...new Set([...prev, newCard.category.id])])
             }}
+        />
+
+        <CategorySheet
+            open={catSheetOpen}
+            category={editingCategory}
+            onClose={() => { setCatSheetOpen(false); setEditingCategory(undefined) }}
+            onSaved={onCategorySaved}
         />
         </>
     )

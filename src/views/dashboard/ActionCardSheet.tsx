@@ -9,10 +9,10 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { X, Plus } from 'lucide-react'
 import {
-    getStatuses, getCategories, getMembers, getProjects, getAxes,
-    createActionCardFull, type ActionCardCreateForm,
+    getStatuses, getCategories, getMembers, getPartners, getProjects, getAxes,
+    getOrCreateOtherCategory, createActionCardFull, type ActionCardCreateForm,
 } from '@/lib/api'
-import type { Status, Category, Member, Project, Axis } from '@/lib/types'
+import type { Status, Category, Member, Partner, Project, Axis } from '@/lib/types'
 import type { ActionCardData } from './ActionCard'
 
 type Props = {
@@ -23,13 +23,8 @@ type Props = {
 
 const ROLES = ['Responsable', 'Contributeur', 'Observateur']
 
-const COLOR_PALETTE = [
-    '#dbeafe', '#d1fae5', '#fce7f3', '#ede9fe',
-    '#ffedd5', '#fef9c3', '#e0f2fe', '#fef2f2',
-]
-
 const EMPTY_FORM: ActionCardCreateForm = {
-    title: '', description: '', color: '#dbeafe',
+    title: '', description: '',
     start_date: '', end_date: '',
     status_id: 0, category_id: 0, axis_id: null,
     owner_id: 0,
@@ -38,39 +33,100 @@ const EMPTY_FORM: ActionCardCreateForm = {
     todo_title: '', todo_items: [],
 }
 
-export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
-    const [form, setForm]       = useState<ActionCardCreateForm>(EMPTY_FORM)
-    const [submitting, setSubmitting] = useState(false)
-    const [error, setError]     = useState<string | null>(null)
+// --- Recherche membre avec suggestions ---
 
-    // Données de référence
+type MemberSearchInputProps = {
+    members: Member[]
+    partners: Partner[]
+    onSelect: (member: Member) => void
+}
+
+function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputProps) {
+    const [query, setQuery] = useState('')
+    const [open, setOpen]   = useState(false)
+    const partnerMap = new Map(partners.map(p => [p.id, p]))
+
+    const filtered = query.trim().length === 0 ? members : members.filter(m => {
+        const full = `${m.first_name} ${m.last_name}`.toLowerCase()
+        const partner = partnerMap.get(m.partner_id)?.name.toLowerCase() ?? ''
+        return full.includes(query.toLowerCase()) || partner.includes(query.toLowerCase())
+    })
+
+    function select(m: Member) {
+        onSelect(m)
+        setQuery('')
+        setOpen(false)
+    }
+
+    return (
+        <div className="relative flex-1">
+            <Input
+                value={query}
+                onChange={e => { setQuery(e.target.value); setOpen(true) }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                placeholder="Rechercher un membre..."
+                className="h-8 text-xs"
+            />
+            {open && filtered.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden">
+                    <ul className="max-h-48 overflow-y-auto py-1">
+                        {filtered.map(m => {
+                            const partner = partnerMap.get(m.partner_id)
+                            return (
+                                <li
+                                    key={m.id}
+                                    onMouseDown={() => select(m)}
+                                    className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted"
+                                >
+                                    <span>{m.first_name} {m.last_name}</span>
+                                    {partner && (
+                                        <span
+                                            className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
+                                            style={partner.color ? { backgroundColor: partner.color } : {}}
+                                        >
+                                            {partner.name}
+                                        </span>
+                                    )}
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </div>
+            )}
+        </div>
+    )
+}
+
+export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
+    const [form, setForm]           = useState<ActionCardCreateForm>(EMPTY_FORM)
+    const [submitting, setSubmitting] = useState(false)
+    const [error, setError]         = useState<string | null>(null)
+
     const [statuses,   setStatuses]   = useState<Status[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [members,    setMembers]    = useState<Member[]>([])
+    const [partners,   setPartners]   = useState<Partner[]>([])
     const [projects,   setProjects]   = useState<Project[]>([])
     const [axes,       setAxes]       = useState<Axis[]>([])
 
-    // État pour l'ajout de participants
-    const [memberToAdd, setMemberToAdd] = useState<string>('')
-    const [roleToAdd,   setRoleToAdd]   = useState<string>(ROLES[1])
-
-    // État pour l'ajout de tâches
-    const [todoInput, setTodoInput] = useState('')
+    const [roleToAdd,  setRoleToAdd]  = useState<string>(ROLES[1])
+    const [todoInput,  setTodoInput]  = useState('')
 
     useEffect(() => {
         if (!open) return
-        Promise.all([getStatuses(), getCategories(), getMembers(), getProjects(), getAxes()])
-            .then(([s, c, m, p, a]) => {
+        Promise.all([getStatuses(), getCategories(), getMembers(), getPartners(), getProjects(), getAxes()])
+            .then(([s, c, m, pt, p, a]) => {
                 setStatuses(s.filter(s => s.context === 'action_card'))
                 setCategories(c)
                 setMembers(m)
+                setPartners(pt)
                 setProjects(p)
                 setAxes(a)
                 setForm(f => ({
                     ...f,
-                    status_id:   s.find(s => s.context === 'action_card')?.id ?? 0,
-                    category_id: c[0]?.id ?? 0,
-                    owner_id:    m[0]?.id ?? 0,
+                    status_id: s.find(s => s.context === 'action_card')?.id ?? 0,
+                    owner_id:  m[0]?.id ?? 0,
                 }))
             })
     }, [open])
@@ -79,11 +135,9 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
         setForm(prev => ({ ...prev, [key]: value }))
     }
 
-    function addMember() {
-        const id = Number(memberToAdd)
+    function addMemberById(id: number) {
         if (!id || form.members.some(m => m.member_id === id)) return
         set('members', [...form.members, { member_id: id, role: roleToAdd }])
-        setMemberToAdd('')
     }
 
     function removeMember(memberId: number) {
@@ -101,19 +155,20 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
     }
 
     async function handleSubmit() {
-        if (!form.title.trim() || !form.category_id || !form.status_id || !form.owner_id) {
-            setError('Titre, catégorie, statut et responsable sont obligatoires.')
+        if (!form.title.trim() || !form.status_id || !form.owner_id) {
+            setError('Titre, statut et responsable sont obligatoires.')
             return
         }
         setError(null)
         setSubmitting(true)
         try {
-            const full = await createActionCardFull(form)
+            // Si aucune catégorie choisie, utiliser/créer "Autre"
+            const categoryId = form.category_id || await getOrCreateOtherCategory()
+            const full = await createActionCardFull({ ...form, category_id: categoryId })
             onCreated({
                 id:          full.id,
                 title:       full.title,
                 description: full.description || undefined,
-                color:       full.color || undefined,
                 status:      full.status,
                 category: {
                     id:     full.category.id,
@@ -140,13 +195,12 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
         }
     }
 
-    // Catégories parentes pour les groupes
-    const parentIds = new Set(categories.filter(c => c.parent_category_id).map(c => c.parent_category_id!))
-    const categoryGroups = categories.filter(c => parentIds.has(c.id) || !c.parent_category_id)
+    // Toutes les catégories : parents en tête, enfants indentés
+    const parentCategories = categories.filter(c => !c.parent_category_id)
 
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) onClose() }}>
-            <SheetContent side="right" className="!w-[580px] overflow-y-auto flex flex-col gap-0 p-0">
+            <SheetContent side="right" showCloseButton={false} className="!w-[480px] overflow-y-auto flex flex-col gap-0 p-0">
                 <SheetHeader className="px-6 py-4 border-b">
                     <SheetTitle>Nouvelle action card</SheetTitle>
                 </SheetHeader>
@@ -177,20 +231,6 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
                                 <Input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} />
                             </div>
                         </div>
-
-                        <div className="flex flex-col gap-1.5">
-                            <Label>Couleur</Label>
-                            <div className="flex gap-2">
-                                {COLOR_PALETTE.map(c => (
-                                    <button
-                                        key={c}
-                                        onClick={() => set('color', c)}
-                                        className={`w-6 h-6 rounded-full border-2 transition-transform ${form.color === c ? 'border-gray-700 scale-110' : 'border-transparent'}`}
-                                        style={{ backgroundColor: c }}
-                                    />
-                                ))}
-                            </div>
-                        </div>
                     </section>
 
                     <Separator />
@@ -200,7 +240,7 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Classification</p>
 
                         <div className="flex flex-col gap-1.5">
-                            <Label>Statut *</Label>
+                            <Label>Statut</Label>
                             <Select value={String(form.status_id)} onValueChange={v => set('status_id', Number(v))}>
                                 <SelectTrigger><SelectValue placeholder="Statut" /></SelectTrigger>
                                 <SelectContent>
@@ -210,19 +250,24 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
                         </div>
 
                         <div className="flex flex-col gap-1.5">
-                            <Label>Catégorie *</Label>
-                            <Select value={String(form.category_id)} onValueChange={v => set('category_id', Number(v))}>
-                                <SelectTrigger><SelectValue placeholder="Catégorie" /></SelectTrigger>
+                            <Label>Catégorie </Label>
+                            <Select value={form.category_id ? String(form.category_id) : 'none'} onValueChange={v => set('category_id', v === 'none' ? 0 : Number(v))}>
+                                <SelectTrigger><SelectValue placeholder="Choisir une catégorie" /></SelectTrigger>
                                 <SelectContent>
-                                    {categoryGroups.map(parent => {
+                                    <SelectItem value="none">Autre</SelectItem>
+                                    {parentCategories.map(parent => {
                                         const children = categories.filter(c => c.parent_category_id === parent.id)
-                                        return children.length > 0 ? (
+                                        return (
                                             <div key={parent.id}>
-                                                <p className="px-2 py-1 text-xs text-muted-foreground">{parent.title}</p>
-                                                {children.map(c => <SelectItem key={c.id} value={String(c.id)} className="pl-5">{c.title}</SelectItem>)}
+                                                <SelectItem value={String(parent.id)} className="font-medium">
+                                                    {parent.title}
+                                                </SelectItem>
+                                                {children.map(c => (
+                                                    <SelectItem key={c.id} value={String(c.id)} className="pl-6 text-muted-foreground">
+                                                        {c.title}
+                                                    </SelectItem>
+                                                ))}
                                             </div>
-                                        ) : (
-                                            <SelectItem key={parent.id} value={String(parent.id)}>{parent.title}</SelectItem>
                                         )
                                     })}
                                 </SelectContent>
@@ -260,24 +305,17 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
                         <div className="flex flex-col gap-1.5">
                             <Label>Participants</Label>
                             <div className="flex gap-2">
-                                <Select value={memberToAdd} onValueChange={setMemberToAdd}>
-                                    <SelectTrigger className="flex-1"><SelectValue placeholder="Membre" /></SelectTrigger>
-                                    <SelectContent>
-                                        {members
-                                            .filter(m => m.id !== form.owner_id && !form.members.some(fm => fm.member_id === m.id))
-                                            .map(m => <SelectItem key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</SelectItem>)
-                                        }
-                                    </SelectContent>
-                                </Select>
+                                <MemberSearchInput
+                                    members={members.filter(m => m.id !== form.owner_id && !form.members.some(fm => fm.member_id === m.id))}
+                                    partners={partners}
+                                    onSelect={m => addMemberById(m.id)}
+                                />
                                 <Select value={roleToAdd} onValueChange={setRoleToAdd}>
-                                    <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="w-36 shrink-0"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
-                                <Button variant="outline" size="icon" onClick={addMember} disabled={!memberToAdd}>
-                                    <Plus size={14} />
-                                </Button>
                             </div>
                             {form.members.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5 mt-1">

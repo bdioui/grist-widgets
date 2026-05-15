@@ -4,7 +4,7 @@ import {
     mockAxes, mockActionCards, mockProjectCalls, mockProjects,
     mockFinancialAgreements, mockPhds, mockMobilityGrants,
     mockIndicatorDefinitions, mockBudgetCategories, mockBudgetDetails,
-    mockToDoLists, mockToDoItems, mockMemberActionCards, mockProjectActionCards,
+    mockToDoLists, mockToDoItems, mockMemberActionCards, mockAxisActionCards, mockProjectActionCards,
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -20,7 +20,7 @@ import type {
     ActionCard, ActionCardFull, ProjectCall, Project,
     FinancialAgreement, Phd, MobilityGrant,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
-    ToDoList, ToDoItem, MemberActionCard, ProjectActionCard,
+    ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard,
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -52,6 +52,20 @@ export async function getBudgetDetails():        Promise<BudgetDetail[]>        
 
 export async function getToDoLists(): Promise<ToDoList[]> { return USE_MOCK ? mockToDoLists : normalizeToDoLists(await fetchTable('to_do_list')) }
 export async function getToDoItems(): Promise<ToDoItem[]> { return USE_MOCK ? mockToDoItems : normalizeToDoItems(await fetchTable('to_do_item')) }
+
+// --- Liens globaux (pour les filtres du kanban) ---
+
+export async function getAllAxisActionCards(): Promise<AxisActionCard[]> {
+    if (USE_MOCK) return [...mockAxisActionCards]
+    const rows = await fetchTable('axis_action_card')
+    return rows.map(r => ({ id: Number(r.id), axis_id: Number(r.axis_id), action_card_id: Number(r.action_card_id) }))
+}
+
+export async function getAllMemberActionCards(): Promise<MemberActionCard[]> {
+    if (USE_MOCK) return [...mockMemberActionCards]
+    const rows = await fetchTable('member_action_card')
+    return normalizeMemberActionCards(rows)
+}
 
 // --- Jointures par carte ---
 
@@ -180,6 +194,44 @@ export async function removeProjectFromCard(linkId: number): Promise<void> {
     await deleteRecord('project_action_card', linkId)
 }
 
+// --- Catégories ---
+
+export async function createCategory(title: string, parentId: number | null): Promise<Category> {
+    if (USE_MOCK) {
+        const newId = Math.max(...mockCategories.map(c => c.id)) + 1
+        const cat: Category = { id: newId, parent_category_id: parentId, title }
+        mockCategories.push(cat)
+        return cat
+    }
+    const id = await addRecord('category', { title, parent_category_id: parentId ?? 0 })
+    return { id, parent_category_id: parentId, title }
+}
+
+export async function updateCategory(id: number, patch: Partial<Pick<Category, 'title' | 'parent_category_id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const cat = mockCategories.find(c => c.id === id)
+        if (cat) Object.assign(cat, patch)
+        return
+    }
+    await updateRecord('category', id, patch)
+}
+
+// --- Catégorie "Autre" ---
+
+export async function getOrCreateOtherCategory(): Promise<number> {
+    if (USE_MOCK) {
+        const existing = mockCategories.find(c => c.title === 'Autre')
+        if (existing) return existing.id
+        const newId = Math.max(...mockCategories.map(c => c.id)) + 1
+        mockCategories.push({ id: newId, parent_category_id: null, title: 'Autre' })
+        return newId
+    }
+    const cats = await getCategories()
+    const existing = cats.find(c => c.title === 'Autre')
+    if (existing) return existing.id
+    return await addRecord('category', { title: 'Autre', parent_category_id: null })
+}
+
 // --- Mutations ---
 
 // Formulaire de création d'une ActionCard complète
@@ -187,7 +239,6 @@ export type ActionCardCreateForm = {
     // Général
     title:       string
     description: string
-    color:       string
     start_date:  string
     end_date:    string
     // Classification
@@ -214,7 +265,7 @@ export async function createActionCardFull(form: ActionCardCreateForm): Promise<
             category_id: form.category_id,
             status_id:   form.status_id,
             title:       form.title,
-            color:       form.color,
+            color:       '',
             description: form.description,
             start_date:  form.start_date,
             end_date:    form.end_date,
@@ -234,7 +285,6 @@ export async function createActionCardFull(form: ActionCardCreateForm): Promise<
     const cardId = await addRecord('action_card', {
         title:       form.title,
         description: form.description,
-        color:       form.color,
         start_date:  form.start_date,
         end_date:    form.end_date,
         status_id:   form.status_id,

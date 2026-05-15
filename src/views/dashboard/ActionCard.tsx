@@ -34,7 +34,6 @@ export type ActionCardData = {
     id: number
     title: string
     description?: string
-    color?: string
     status: Pick<Status, 'id' | 'label' | 'context'>
     category: {
         id: number
@@ -55,11 +54,6 @@ const STATUS_COLORS: Record<string, string> = {
     'Annulé':    '#fee2e2',
     'À traiter': '#ffedd5',
 }
-
-const COLOR_PALETTE = [
-    '#dbeafe', '#d1fae5', '#fce7f3', '#ede9fe',
-    '#ffedd5', '#fef9c3', '#e0f2fe', '#fef2f2',
-]
 
 const ROLES = ['Responsable', 'Contributeur', 'Observateur']
 
@@ -293,7 +287,6 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
         const patch: Parameters<typeof updateActionCard>[1] = {
             title:       draft.title,
             description: draft.description ?? '',
-            color:       draft.color ?? '',
             start_date:  draft.start_date ?? '',
             end_date:    draft.end_date ?? '',
             status_id:   draft.status.id,
@@ -386,9 +379,7 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
 
     const statusColor = STATUS_COLORS[card.status.label] ?? '#f3f4f6'
 
-    // Catégories structurées pour le select
-    const parentIds = new Set(allCategories.filter(c => c.parent_category_id).map(c => c.parent_category_id!))
-    const categoryGroups = allCategories.filter(c => parentIds.has(c.id) || !c.parent_category_id)
+    const parentCategories = allCategories.filter(c => !c.parent_category_id)
 
     // Membres et projets non encore liés
     const linkedMemberIds  = memberLinks.map(l => l.member_id)
@@ -430,14 +421,11 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
                 ) : (
                     <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
 
-                        {/* Badges statut + couleur */}
+                        {/* Statut + catégorie */}
                         <div className="flex flex-wrap items-center gap-2">
                             <Badge variant="secondary" style={{ backgroundColor: statusColor }}>
                                 {card.status.label}
                             </Badge>
-                            {card.color && (
-                                <span className="inline-block w-4 h-4 rounded-full border border-gray-200" style={{ backgroundColor: card.color }} />
-                            )}
                             <span className="text-xs text-muted-foreground">
                                 {card.category.parent ? `${card.category.parent.title} › ${card.category.title}` : card.category.title}
                             </span>
@@ -465,20 +453,6 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
                                     <div className="flex flex-col gap-1.5 flex-1">
                                         <Label>Date de fin</Label>
                                         <Input type="date" value={draft.end_date ?? ''} onChange={e => setDraftField('end_date', e.target.value)} />
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col gap-1.5">
-                                    <Label>Couleur</Label>
-                                    <div className="flex gap-2">
-                                        {COLOR_PALETTE.map(c => (
-                                            <button
-                                                key={c}
-                                                onClick={() => setDraftField('color', c)}
-                                                className={`w-6 h-6 rounded-full border-2 transition-transform ${draft.color === c ? 'border-gray-700 scale-110' : 'border-transparent'}`}
-                                                style={{ backgroundColor: c }}
-                                            />
-                                        ))}
                                     </div>
                                 </div>
 
@@ -517,15 +491,15 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
                                     >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            {categoryGroups.map(parent => {
+                                            {parentCategories.map(parent => {
                                                 const children = allCategories.filter(c => c.parent_category_id === parent.id)
-                                                return children.length > 0 ? (
+                                                return (
                                                     <div key={parent.id}>
-                                                        <p className="px-2 py-1 text-xs text-muted-foreground">{parent.title}</p>
-                                                        {children.map(c => <SelectItem key={c.id} value={String(c.id)} className="pl-5">{c.title}</SelectItem>)}
+                                                        <SelectItem value={String(parent.id)} className="font-medium">{parent.title}</SelectItem>
+                                                        {children.map(c => (
+                                                            <SelectItem key={c.id} value={String(c.id)} className="pl-6 text-muted-foreground">{c.title}</SelectItem>
+                                                        ))}
                                                     </div>
-                                                ) : (
-                                                    <SelectItem key={parent.id} value={String(parent.id)}>{parent.title}</SelectItem>
                                                 )
                                             })}
                                         </SelectContent>
@@ -701,7 +675,7 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
 // --- Composant principal carte ---
 
 export default function ActionCard(props: ActionCardData) {
-    const { title, color, status, category, owner, start_date, end_date } = props
+    const { title, status, category, owner, start_date, end_date } = props
     const [open, setOpen]     = useState(false)
     const [data, setData]     = useState<ActionCardData>(props)
 
