@@ -7,10 +7,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
-import { X, Plus } from 'lucide-react'
+import { X, Plus, Pencil } from 'lucide-react'
 import {
     getStatuses, getCategories, getMembers, getPartners, getProjects, getAxes,
-    getOrCreateOtherCategory, createActionCardFull, type ActionCardCreateForm,
+    getOrCreateOtherCategory, createActionCardFull, updateActionCard, type ActionCardCreateForm,
 } from '@/lib/api'
 import type { Status, Category, Member, Partner, Project, Axis } from '@/lib/types'
 import type { ActionCardData } from './ActionCard'
@@ -19,6 +19,8 @@ type Props = {
     open: boolean
     onClose: () => void
     onCreated: (card: ActionCardData) => void
+    editCard?: ActionCardData
+    onUpdated?: (card: ActionCardData) => void
 }
 
 const ROLES = ['Responsable', 'Contributeur', 'Observateur']
@@ -98,10 +100,11 @@ function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputPro
     )
 }
 
-export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
+export default function ActionCardSheet({ open, onClose, onCreated, editCard, onUpdated }: Props) {
     const [form, setForm]           = useState<ActionCardCreateForm>(EMPTY_FORM)
     const [submitting, setSubmitting] = useState(false)
     const [error, setError]         = useState<string | null>(null)
+    const [isEditing, setIsEditing] = useState(false)
 
     const [statuses,   setStatuses]   = useState<Status[]>([])
     const [categories, setCategories] = useState<Category[]>([])
@@ -114,7 +117,7 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
     const [todoInput,  setTodoInput]  = useState('')
 
     useEffect(() => {
-        if (!open) return
+        if (!open) { setIsEditing(false); return }
         Promise.all([getStatuses(), getCategories(), getMembers(), getPartners(), getProjects(), getAxes()])
             .then(([s, c, m, pt, p, a]) => {
                 setStatuses(s.filter(s => s.context === 'action_card'))
@@ -123,11 +126,24 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
                 setPartners(pt)
                 setProjects(p)
                 setAxes(a)
-                setForm(f => ({
-                    ...f,
-                    status_id: s.find(s => s.context === 'action_card')?.id ?? 0,
-                    owner_id:  m[0]?.id ?? 0,
-                }))
+                if (editCard) {
+                    setForm({
+                        ...EMPTY_FORM,
+                        title:       editCard.title,
+                        description: editCard.description ?? '',
+                        start_date:  editCard.start_date ?? '',
+                        end_date:    editCard.end_date   ?? '',
+                        status_id:   editCard.status.id,
+                        category_id: editCard.category.id,
+                        owner_id:    editCard.owner?.id ?? m[0]?.id ?? 0,
+                    })
+                } else {
+                    setForm(f => ({
+                        ...f,
+                        status_id: s.find(s => s.context === 'action_card')?.id ?? 0,
+                        owner_id:  m[0]?.id ?? 0,
+                    }))
+                }
             })
     }, [open])
 
@@ -162,30 +178,64 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
         setError(null)
         setSubmitting(true)
         try {
-            // Si aucune catégorie choisie, utiliser/créer "Autre"
-            const categoryId = form.category_id || await getOrCreateOtherCategory()
-            const full = await createActionCardFull({ ...form, category_id: categoryId })
-            onCreated({
-                id:          full.id,
-                title:       full.title,
-                description: full.description || undefined,
-                status:      full.status,
-                category: {
-                    id:     full.category.id,
-                    title:  full.category.title,
-                    parent: full.category.parent
-                        ? { id: full.category.parent.id, title: full.category.parent.title }
-                        : undefined,
-                },
-                owner: {
-                    id:         full.owner.id,
-                    first_name: full.owner.first_name,
-                    last_name:  full.owner.last_name,
-                    position:   full.owner.position,
-                },
-                start_date: full.start_date || undefined,
-                end_date:   full.end_date   || undefined,
-            })
+            if (editCard) {
+                const categoryId = form.category_id || editCard.category.id
+                await updateActionCard(editCard.id, {
+                    title:       form.title,
+                    description: form.description,
+                    start_date:  form.start_date,
+                    end_date:    form.end_date,
+                    status_id:   form.status_id,
+                    category_id: categoryId,
+                    owner_id:    form.owner_id,
+                })
+                const status     = statuses.find(s => s.id === form.status_id)!
+                const category   = categories.find(c => c.id === categoryId)!
+                const parentCat  = category.parent_category_id
+                    ? categories.find(c => c.id === category.parent_category_id)
+                    : undefined
+                const owner      = members.find(m => m.id === form.owner_id)!
+                onUpdated?.({
+                    ...editCard,
+                    title:       form.title,
+                    description: form.description || undefined,
+                    start_date:  form.start_date  || undefined,
+                    end_date:    form.end_date     || undefined,
+                    status:      { id: status.id, label: status.label, context: status.context },
+                    category: {
+                        id:     category.id,
+                        title:  category.title,
+                        color:  category.color ?? null,
+                        parent: parentCat ? { id: parentCat.id, title: parentCat.title, color: parentCat.color ?? null } : undefined,
+                    },
+                    owner: { id: owner.id, first_name: owner.first_name, last_name: owner.last_name, position: owner.position },
+                })
+            } else {
+                // Si aucune catégorie choisie, utiliser/créer "Autre"
+                const categoryId = form.category_id || await getOrCreateOtherCategory()
+                const full = await createActionCardFull({ ...form, category_id: categoryId })
+                onCreated({
+                    id:          full.id,
+                    title:       full.title,
+                    description: full.description || undefined,
+                    status:      full.status,
+                    category: {
+                        id:     full.category.id,
+                        title:  full.category.title,
+                        parent: full.category.parent
+                            ? { id: full.category.parent.id, title: full.category.parent.title }
+                            : undefined,
+                    },
+                    owner: {
+                        id:         full.owner.id,
+                        first_name: full.owner.first_name,
+                        last_name:  full.owner.last_name,
+                        position:   full.owner.position,
+                    },
+                    start_date: full.start_date || undefined,
+                    end_date:   full.end_date   || undefined,
+                })
+            }
             setForm(EMPTY_FORM)
             onClose()
         } catch (e) {
@@ -198,13 +248,77 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
     // Toutes les catégories : parents en tête, enfants indentés
     const parentCategories = categories.filter(c => !c.parent_category_id)
 
+    const viewMode = !!editCard && !isEditing
+
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) onClose() }}>
             <SheetContent side="right" showCloseButton={false} className="!w-[480px] overflow-y-auto flex flex-col gap-0 p-0">
-                <SheetHeader className="px-6 py-4 border-b">
-                    <SheetTitle>Nouvelle action card</SheetTitle>
+                <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
+                    <SheetTitle>
+                        {editCard ? editCard.title : 'Nouvelle action card'}
+                    </SheetTitle>
+                    {viewMode && (
+                        <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => setIsEditing(true)}>
+                            <Pencil size={13} />
+                            Modifier
+                        </Button>
+                    )}
                 </SheetHeader>
 
+                {/* --- Mode lecture --- */}
+                {viewMode && editCard ? (
+                    <>
+                        <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-5">
+                            {editCard.description && (
+                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{editCard.description}</p>
+                            )}
+
+                            <div className="flex flex-col gap-3">
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="w-28 shrink-0 text-muted-foreground text-xs">Statut</span>
+                                    <Badge variant="secondary">{editCard.status.label}</Badge>
+                                </div>
+
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="w-28 shrink-0 text-muted-foreground text-xs">Catégorie</span>
+                                    <span className="flex items-center gap-1.5">
+                                        {(editCard.category.color ?? editCard.category.parent?.color) && (
+                                            <span
+                                                className="w-2.5 h-2.5 rounded-full border border-border shrink-0"
+                                                style={{ backgroundColor: editCard.category.color ?? editCard.category.parent?.color ?? undefined }}
+                                            />
+                                        )}
+                                        {editCard.category.parent
+                                            ? `${editCard.category.parent.title} › ${editCard.category.title}`
+                                            : editCard.category.title}
+                                    </span>
+                                </div>
+
+                                {editCard.owner && (
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <span className="w-28 shrink-0 text-muted-foreground text-xs">Responsable</span>
+                                        <span>{editCard.owner.first_name} {editCard.owner.last_name}</span>
+                                    </div>
+                                )}
+
+                                {(editCard.start_date || editCard.end_date) && (
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <span className="w-28 shrink-0 text-muted-foreground text-xs">Dates</span>
+                                        <span>
+                                            {editCard.start_date && new Date(editCard.start_date).toLocaleDateString('fr-FR')}
+                                            {editCard.start_date && editCard.end_date && ' → '}
+                                            {editCard.end_date && new Date(editCard.end_date).toLocaleDateString('fr-FR')}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <SheetFooter className="px-6 py-4 border-t">
+                            <Button variant="outline" onClick={onClose}>Fermer</Button>
+                        </SheetFooter>
+                    </>
+                ) : (
+                <>
                 <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-6">
 
                     {/* Général */}
@@ -394,12 +508,17 @@ export default function ActionCardSheet({ open, onClose, onCreated }: Props) {
                 <SheetFooter className="px-6 py-4 border-t flex flex-col gap-2">
                     {error && <p className="text-sm text-destructive">{error}</p>}
                     <div className="flex gap-2 justify-end">
-                        <Button variant="outline" onClick={onClose} disabled={submitting}>Annuler</Button>
+                        <Button variant="outline" onClick={() => isEditing ? setIsEditing(false) : onClose()} disabled={submitting}>
+                            {isEditing ? 'Retour' : 'Annuler'}
+                        </Button>
                         <Button onClick={handleSubmit} disabled={submitting}>
-                            {submitting ? 'Création...' : 'Créer'}
+                            {submitting ? (editCard ? 'Enregistrement...' : 'Création...') : (editCard ? 'Enregistrer' : 'Créer')}
                         </Button>
                     </div>
                 </SheetFooter>
+
+                </>
+                )} {/* fin du mode formulaire */}
             </SheetContent>
         </Sheet>
     )

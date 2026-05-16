@@ -10,6 +10,7 @@ export type Category = {
     id: number
     parent_category_id: number | null
     title: string
+    color?: string | null
 }
 
 export type Partner = {

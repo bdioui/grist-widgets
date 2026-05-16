@@ -35,8 +35,9 @@ function toCardData(card: ActionCardFull): ActionCardData {
         category: {
             id:     card.category.id,
             title:  card.category.title,
+            color:  card.category.color ?? null,
             parent: card.category.parent
-                ? { id: card.category.parent.id, title: card.category.parent.title }
+                ? { id: card.category.parent.id, title: card.category.parent.title, color: card.category.parent.color ?? null }
                 : undefined,
         },
         owner: {
@@ -57,6 +58,7 @@ type ChildCategory = { id: number; title: string }
 type ColumnGroup = {
     id: number
     title: string
+    color?: string | null
     children: ChildCategory[]
 }
 
@@ -67,7 +69,7 @@ function buildColumnGroups(cards: ActionCardData[]): ColumnGroup[] {
         const { category } = card
         if (category.parent) {
             if (!groups.has(category.parent.id)) {
-                groups.set(category.parent.id, { id: category.parent.id, title: category.parent.title, children: [] })
+                groups.set(category.parent.id, { id: category.parent.id, title: category.parent.title, color: category.parent.color, children: [] })
             }
             const group = groups.get(category.parent.id)!
             if (!group.children.some(c => c.id === category.id)) {
@@ -75,7 +77,7 @@ function buildColumnGroups(cards: ActionCardData[]): ColumnGroup[] {
             }
         } else {
             if (!groups.has(category.id)) {
-                groups.set(category.id, { id: category.id, title: category.title, children: [{ id: category.id, title: category.title }] })
+                groups.set(category.id, { id: category.id, title: category.title, color: category.color, children: [{ id: category.id, title: category.title }] })
             }
         }
     }
@@ -372,7 +374,7 @@ export default function Categories() {
             // Édition : renommer group ou child
             if (editingCategory) {
                 return prev.map(group => {
-                    if (group.id === saved.id) return { ...group, title: saved.title }
+                    if (group.id === saved.id) return { ...group, title: saved.title, color: saved.color }
                     return {
                         ...group,
                         children: group.children.map(c =>
@@ -383,7 +385,7 @@ export default function Categories() {
             }
             // Création sans parent → nouvelle colonne racine
             if (!saved.parent_category_id) {
-                const newGroup = { id: saved.id, title: saved.title, children: [{ id: saved.id, title: saved.title }] }
+                const newGroup = { id: saved.id, title: saved.title, color: saved.color, children: [{ id: saved.id, title: saved.title }] }
                 setVisibleIds(prev => [...prev, saved.id])
                 return [...prev, newGroup]
             }
@@ -500,7 +502,7 @@ export default function Categories() {
                             size="sm"
                             className="gap-2 rounded-md"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-columns-gap" viewBox="0 0 16 16">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-columns-gap" viewBox="0 0 16 16">
                             <path d="M6 1v3H1V1zM1 0a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm14 12v3h-5v-3zm-5-1a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1zM6 8v7H1V8zM1 7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm14-6v7h-5V1zm-5-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1z"/>
                             </svg>
                             Axe
@@ -569,7 +571,7 @@ export default function Categories() {
                             group.children.some(ch => ch.id === c.category.id)
                         ).length
                         return (
-                            <div key={group.id} className="flex flex-col gap-3 w-[260px] shrink-0">
+                            <div key={group.id} className="flex flex-col gap-3 w-[300px] rounded-xl p-5 shrink-0">
                                 <div className="flex items-center justify-between px-1 group/col">
                                     <span className="text-sm font-medium text-gray-700">{group.title}</span>
                                     <div className="flex items-center gap-1">

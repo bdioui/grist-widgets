@@ -19,14 +19,27 @@ export default function CategorySheet({ open, category, onClose, onSaved }: Prop
     const [parentId,  setParentId]  = useState<number | null>(null)
     const [parents,   setParents]   = useState<Category[]>([])
     const [submitting, setSubmitting] = useState(false)
+    const [color, setColor] = useState<string | null >(null)
     const [error,     setError]     = useState<string | null>(null)
 
     const isEdit = !!category
+    
+    const CAT_COLORS = [
+        { label: 'Bleu',    hexa: '#D3E5EF' },
+        { label: 'Vert',    hexa: '#DDEFDF' },
+        { label: 'Violet',  hexa: '#E8DEEE' },
+        { label: 'Orange',  hexa: '#FDEFD4' },
+        { label: 'Rouge',   hexa: '#FFE2DD' },
+        { label: 'Rose',    hexa: '#F5E0E9' },
+        { label: 'Jaune',   hexa: '#FBF3CF' },
+        { label: 'Gris',    hexa: '#F1F1EF' },
+    ]
 
     useEffect(() => {
         if (!open) return
         setTitle(category?.title ?? '')
         setParentId(category?.parent_category_id ?? null)
+        setColor(category?.color ?? null)
         setError(null)
         getCategories().then(all => {
             // Seules les catégories sans parent peuvent être parent
@@ -43,10 +56,10 @@ export default function CategorySheet({ open, category, onClose, onSaved }: Prop
         setSubmitting(true)
         try {
             if (isEdit) {
-                await updateCategory(category!.id, { title: title.trim(), parent_category_id: parentId })
-                onSaved({ ...category!, title: title.trim(), parent_category_id: parentId })
+                await updateCategory(category!.id, { title: title.trim(), parent_category_id: parentId, color })
+                onSaved({ ...category!, title: title.trim(), parent_category_id: parentId, color })
             } else {
-                const created = await createCategory(title.trim(), parentId)
+                const created = await createCategory(title.trim(), parentId, color)
                 onSaved(created)
             }
             onClose()
@@ -82,7 +95,7 @@ export default function CategorySheet({ open, category, onClose, onSaved }: Prop
                             value={parentId ? String(parentId) : 'none'}
                             onValueChange={v => setParentId(v === 'none' ? null : Number(v))}
                         >
-                            <SelectTrigger><SelectValue placeholder="Aucune (catégorie racine)" /></SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder="Aucune" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="none">Aucune (catégorie racine)</SelectItem>
                                 {parents.map(p => (
@@ -93,6 +106,22 @@ export default function CategorySheet({ open, category, onClose, onSaved }: Prop
                         <p className="text-xs text-muted-foreground">
                             Si une catégorie parente est choisie, cette catégorie apparaîtra comme sous-catégorie.
                         </p>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <Label>Couleur <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+                        <Select
+                            value={color ? String(color) : 'none'}
+                            onValueChange={c => setColor(c === 'none' ? null : String(c))}
+                        >
+                            <SelectTrigger><SelectValue placeholder="Aucune (catégorie racine)" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Aucune</SelectItem>
+                                {CAT_COLORS.map(c => (
+                                    <SelectItem key={c.label} value={String(c.hexa)}><div className='flex'><div className='w-5 h-5 rounded-full border border-border mr-2' style={{backgroundColor: c.hexa}}></div><div>{c.label}</div></div></SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
 

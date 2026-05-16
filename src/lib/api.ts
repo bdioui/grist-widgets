@@ -27,26 +27,26 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 // --- Tables de référence ---
 
-export async function getStatuses():            Promise<Status[]>             { return USE_MOCK ? mockStatuses            : normalizeStatuses(           await fetchTable('status')) }
-export async function getCategories():          Promise<Category[]>           { return USE_MOCK ? mockCategories          : normalizeCategories(         await fetchTable('category')) }
-export async function getMembers():             Promise<Member[]>             { return USE_MOCK ? mockMembers             : normalizeMembers(            await fetchTable('member')) }
-export async function getPartners():            Promise<Partner[]>            { return USE_MOCK ? mockPartners            : normalizePartners(           await fetchTable('partner')) }
-export async function getAxes():                Promise<Axis[]>               { return USE_MOCK ? mockAxes                : normalizeAxes(               await fetchTable('axis')) }
+export async function getStatuses(): Promise<Status[]> { return USE_MOCK ? mockStatuses : normalizeStatuses(await fetchTable('status')) }
+export async function getCategories(): Promise<Category[]> { return USE_MOCK ? mockCategories : normalizeCategories(await fetchTable('category')) }
+export async function getMembers(): Promise<Member[]> { return USE_MOCK ? mockMembers : normalizeMembers(await fetchTable('member')) }
+export async function getPartners(): Promise<Partner[]> { return USE_MOCK ? mockPartners : normalizePartners(await fetchTable('partner')) }
+export async function getAxes(): Promise<Axis[]> { return USE_MOCK ? mockAxes : normalizeAxes(await fetchTable('axis')) }
 
 // --- Cœur du système ---
 
-export async function getActionCards():         Promise<ActionCard[]>         { return USE_MOCK ? mockActionCards         : normalizeActionCards(        await fetchTable('action_card')) }
-export async function getProjectCalls():        Promise<ProjectCall[]>        { return USE_MOCK ? mockProjectCalls        : normalizeProjectCalls(       await fetchTable('project_call')) }
-export async function getProjects():            Promise<Project[]>            { return USE_MOCK ? mockProjects            : normalizeProjects(           await fetchTable('project')) }
+export async function getActionCards(): Promise<ActionCard[]> { return USE_MOCK ? mockActionCards : normalizeActionCards(await fetchTable('action_card')) }
+export async function getProjectCalls(): Promise<ProjectCall[]> { return USE_MOCK ? mockProjectCalls : normalizeProjectCalls(await fetchTable('project_call')) }
+export async function getProjects(): Promise<Project[]> { return USE_MOCK ? mockProjects : normalizeProjects(await fetchTable('project')) }
 export async function getFinancialAgreements(): Promise<FinancialAgreement[]> { return USE_MOCK ? mockFinancialAgreements : normalizeFinancialAgreements(await fetchTable('financial_agreement')) }
-export async function getPhds():                Promise<Phd[]>                { return USE_MOCK ? mockPhds                : normalizePhds(               await fetchTable('Phd')) }
-export async function getMobilityGrants():      Promise<MobilityGrant[]>      { return USE_MOCK ? mockMobilityGrants      : normalizeMobilityGrants(     await fetchTable('mobility_grant')) }
+export async function getPhds(): Promise<Phd[]> { return USE_MOCK ? mockPhds : normalizePhds(await fetchTable('Phd')) }
+export async function getMobilityGrants(): Promise<MobilityGrant[]> { return USE_MOCK ? mockMobilityGrants : normalizeMobilityGrants(await fetchTable('mobility_grant')) }
 
 // --- Budget & indicateurs ---
 
 export async function getIndicatorDefinitions(): Promise<IndicatorDefinition[]> { return USE_MOCK ? mockIndicatorDefinitions : normalizeIndicatorDefinitions(await fetchTable('indicator_definition')) }
-export async function getBudgetCategories():     Promise<BudgetCategory[]>      { return USE_MOCK ? mockBudgetCategories     : normalizeBudgetCategories(   await fetchTable('budget_category')) }
-export async function getBudgetDetails():        Promise<BudgetDetail[]>        { return USE_MOCK ? mockBudgetDetails        : normalizeBudgetDetails(      await fetchTable('budget_detail')) }
+export async function getBudgetCategories(): Promise<BudgetCategory[]> { return USE_MOCK ? mockBudgetCategories : normalizeBudgetCategories(await fetchTable('budget_category')) }
+export async function getBudgetDetails(): Promise<BudgetDetail[]> { return USE_MOCK ? mockBudgetDetails : normalizeBudgetDetails(await fetchTable('budget_detail')) }
 
 // --- To-do ---
 
@@ -74,11 +74,11 @@ export async function getMemberActionCardsByCard(cardId: number): Promise<(Membe
         ? Promise.resolve([
             mockMemberActionCards.filter(m => m.action_card_id === cardId),
             mockMembers,
-          ])
+        ])
         : Promise.all([
             fetchTable('member_action_card').then(normalizeMemberActionCards),
             getMembers(),
-          ])
+        ])
     )
     const memberMap = new Map((members as Member[]).map(m => [m.id, m]))
     return (links as MemberActionCard[])
@@ -92,11 +92,11 @@ export async function getProjectActionCardsByCard(cardId: number): Promise<(Proj
         ? Promise.resolve([
             mockProjectActionCards.filter(p => p.action_card_id === cardId),
             mockProjects,
-          ])
+        ])
         : Promise.all([
             fetchTable('project_action_card').then(normalizeProjectActionCards),
             getProjects(),
-          ])
+        ])
     )
     const projectMap = new Map((projects as Project[]).map(p => [p.id, p]))
     return (links as ProjectActionCard[])
@@ -196,18 +196,18 @@ export async function removeProjectFromCard(linkId: number): Promise<void> {
 
 // --- Catégories ---
 
-export async function createCategory(title: string, parentId: number | null): Promise<Category> {
+export async function createCategory(title: string, parentId: number | null, color?: string | null): Promise<Category> {
     if (USE_MOCK) {
         const newId = Math.max(...mockCategories.map(c => c.id)) + 1
-        const cat: Category = { id: newId, parent_category_id: parentId, title }
+        const cat: Category = { id: newId, parent_category_id: parentId, title, color: color ?? null }
         mockCategories.push(cat)
         return cat
     }
-    const id = await addRecord('category', { title, parent_category_id: parentId ?? 0 })
-    return { id, parent_category_id: parentId, title }
+    const id = await addRecord('category', { title, parent_category_id: parentId ?? 0, color: color ?? '' })
+    return { id, parent_category_id: parentId, title, color: color ?? null }
 }
 
-export async function updateCategory(id: number, patch: Partial<Pick<Category, 'title' | 'parent_category_id'>>): Promise<void> {
+export async function updateCategory(id: number, patch: Partial<Pick<Category, 'title' | 'parent_category_id' | 'color'>>): Promise<void> {
     if (USE_MOCK) {
         const cat = mockCategories.find(c => c.id === id)
         if (cat) Object.assign(cat, patch)
@@ -237,22 +237,22 @@ export async function getOrCreateOtherCategory(): Promise<number> {
 // Formulaire de création d'une ActionCard complète
 export type ActionCardCreateForm = {
     // Général
-    title:       string
+    title: string
     description: string
-    start_date:  string
-    end_date:    string
+    start_date: string
+    end_date: string
     // Classification
-    status_id:   number
+    status_id: number
     category_id: number
-    axis_id:     number | null
+    axis_id: number | null
     // Personnes
-    owner_id:    number
-    members:     { member_id: number; role: string }[]
+    owner_id: number
+    members: { member_id: number; role: string }[]
     // Projet
-    project_id:  number | null
+    project_id: number | null
     // To-do
-    todo_title:  string
-    todo_items:  string[]
+    todo_title: string
+    todo_items: string[]
 }
 
 export async function createActionCardFull(form: ActionCardCreateForm): Promise<ActionCardFull> {
@@ -260,36 +260,36 @@ export async function createActionCardFull(form: ActionCardCreateForm): Promise<
         // En mode mock on pousse dans les tableaux en mémoire (reload = reset)
         const newId = Math.max(...mockActionCards.map(c => c.id)) + 1
         const card = {
-            id:          newId,
-            owner_id:    form.owner_id,
+            id: newId,
+            owner_id: form.owner_id,
             category_id: form.category_id,
-            status_id:   form.status_id,
-            title:       form.title,
-            color:       '',
+            status_id: form.status_id,
+            title: form.title,
+            color: '',
             description: form.description,
-            start_date:  form.start_date,
-            end_date:    form.end_date,
+            start_date: form.start_date,
+            end_date: form.end_date,
         }
         mockActionCards.push(card)
 
-        const statusMap   = new Map(mockStatuses.map(s => [s.id, s]))
+        const statusMap = new Map(mockStatuses.map(s => [s.id, s]))
         const categoryMap = new Map(mockCategories.map(c => [c.id, c]))
-        const memberMap   = new Map(mockMembers.map(m => [m.id, m]))
-        const category    = categoryMap.get(form.category_id)!
-        const parent      = category.parent_category_id ? categoryMap.get(category.parent_category_id) ?? null : null
+        const memberMap = new Map(mockMembers.map(m => [m.id, m]))
+        const category = categoryMap.get(form.category_id)!
+        const parent = category.parent_category_id ? categoryMap.get(category.parent_category_id) ?? null : null
 
         return { ...card, status: statusMap.get(form.status_id)!, category: { ...category, parent }, owner: memberMap.get(form.owner_id)! }
     }
 
     // 1. Créer la carte principale
     const cardId = await addRecord('action_card', {
-        title:       form.title,
+        title: form.title,
         description: form.description,
-        start_date:  form.start_date,
-        end_date:    form.end_date,
-        status_id:   form.status_id,
+        start_date: form.start_date,
+        end_date: form.end_date,
+        status_id: form.status_id,
         category_id: form.category_id,
-        owner_id:    form.owner_id,
+        owner_id: form.owner_id,
     })
 
     // 2. Lier les participants en parallèle avec les autres relations
@@ -331,13 +331,13 @@ export async function updateActionCard(
 
 export async function getActionCardsFull(): Promise<ActionCardFull[]> {
     if (USE_MOCK) {
-        const statusMap   = new Map(mockStatuses.map(s => [s.id, s]))
+        const statusMap = new Map(mockStatuses.map(s => [s.id, s]))
         const categoryMap = new Map(mockCategories.map(c => [c.id, c]))
-        const memberMap   = new Map(mockMembers.map(m => [m.id, m]))
+        const memberMap = new Map(mockMembers.map(m => [m.id, m]))
 
         return mockActionCards.map(card => ({
             ...card,
-            status:   statusMap.get(card.status_id)!,
+            status: statusMap.get(card.status_id)!,
             category: {
                 ...categoryMap.get(card.category_id)!,
                 parent: (() => {

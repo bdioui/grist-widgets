@@ -30,9 +30,10 @@ export function normalizeStatuses(rows: Record<string, unknown>[]): Status[] {
 
 export function normalizeCategories(rows: Record<string, unknown>[]): Category[] {
     return rows.map(r => ({
-        id:                num(r.id),
+        id:                 num(r.id),
         parent_category_id: nullable(r.parent_category_id),
-        title:             str(r.title),
+        title:              str(r.title),
+        color:              r.color ? str(r.color) : null,
     }))
 }
 

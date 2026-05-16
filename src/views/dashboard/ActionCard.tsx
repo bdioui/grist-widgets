@@ -38,7 +38,8 @@ export type ActionCardData = {
     category: {
         id: number
         title: string
-        parent?: { id: number; title: string }
+        color?: string | null
+        parent?: { id: number; title: string; color?: string | null }
     }
     owner?: Owner
     start_date?: string
