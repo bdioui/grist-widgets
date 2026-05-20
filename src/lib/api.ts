@@ -26,45 +26,70 @@ import type {
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
+// --- IDs des tables Grist (Grist capitalise automatiquement la 1ère lettre) ---
+// Si vos tables ont un ID différent, modifiez uniquement ici.
+const T = {
+    status:               'Status',
+    category:             'Category',
+    member:               'Member',
+    partner:              'Partner',
+    axis:                 'Axis',
+    action_card:          'Action_card',
+    project_call:         'Project_call',
+    project:              'Project',
+    financial_agreement:  'Financial_agreement',
+    phd:                  'Phd',
+    mobility_grant:       'Mobility_grant',
+    indicator_definition: 'Indicator_definition',
+    budget_category:      'Budget_category',
+    budget_detail:        'Budget_detail',
+    to_do_list:           'To_do_list',
+    to_do_item:           'To_do_item',
+    axis_action_card:     'Axis_action_card',
+    member_action_card:   'Member_action_card',
+    agreement_action_card:'Agreement_action_card',
+    project_action_card:  'Project_action_card',
+}
+
 // --- Tables de référence ---
 
-export async function getStatuses(): Promise<Status[]> { return USE_MOCK ? mockStatuses : normalizeStatuses(await fetchTable('status')) }
-export async function getCategories(): Promise<Category[]> { return USE_MOCK ? mockCategories : normalizeCategories(await fetchTable('category')) }
-export async function getMembers(): Promise<Member[]> { return USE_MOCK ? mockMembers : normalizeMembers(await fetchTable('member')) }
-export async function getPartners(): Promise<Partner[]> { return USE_MOCK ? mockPartners : normalizePartners(await fetchTable('partner')) }
-export async function getAxes(): Promise<Axis[]> { return USE_MOCK ? mockAxes : normalizeAxes(await fetchTable('axis')) }
+export async function getStatuses(): Promise<Status[]> { return USE_MOCK ? mockStatuses : normalizeStatuses(await fetchTable(T.status)) }
+export async function getCategories(): Promise<Category[]> { return USE_MOCK ? mockCategories : normalizeCategories(await fetchTable(T.category)) }
+export async function getMembers(): Promise<Member[]> { return USE_MOCK ? mockMembers : normalizeMembers(await fetchTable(T.member)) }
+export async function getPartners(): Promise<Partner[]> { return USE_MOCK ? mockPartners : normalizePartners(await fetchTable(T.partner)) }
+export async function getAxes(): Promise<Axis[]> { return USE_MOCK ? mockAxes : normalizeAxes(await fetchTable(T.axis)) }
 
 // --- Cœur du système ---
 
-export async function getActionCards(): Promise<ActionCard[]> { return USE_MOCK ? mockActionCards : normalizeActionCards(await fetchTable('action_card')) }
-export async function getProjectCalls(): Promise<ProjectCall[]> { return USE_MOCK ? mockProjectCalls : normalizeProjectCalls(await fetchTable('project_call')) }
-export async function getProjects(): Promise<Project[]> { return USE_MOCK ? mockProjects : normalizeProjects(await fetchTable('project')) }
-export async function getFinancialAgreements(): Promise<FinancialAgreement[]> { return USE_MOCK ? mockFinancialAgreements : normalizeFinancialAgreements(await fetchTable('financial_agreement')) }
-export async function getPhds(): Promise<Phd[]> { return USE_MOCK ? mockPhds : normalizePhds(await fetchTable('Phd')) }
-export async function getMobilityGrants(): Promise<MobilityGrant[]> { return USE_MOCK ? mockMobilityGrants : normalizeMobilityGrants(await fetchTable('mobility_grant')) }
+export async function getActionCards(): Promise<ActionCard[]> { return USE_MOCK ? mockActionCards : normalizeActionCards(await fetchTable(T.action_card)) }
+export async function getProjectCalls(): Promise<ProjectCall[]> { return USE_MOCK ? mockProjectCalls : normalizeProjectCalls(await fetchTable(T.project_call)) }
+export async function getProjects(): Promise<Project[]> { return USE_MOCK ? mockProjects : normalizeProjects(await fetchTable(T.project)) }
+export async function getFinancialAgreements(): Promise<FinancialAgreement[]> { return USE_MOCK ? mockFinancialAgreements : normalizeFinancialAgreements(await fetchTable(T.financial_agreement)) }
+export async function getPhds(): Promise<Phd[]> { return USE_MOCK ? mockPhds : normalizePhds(await fetchTable(T.phd)) }
+export async function getMobilityGrants(): Promise<MobilityGrant[]> { return USE_MOCK ? mockMobilityGrants : normalizeMobilityGrants(await fetchTable(T.mobility_grant)) }
 
 // --- Budget & indicateurs ---
 
-export async function getIndicatorDefinitions(): Promise<IndicatorDefinition[]> { return USE_MOCK ? mockIndicatorDefinitions : normalizeIndicatorDefinitions(await fetchTable('indicator_definition')) }
-export async function getBudgetCategories(): Promise<BudgetCategory[]> { return USE_MOCK ? mockBudgetCategories : normalizeBudgetCategories(await fetchTable('budget_category')) }
-export async function getBudgetDetails(): Promise<BudgetDetail[]> { return USE_MOCK ? mockBudgetDetails : normalizeBudgetDetails(await fetchTable('budget_detail')) }
+export async function getIndicatorDefinitions(): Promise<IndicatorDefinition[]> { return USE_MOCK ? mockIndicatorDefinitions : normalizeIndicatorDefinitions(await fetchTable(T.indicator_definition)) }
+export async function getBudgetCategories(): Promise<BudgetCategory[]> { return USE_MOCK ? mockBudgetCategories : normalizeBudgetCategories(await fetchTable(T.budget_category)) }
+export async function getBudgetDetails(): Promise<BudgetDetail[]> { return USE_MOCK ? mockBudgetDetails : normalizeBudgetDetails(await fetchTable(T.budget_detail)) }
 
 // --- To-do ---
 
-export async function getToDoLists(): Promise<ToDoList[]> { return USE_MOCK ? mockToDoLists : normalizeToDoLists(await fetchTable('to_do_list')) }
-export async function getToDoItems(): Promise<ToDoItem[]> { return USE_MOCK ? mockToDoItems : normalizeToDoItems(await fetchTable('to_do_item')) }
+export async function getToDoLists(): Promise<ToDoList[]> { return USE_MOCK ? mockToDoLists : normalizeToDoLists(await fetchTable(T.to_do_list)) }
+export async function getToDoItems(): Promise<ToDoItem[]> { return USE_MOCK ? mockToDoItems : normalizeToDoItems(await fetchTable(T.to_do_item)) }
 
 // --- Liens globaux (pour les filtres du kanban) ---
 
 export async function getAllAxisActionCards(): Promise<AxisActionCard[]> {
     if (USE_MOCK) return [...mockAxisActionCards]
-    const rows = await fetchTable('axis_action_card')
+    const rows = await fetchTable(T.axis_action_card)
     return rows.map(r => ({ id: Number(r.id), axis_id: Number(r.axis_id), action_card_id: Number(r.action_card_id) }))
 }
 
 export async function getAllMemberActionCards(): Promise<MemberActionCard[]> {
     if (USE_MOCK) return [...mockMemberActionCards]
-    const rows = await fetchTable('member_action_card')
+    const rows = await fetchTable(T.member_action_card)
     return normalizeMemberActionCards(rows)
 }
 
@@ -77,7 +102,7 @@ export async function getMemberActionCardsByCard(cardId: number): Promise<(Membe
             mockMembers,
         ])
         : Promise.all([
-            fetchTable('member_action_card').then(normalizeMemberActionCards),
+            fetchTable(T.member_action_card).then(normalizeMemberActionCards),
             getMembers(),
         ])
     )
@@ -95,7 +120,7 @@ export async function getProjectActionCardsByCard(cardId: number): Promise<(Proj
             mockProjects,
         ])
         : Promise.all([
-            fetchTable('project_action_card').then(normalizeProjectActionCards),
+            fetchTable(T.project_action_card).then(normalizeProjectActionCards),
             getProjects(),
         ])
     )
@@ -112,8 +137,8 @@ export async function getToDoListsWithItemsByCard(cardId: number): Promise<(ToDo
         return lists.map(l => ({ ...l, items: mockToDoItems.filter(i => i.list_id === l.id) }))
     }
     const [lists, items] = await Promise.all([
-        fetchTable('to_do_list').then(normalizeToDoLists),
-        fetchTable('to_do_item').then(normalizeToDoItems),
+        fetchTable(T.to_do_list).then(normalizeToDoLists),
+        fetchTable(T.to_do_item).then(normalizeToDoItems),
     ])
     return lists
         .filter(l => l.action_card_id === cardId)
@@ -128,7 +153,7 @@ export async function updateToDoItem(id: number, patch: Partial<Pick<ToDoItem, '
         if (item) Object.assign(item, patch)
         return
     }
-    await updateRecord('to_do_item', id, patch)
+    await updateRecord(T.to_do_item, id, patch)
 }
 
 export async function addToDoItemToList(listId: number, content: string): Promise<ToDoItem> {
@@ -138,7 +163,7 @@ export async function addToDoItemToList(listId: number, content: string): Promis
         mockToDoItems.push(item)
         return item
     }
-    const id = await addRecord('to_do_item', { list_id: listId, content, status_id: 8 })
+    const id = await addRecord(T.to_do_item, { list_id: listId, content, status_id: 8 })
     return { id, list_id: listId, content, status_id: 8, start_date: '', end_time: '' }
 }
 
@@ -149,7 +174,7 @@ export async function addToDoListToCard(cardId: number, title: string): Promise<
         mockToDoLists.push(list)
         return { ...list, items: [] }
     }
-    const id = await addRecord('to_do_list', { action_card_id: cardId, title })
+    const id = await addRecord(T.to_do_list, { action_card_id: cardId, title })
     return { id, action_card_id: cardId, title, items: [] }
 }
 
@@ -160,7 +185,7 @@ export async function addMemberToCard(cardId: number, memberId: number, role: st
         mockMemberActionCards.push(link)
         return { ...link, member: mockMembers.find(m => m.id === memberId)! }
     }
-    const id = await addRecord('member_action_card', { member_id: memberId, action_card_id: cardId, role })
+    const id = await addRecord(T.member_action_card, { member_id: memberId, action_card_id: cardId, role })
     const members = await getMembers()
     return { id, member_id: memberId, action_card_id: cardId, role, member: members.find(m => m.id === memberId)! }
 }
@@ -171,7 +196,7 @@ export async function removeMemberFromCard(linkId: number): Promise<void> {
         if (i !== -1) mockMemberActionCards.splice(i, 1)
         return
     }
-    await deleteRecord('member_action_card', linkId)
+    await deleteRecord(T.member_action_card, linkId)
 }
 
 export async function addProjectToCard(cardId: number, projectId: number): Promise<ProjectActionCard & { project: Project }> {
@@ -181,7 +206,7 @@ export async function addProjectToCard(cardId: number, projectId: number): Promi
         mockProjectActionCards.push(link)
         return { ...link, project: mockProjects.find(p => p.id === projectId)! }
     }
-    const id = await addRecord('project_action_card', { project_id: projectId, action_card_id: cardId })
+    const id = await addRecord(T.project_action_card, { project_id: projectId, action_card_id: cardId })
     const projects = await getProjects()
     return { id, project_id: projectId, action_card_id: cardId, project: projects.find(p => p.id === projectId)! }
 }
@@ -192,7 +217,7 @@ export async function removeProjectFromCard(linkId: number): Promise<void> {
         if (i !== -1) mockProjectActionCards.splice(i, 1)
         return
     }
-    await deleteRecord('project_action_card', linkId)
+    await deleteRecord(T.project_action_card, linkId)
 }
 
 export async function getAgreementActionCardsByCard(cardId: number): Promise<(AgreementActionCard & { agreement: FinancialAgreement })[]> {
@@ -202,7 +227,7 @@ export async function getAgreementActionCardsByCard(cardId: number): Promise<(Ag
             mockFinancialAgreements,
         ])
         : Promise.all([
-            fetchTable('agreement_action_card').then(normalizeAgreementActionCards),
+            fetchTable(T.agreement_action_card).then(normalizeAgreementActionCards),
             getFinancialAgreements(),
         ])
     )
@@ -220,7 +245,7 @@ export async function addAgreementToCard(cardId: number, agreementId: number): P
         mockAgreementActionCards.push(link)
         return { ...link, agreement: mockFinancialAgreements.find(a => a.id === agreementId)! }
     }
-    const id = await addRecord('agreement_action_card', { financial_agreement_id: agreementId, action_card_id: cardId })
+    const id = await addRecord(T.agreement_action_card, { financial_agreement_id: agreementId, action_card_id: cardId })
     const agreements = await getFinancialAgreements()
     return { id, financial_agreement_id: agreementId, action_card_id: cardId, agreement: agreements.find(a => a.id === agreementId)! }
 }
@@ -231,7 +256,7 @@ export async function removeAgreementFromCard(linkId: number): Promise<void> {
         if (i !== -1) mockAgreementActionCards.splice(i, 1)
         return
     }
-    await deleteRecord('agreement_action_card', linkId)
+    await deleteRecord(T.agreement_action_card, linkId)
 }
 
 // --- Membres ---
@@ -255,7 +280,7 @@ export async function addMember(fields: Omit<Member, 'id'>): Promise<Member> {
         mockMembers.push(member)
         return member
     }
-    const id = await addRecord('member', fields)
+    const id = await addRecord(T.member, fields)
     return { id, ...fields }
 }
 
@@ -265,7 +290,7 @@ export async function updateMember(id: number, patch: Partial<Omit<Member, 'id'>
         if (m) Object.assign(m, patch)
         return
     }
-    await updateRecord('member', id, patch)
+    await updateRecord(T.member, id, patch)
 }
 
 export async function deleteMember(id: number): Promise<void> {
@@ -274,7 +299,7 @@ export async function deleteMember(id: number): Promise<void> {
         if (i !== -1) mockMembers.splice(i, 1)
         return
     }
-    await deleteRecord('member', id)
+    await deleteRecord(T.member, id)
 }
 
 // --- Partenaires ---
@@ -286,7 +311,7 @@ export async function addPartner(fields: Omit<Partner, 'id'>): Promise<Partner> 
         mockPartners.push(partner)
         return partner
     }
-    const id = await addRecord('partner', fields)
+    const id = await addRecord(T.partner, fields)
     return { id, ...fields }
 }
 
@@ -296,7 +321,7 @@ export async function updatePartner(id: number, patch: Partial<Omit<Partner, 'id
         if (p) Object.assign(p, patch)
         return
     }
-    await updateRecord('partner', id, patch)
+    await updateRecord(T.partner, id, patch)
 }
 
 export async function deletePartner(id: number): Promise<void> {
@@ -305,7 +330,7 @@ export async function deletePartner(id: number): Promise<void> {
         if (i !== -1) mockPartners.splice(i, 1)
         return
     }
-    await deleteRecord('partner', id)
+    await deleteRecord(T.partner, id)
 }
 
 // --- Appels à projets ---
@@ -317,7 +342,7 @@ export async function addProjectCall(fields: Omit<ProjectCall, 'id'>): Promise<P
         mockProjectCalls.push(pc)
         return pc
     }
-    const id = await addRecord('project_call', fields)
+    const id = await addRecord(T.project_call, fields)
     return { id, ...fields }
 }
 
@@ -327,7 +352,7 @@ export async function updateProjectCall(id: number, patch: Partial<Omit<ProjectC
         if (pc) Object.assign(pc, patch)
         return
     }
-    await updateRecord('project_call', id, patch)
+    await updateRecord(T.project_call, id, patch)
 }
 
 export async function deleteProjectCall(id: number): Promise<void> {
@@ -336,7 +361,7 @@ export async function deleteProjectCall(id: number): Promise<void> {
         if (i !== -1) mockProjectCalls.splice(i, 1)
         return
     }
-    await deleteRecord('project_call', id)
+    await deleteRecord(T.project_call, id)
 }
 
 // --- Projets ---
@@ -348,7 +373,7 @@ export async function addProject(fields: Omit<Project, 'id'>): Promise<Project> 
         mockProjects.push(project)
         return project
     }
-    const id = await addRecord('project', fields)
+    const id = await addRecord(T.project, fields)
     return { id, ...fields }
 }
 
@@ -358,7 +383,7 @@ export async function updateProject(id: number, patch: Partial<Omit<Project, 'id
         if (p) Object.assign(p, patch)
         return
     }
-    await updateRecord('project', id, patch)
+    await updateRecord(T.project, id, patch)
 }
 
 export async function deleteProject(id: number): Promise<void> {
@@ -367,7 +392,7 @@ export async function deleteProject(id: number): Promise<void> {
         if (i !== -1) mockProjects.splice(i, 1)
         return
     }
-    await deleteRecord('project', id)
+    await deleteRecord(T.project, id)
 }
 
 // --- Conventions financières ---
@@ -394,7 +419,7 @@ export async function addAgreement(fields: Omit<FinancialAgreement, 'id'>): Prom
         mockFinancialAgreements.push(agreement)
         return agreement
     }
-    const id = await addRecord('financial_agreement', fields)
+    const id = await addRecord(T.financial_agreement, fields)
     return { id, ...fields }
 }
 
@@ -404,7 +429,7 @@ export async function updateAgreement(id: number, patch: Partial<Omit<FinancialA
         if (a) Object.assign(a, patch)
         return
     }
-    await updateRecord('financial_agreement', id, patch)
+    await updateRecord(T.financial_agreement, id, patch)
 }
 
 export async function deleteAgreement(id: number): Promise<void> {
@@ -413,7 +438,7 @@ export async function deleteAgreement(id: number): Promise<void> {
         if (i !== -1) mockFinancialAgreements.splice(i, 1)
         return
     }
-    await deleteRecord('financial_agreement', id)
+    await deleteRecord(T.financial_agreement, id)
 }
 
 // --- Catégories ---
@@ -425,7 +450,7 @@ export async function createCategory(title: string, parentId: number | null, col
         mockCategories.push(cat)
         return cat
     }
-    const id = await addRecord('category', { title, parent_category_id: parentId ?? 0, color: color ?? '' })
+    const id = await addRecord(T.category, { title, parent_category_id: parentId ?? 0, color: color ?? '' })
     return { id, parent_category_id: parentId, title, color: color ?? null }
 }
 
@@ -435,7 +460,7 @@ export async function updateCategory(id: number, patch: Partial<Pick<Category, '
         if (cat) Object.assign(cat, patch)
         return
     }
-    await updateRecord('category', id, patch)
+    await updateRecord(T.category, id, patch)
 }
 
 // --- Catégorie "Autre" ---
@@ -451,7 +476,7 @@ export async function getOrCreateOtherCategory(): Promise<number> {
     const cats = await getCategories()
     const existing = cats.find(c => c.title === 'Autre')
     if (existing) return existing.id
-    return await addRecord('category', { title: 'Autre', parent_category_id: null })
+    return await addRecord(T.category, { title: 'Autre', parent_category_id: null })
 }
 
 // --- Mutations ---
@@ -504,7 +529,7 @@ export async function createActionCardFull(form: ActionCardCreateForm): Promise<
     }
 
     // 1. Créer la carte principale
-    const cardId = await addRecord('action_card', {
+    const cardId = await addRecord(T.action_card, {
         title: form.title,
         description: form.description,
         start_date: form.start_date,
@@ -517,19 +542,19 @@ export async function createActionCardFull(form: ActionCardCreateForm): Promise<
     // 2. Lier les participants en parallèle avec les autres relations
     await Promise.all([
         form.members.length > 0
-            ? addRecords('member_action_card', form.members.map(m => ({ member_id: m.member_id, action_card_id: cardId, role: m.role })))
+            ? addRecords(T.member_action_card, form.members.map(m => ({ member_id: m.member_id, action_card_id: cardId, role: m.role })))
             : Promise.resolve([]),
         form.project_id
-            ? addRecord('project_action_card', { project_id: form.project_id, action_card_id: cardId })
+            ? addRecord(T.project_action_card, { project_id: form.project_id, action_card_id: cardId })
             : Promise.resolve(0),
         form.axis_id
-            ? addRecord('axis_action_card', { axis_id: form.axis_id, action_card_id: cardId })
+            ? addRecord(T.axis_action_card, { axis_id: form.axis_id, action_card_id: cardId })
             : Promise.resolve(0),
         (async () => {
             if (!form.todo_title && form.todo_items.length === 0) return
-            const listId = await addRecord('to_do_list', { action_card_id: cardId, title: form.todo_title || 'To-do' })
+            const listId = await addRecord(T.to_do_list, { action_card_id: cardId, title: form.todo_title || 'To-do' })
             if (form.todo_items.length > 0) {
-                await addRecords('to_do_item', form.todo_items.map(content => ({
+                await addRecords(T.to_do_item, form.todo_items.map(content => ({
                     list_id: listId, content, status_id: 8,
                 })))
             }
@@ -546,7 +571,7 @@ export async function updateActionCard(
     patch: Partial<Pick<ActionCard, 'category_id' | 'status_id' | 'owner_id' | 'title' | 'description' | 'color' | 'start_date' | 'end_date'>>
 ): Promise<void> {
     if (USE_MOCK) return // pas de persistance en mode mock
-    await updateRecord('action_card', id, patch)
+    await updateRecord(T.action_card, id, patch)
 }
 
 export async function deleteActionCard(id: number): Promise<void> {
@@ -555,7 +580,7 @@ export async function deleteActionCard(id: number): Promise<void> {
         if (i !== -1) mockActionCards.splice(i, 1)
         return
     }
-    await deleteRecord('action_card', id)
+    await deleteRecord(T.action_card, id)
 }
 
 // --- Requête enrichie (jointures) ---
@@ -581,7 +606,7 @@ export async function getActionCardsFull(): Promise<ActionCardFull[]> {
     }
 
     const [rows, statuses, categories, members] = await Promise.all([
-        fetchTable('action_card'),
+        fetchTable(T.action_card),
         getStatuses(),
         getCategories(),
         getMembers(),
@@ -628,7 +653,7 @@ export async function getPartnerCardsFull(): Promise<PartnerCardFull[]> {
     }
 
     const [rows, financial_agreements, projects, members] = await Promise.all([
-        fetchTable('partner'),
+        fetchTable(T.partner),
         getFinancialAgreements(),
         getProjects(),
         getMembers(),
