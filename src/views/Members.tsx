@@ -1,9 +1,640 @@
+import { useEffect, useState } from 'react'
+import { getMembersFull, getPartners, addMember, updateMember, deleteMember } from '@/lib/api'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2 } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import type { MemberFull, Partner } from '@/lib/types'
+
+// --- Constantes ---
+
+const MEMBER_STATUSES = [
+    'Enseignant-chercheur',
+    'Chercheur',
+    'BIATSS',
+    'Doctorant',
+    'Post-doc',
+    'Salarié',
+    'Fonctionnaire',
+    'Élu',
+    'Autre',
+]
+
+const GENRES = ['F', 'M', 'Autre']
+
+type MemberForm = {
+    first_name:    string
+    last_name:     string
+    position:      string
+    email:         string
+    tel:           string
+    genre:         string
+    status:        string
+    partner_id:    number
+    profile_image: string
+}
+
+const EMPTY_FORM: MemberForm = {
+    first_name:    '',
+    last_name:     '',
+    position:      '',
+    email:         '',
+    tel:           '',
+    genre:         'F',
+    status:        'Enseignant-chercheur',
+    partner_id:    0,
+    profile_image: '',
+}
+
+// --- Formulaire création / édition ---
+
+type MemberFormSheetProps =
+    | { mode: 'create'; partners: Partner[]; onCreated: (m: MemberFull) => void; onClose: () => void }
+    | { mode: 'edit';   partners: Partner[]; member: MemberFull; onUpdated: (m: MemberFull) => void; onClose: () => void }
+
+function MemberFormSheet(props: MemberFormSheetProps) {
+    const isEdit = props.mode === 'edit'
+    const [form, setForm] = useState<MemberForm>(
+        isEdit
+            ? {
+                first_name:    props.member.first_name,
+                last_name:     props.member.last_name,
+                position:      props.member.position,
+                email:         props.member.email,
+                tel:           props.member.tel,
+                genre:         props.member.genre,
+                status:        props.member.status,
+                partner_id:    props.member.partner_id,
+                profile_image: props.member.profile_image,
+            }
+            : EMPTY_FORM
+    )
+    const [saving, setSaving] = useState(false)
+
+    function setField<K extends keyof MemberForm>(key: K, value: MemberForm[K]) {
+        setForm(prev => ({ ...prev, [key]: value }))
+    }
+
+    async function handleSave() {
+        if (!form.first_name.trim() || !form.last_name.trim()) return
+        setSaving(true)
+        try {
+            const partner = props.partners.find(p => p.id === form.partner_id) ?? null
+            if (isEdit) {
+                await updateMember(props.member.id, form)
+                props.onUpdated({ ...props.member, ...form, partner })
+            } else {
+                const created = await addMember(form)
+                props.onCreated({ ...created, partner })
+            }
+            props.onClose()
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <div className="flex flex-col gap-4 px-6 py-4">
+            <div className="flex gap-3">
+                <div className="flex flex-col gap-1.5 flex-1">
+                    <Label>Prénom</Label>
+                    <Input value={form.first_name} onChange={e => setField('first_name', e.target.value)} placeholder="Prénom" />
+                </div>
+                <div className="flex flex-col gap-1.5 flex-1">
+                    <Label>Nom</Label>
+                    <Input value={form.last_name} onChange={e => setField('last_name', e.target.value)} placeholder="Nom" />
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+                <Label>Poste</Label>
+                <Input value={form.position} onChange={e => setField('position', e.target.value)} placeholder="Titre / fonction" />
+            </div>
+
+            <div className="flex gap-3">
+                <div className="flex flex-col gap-1.5 flex-1">
+                    <Label>Statut</Label>
+                    <Select value={form.status} onValueChange={v => setField('status', v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            {MEMBER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="flex flex-col gap-1.5 w-28">
+                    <Label>Genre</Label>
+                    <Select value={form.genre} onValueChange={v => setField('genre', v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            {GENRES.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+                <Label>Partenaire</Label>
+                <Select
+                    value={form.partner_id ? String(form.partner_id) : '0'}
+                    onValueChange={v => setField('partner_id', Number(v))}
+                >
+                    <SelectTrigger><SelectValue placeholder="Aucun partenaire" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="0">Aucun partenaire</SelectItem>
+                        {props.partners.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+                <Label>Email</Label>
+                <Input type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="email@exemple.fr" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+                <Label>Téléphone</Label>
+                <Input type="tel" value={form.tel} onChange={e => setField('tel', e.target.value)} placeholder="06 00 00 00 00" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+                <Label>Photo de profil (URL)</Label>
+                <div className="flex items-center gap-3">
+                    <Input
+                        value={form.profile_image}
+                        onChange={e => setField('profile_image', e.target.value)}
+                        placeholder="https://..."
+                    />
+                    {form.profile_image && (
+                        <img
+                            src={form.profile_image}
+                            alt="Aperçu"
+                            className="w-9 h-9 rounded-full object-cover shrink-0 border border-border"
+                            onError={e => (e.currentTarget.style.display = 'none')}
+                        />
+                    )}
+                </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={props.onClose}>Annuler</Button>
+                <Button
+                    className="flex-1"
+                    onClick={handleSave}
+                    disabled={saving || !form.first_name.trim() || !form.last_name.trim()}
+                >
+                    {saving ? 'Enregistrement...' : isEdit ? 'Enregistrer' : 'Créer'}
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+// --- Sheet de consultation ---
+
+type MemberDetailSheetProps = {
+    member:    MemberFull
+    partners:  Partner[]
+    open:      boolean
+    onClose:   () => void
+    onUpdated: (m: MemberFull) => void
+    onDeleted: (id: number) => void
+}
+
+function MemberDetailSheet({ member, partners, open, onClose, onUpdated, onDeleted }: MemberDetailSheetProps) {
+    const [editing,    setEditing]    = useState(false)
+    const [confirming, setConfirming] = useState(false)
+    const [deleting,   setDeleting]   = useState(false)
+
+    async function handleDelete() {
+        setDeleting(true)
+        try {
+            await deleteMember(member.id)
+            onDeleted(member.id)
+            onClose()
+        } finally {
+            setDeleting(false)
+            setConfirming(false)
+        }
+    }
+
+    return (
+        <Sheet open={open} onOpenChange={v => { if (!v) { setEditing(false); setConfirming(false); onClose() } }}>
+            <SheetContent side="right" showCloseButton={false} className="!w-[520px] overflow-y-auto flex flex-col gap-0 p-0">
+
+                {/* Header */}
+                <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium shrink-0"
+                            style={{ backgroundColor: member.partner?.color ?? '#E7E8E2' }}
+                        >
+                            {member.first_name[0]}{member.last_name[0]}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <SheetTitle className="text-base leading-tight">
+                                {member.first_name} {member.last_name}
+                            </SheetTitle>
+                            <span className="text-xs text-muted-foreground truncate">{member.position}</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                        {confirming ? (
+                            <>
+                                <span className="text-xs text-destructive mr-1">Supprimer ?</span>
+                                <Button variant="destructive" size="sm" className="h-7" onClick={handleDelete} disabled={deleting}>
+                                    {deleting ? '...' : 'Confirmer'}
+                                </Button>
+                                <Button variant="ghost" size="sm" className="h-7" onClick={() => setConfirming(false)}>
+                                    Annuler
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(v => !v)}>
+                                    <Pencil size={14} />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setConfirming(true)}>
+                                    <Trash2 size={14} />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+                                    <X size={14} />
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                </SheetHeader>
+
+                {/* Formulaire édition */}
+                {editing && (
+                    <>
+                        <MemberFormSheet
+                            mode="edit"
+                            partners={partners}
+                            member={member}
+                            onUpdated={m => { onUpdated(m); setEditing(false) }}
+                            onClose={() => setEditing(false)}
+                        />
+                        <Separator />
+                    </>
+                )}
+
+                {/* Contenu */}
+                <div className="flex flex-col gap-5 px-6 py-5">
+
+                    <section className="flex flex-col gap-2 text-sm">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Informations</p>
+                        <div className="flex flex-col gap-2 mt-1">
+                            <div className="flex items-center gap-3">
+                                <span className="w-24 shrink-0 text-xs text-muted-foreground">Statut</span>
+                                <Badge variant="outline" className="text-xs">{member.status}</Badge>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="w-24 shrink-0 text-xs text-muted-foreground">Genre</span>
+                                <span>{member.genre}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="w-24 shrink-0 text-xs text-muted-foreground">Partenaire</span>
+                                {member.partner ? (
+                                    <span
+                                        className="text-xs px-2 py-0.5 rounded-full border border-border"
+                                        style={{ backgroundColor: member.partner.color }}
+                                    >
+                                        {member.partner.name}
+                                    </span>
+                                ) : (
+                                    <span className="text-xs text-muted-foreground italic">Aucun</span>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+
+                    <Separator />
+
+                    <section className="flex flex-col gap-2">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Contact</p>
+                        <div className="flex flex-col gap-1 mt-1">
+                            {member.email ? (
+                                <a
+                                    href={`mailto:${member.email}`}
+                                    className="flex items-center gap-3 px-2 py-2 rounded hover:bg-muted group"
+                                >
+                                    <Mail size={14} className="text-muted-foreground shrink-0" />
+                                    <span className="text-sm text-blue-600 group-hover:underline">{member.email}</span>
+                                </a>
+                            ) : (
+                                <p className="text-xs text-muted-foreground italic px-2">Aucun email renseigné</p>
+                            )}
+                            {member.tel && (
+                                <a
+                                    href={`tel:${member.tel}`}
+                                    className="flex items-center gap-3 px-2 py-2 rounded hover:bg-muted group"
+                                >
+                                    <Phone size={14} className="text-muted-foreground shrink-0" />
+                                    <span className="text-sm group-hover:underline">{member.tel}</span>
+                                </a>
+                            )}
+                        </div>
+                    </section>
+
+                </div>
+            </SheetContent>
+        </Sheet>
+    )
+}
+
+// --- Carte contact ---
+
+function MemberCard({ member, onClick }: { member: MemberFull; onClick: () => void }) {
+    return (
+        <Card
+            className="cursor-pointer hover:shadow-md transition-shadow duration-200"
+            onClick={onClick}
+        >
+            <CardHeader className="pb-2">
+                <div className="flex items-start gap-3">
+                    <div
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 mt-0.5"
+                        style={{ backgroundColor: member.partner?.color ?? '#E7E8E2' }}
+                    >
+                        {member.first_name[0]}{member.last_name[0]}
+                    </div>
+                    <div className="flex flex-col min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                            <CardTitle className="text-sm leading-snug">
+                                {member.first_name} {member.last_name}
+                            </CardTitle>
+                            <Badge variant="outline" className="text-xs shrink-0">{member.status}</Badge>
+                        </div>
+                        <CardDescription className="text-xs">{member.position}</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+
+            <CardContent className="pt-0 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                {member.partner ? (
+                    <span
+                        className="px-1.5 py-0.5 rounded-full border border-border text-xs shrink-0"
+                        style={{ backgroundColor: member.partner.color }}
+                    >
+                        {member.partner.name}
+                    </span>
+                ) : (
+                    <span className="italic shrink-0">Sans partenaire</span>
+                )}
+                {member.email && (
+                    <span className="truncate">{member.email}</span>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+// --- Skeleton ---
+
+function MemberCardSkeleton() {
+    return (
+        <Card>
+            <CardHeader className="pb-2">
+                <div className="flex items-start gap-3">
+                    <Skeleton className="w-9 h-9 rounded-full shrink-0" />
+                    <div className="flex flex-col gap-1.5 flex-1">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+                <Skeleton className="h-3 w-20" />
+            </CardContent>
+        </Card>
+    )
+}
+
+// --- Page principale ---
 
 export default function Members() {
-    
+    const [members,  setMembers]  = useState<MemberFull[]>([])
+    const [partners, setPartners] = useState<Partner[]>([])
+    const [loading,  setLoading]  = useState(false)
+    const [error,    setError]    = useState('')
+    const [query,         setQuery]         = useState('')
+    const [statusFilter,  setStatusFilter]  = useState<string[]>([])
+    const [partnerFilter, setPartnerFilter] = useState<number[]>([])
+    const [selected,   setSelected]   = useState<MemberFull | null>(null)
+    const [showCreate, setShowCreate] = useState(false)
+
+    useEffect(() => {
+        setLoading(true)
+        Promise.all([getMembersFull(), getPartners()])
+            .then(([m, p]) => { setMembers(m); setPartners(p) })
+            .catch(err => setError(err.message))
+            .finally(() => setLoading(false))
+    }, [])
+
+    const availableStatuses = [...new Set(members.map(m => m.status))].sort()
+
+    const filtered = members.filter(m => {
+        const matchesQuery = !query.trim() ||
+            `${m.first_name} ${m.last_name}`.toLowerCase().includes(query.toLowerCase()) ||
+            m.position.toLowerCase().includes(query.toLowerCase()) ||
+            m.email.toLowerCase().includes(query.toLowerCase())
+        const matchesStatus  = statusFilter.length === 0 || statusFilter.includes(m.status)
+        const matchesPartner = partnerFilter.length === 0 || partnerFilter.includes(m.partner_id)
+        return matchesQuery && matchesStatus && matchesPartner
+    })
+
+    function handleUpdated(updated: MemberFull) {
+        setMembers(prev => prev.map(m => m.id === updated.id ? updated : m))
+        setSelected(updated)
+    }
+
+    function handleCreated(newMember: MemberFull) {
+        setMembers(prev => [...prev, newMember])
+        setShowCreate(false)
+    }
+
+    function handleDeleted(id: number) {
+        setMembers(prev => prev.filter(m => m.id !== id))
+        setSelected(null)
+    }
+
     return (
-        <div>
-            Members
+        <div className="m-5 flex flex-col gap-4">
+
+            {/* Barre + filtres + bouton */}
+            <div className="flex items-center gap-3 flex-wrap">
+                <Input
+                    placeholder="Rechercher un contact..."
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    className="max-w-sm"
+                />
+
+                {/* Filtre statut — multi-select */}
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <button className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border bg-white transition-colors ${
+                            statusFilter.length > 0
+                                ? 'bg-foreground text-background border-foreground'
+                                : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'
+                        }`}>
+                            {statusFilter.length === 0
+                                ? 'Tous les statuts'
+                                : statusFilter.length === 1
+                                    ? statusFilter[0]
+                                    : `${statusFilter.length} statuts`
+                            }
+                            <ChevronDown size={12} />
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-52 p-2 flex flex-col gap-0.5">
+                        {statusFilter.length > 0 && (
+                            <>
+                                <button
+                                    onClick={() => setStatusFilter([])}
+                                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 text-left"
+                                >
+                                    Tout déselectionner
+                                </button>
+                                <Separator className="my-1" />
+                            </>
+                        )}
+                        {availableStatuses.map(s => (
+                            <label
+                                key={s}
+                                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-xs"
+                            >
+                                <Checkbox
+                                    checked={statusFilter.includes(s)}
+                                    onCheckedChange={checked => setStatusFilter(prev =>
+                                        checked ? [...prev, s] : prev.filter(x => x !== s)
+                                    )}
+                                />
+                                {s}
+                            </label>
+                        ))}
+                    </PopoverContent>
+                </Popover>
+
+                {/* Filtre partenaire — multi-select */}
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <button className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border bg-white transition-colors ${
+                            partnerFilter.length > 0
+                                ? 'bg-foreground text-background border-foreground'
+                                : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'
+                        }`}>
+                            {partnerFilter.length === 0
+                                ? 'Tous les partenaires'
+                                : partnerFilter.length === 1
+                                    ? partners.find(p => p.id === partnerFilter[0])?.name ?? '1 partenaire'
+                                    : `${partnerFilter.length} partenaires`
+                            }
+                            <ChevronDown size={12} />
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-56 p-2 flex flex-col gap-0.5">
+                        {partnerFilter.length > 0 && (
+                            <>
+                                <button
+                                    onClick={() => setPartnerFilter([])}
+                                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 text-left"
+                                >
+                                    Tout déselectionner
+                                </button>
+                                <Separator className="my-1" />
+                            </>
+                        )}
+                        {partners.map(p => (
+                            <label
+                                key={p.id}
+                                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-xs"
+                            >
+                                <Checkbox
+                                    checked={partnerFilter.includes(p.id)}
+                                    onCheckedChange={checked => setPartnerFilter(prev =>
+                                        checked ? [...prev, p.id] : prev.filter(x => x !== p.id)
+                                    )}
+                                />
+                                <span className="flex items-center gap-1.5">
+                                    {p.color && (
+                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                                    )}
+                                    {p.name}
+                                </span>
+                            </label>
+                        ))}
+                    </PopoverContent>
+                </Popover>
+
+                <span className="text-sm text-muted-foreground flex-1">
+                    {filtered.length} contact{filtered.length > 1 ? 's' : ''}
+                </span>
+
+                <Button size="sm" className="gap-1.5 rounded-md" onClick={() => setShowCreate(true)}>
+                    <Plus size={14} /> Nouveau contact
+                </Button>
+            </div>
+
+            {error && <p className="text-sm text-destructive">Erreur : {error}</p>}
+
+            {/* Grille */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {loading
+                    ? [...Array(6)].map((_, i) => <MemberCardSkeleton key={i} />)
+                    : filtered.map(member => (
+                        <MemberCard
+                            key={member.id}
+                            member={member}
+                            onClick={() => setSelected(member)}
+                        />
+                    ))
+                }
+                {!loading && filtered.length === 0 && (
+                    <p className="text-sm text-muted-foreground col-span-full text-center py-8">
+                        Aucun contact ne correspond à la recherche.
+                    </p>
+                )}
+            </div>
+
+            {/* Sheet consultation */}
+            {selected && (
+                <MemberDetailSheet
+                    member={selected}
+                    partners={partners}
+                    open={!!selected}
+                    onClose={() => setSelected(null)}
+                    onUpdated={handleUpdated}
+                    onDeleted={handleDeleted}
+                />
+            )}
+
+            {/* Sheet création */}
+            <Sheet open={showCreate} onOpenChange={v => { if (!v) setShowCreate(false) }}>
+                <SheetContent side="right" showCloseButton={false} className="!w-[480px] p-0">
+                    <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
+                        <SheetTitle>Nouveau contact</SheetTitle>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowCreate(false)}>
+                            <X size={14} />
+                        </Button>
+                    </SheetHeader>
+                    <MemberFormSheet
+                        mode="create"
+                        partners={partners}
+                        onCreated={handleCreated}
+                        onClose={() => setShowCreate(false)}
+                    />
+                </SheetContent>
+            </Sheet>
+
         </div>
     )
 }

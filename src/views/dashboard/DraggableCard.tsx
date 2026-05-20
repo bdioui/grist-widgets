@@ -2,9 +2,9 @@ import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import ActionCard, { type ActionCardData } from './ActionCard'
 
-type Props = { card: ActionCardData }
+type Props = { card: ActionCardData; onDeleted?: (id: number) => void }
 
-export default function DraggableCard({ card }: Props) {
+export default function DraggableCard({ card, onDeleted }: Props) {
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: card.id,
     })
@@ -17,7 +17,7 @@ export default function DraggableCard({ card }: Props) {
             {...listeners}
             {...attributes}
         >
-            <ActionCard {...card} />
+            <ActionCard {...card} onDeleted={onDeleted} />
         </div>
     )
 }

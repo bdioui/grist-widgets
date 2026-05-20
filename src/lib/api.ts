@@ -5,6 +5,7 @@ import {
     mockFinancialAgreements, mockPhds, mockMobilityGrants,
     mockIndicatorDefinitions, mockBudgetCategories, mockBudgetDetails,
     mockToDoLists, mockToDoItems, mockMemberActionCards, mockAxisActionCards, mockProjectActionCards,
+    mockAgreementActionCards,
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -13,14 +14,14 @@ import {
     normalizePhds, normalizeMobilityGrants, normalizeIndicatorDefinitions,
     normalizeBudgetCategories, normalizeBudgetDetails,
     normalizeToDoLists, normalizeToDoItems,
-    normalizeMemberActionCards, normalizeProjectActionCards,
+    normalizeMemberActionCards, normalizeProjectActionCards, normalizeAgreementActionCards, normalizePartnerCardsFull
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis,
-    ActionCard, ActionCardFull, ProjectCall, Project,
+    ActionCard, ActionCardFull, PartnerCardFull, ProjectCall, Project,
     FinancialAgreement, Phd, MobilityGrant,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
-    ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard,
+    ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard, MemberFull,
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -194,6 +195,227 @@ export async function removeProjectFromCard(linkId: number): Promise<void> {
     await deleteRecord('project_action_card', linkId)
 }
 
+export async function getAgreementActionCardsByCard(cardId: number): Promise<(AgreementActionCard & { agreement: FinancialAgreement })[]> {
+    const [links, agreements] = await (USE_MOCK
+        ? Promise.resolve([
+            mockAgreementActionCards.filter(a => a.action_card_id === cardId),
+            mockFinancialAgreements,
+        ])
+        : Promise.all([
+            fetchTable('agreement_action_card').then(normalizeAgreementActionCards),
+            getFinancialAgreements(),
+        ])
+    )
+    const agreementMap = new Map((agreements as FinancialAgreement[]).map(a => [a.id, a]))
+    return (links as AgreementActionCard[])
+        .filter(l => l.action_card_id === cardId)
+        .map(l => ({ ...l, agreement: agreementMap.get(l.financial_agreement_id)! }))
+        .filter(l => l.agreement)
+}
+
+export async function addAgreementToCard(cardId: number, agreementId: number): Promise<AgreementActionCard & { agreement: FinancialAgreement }> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockAgreementActionCards.map(a => a.id)) + 1
+        const link: AgreementActionCard = { id: newId, financial_agreement_id: agreementId, action_card_id: cardId }
+        mockAgreementActionCards.push(link)
+        return { ...link, agreement: mockFinancialAgreements.find(a => a.id === agreementId)! }
+    }
+    const id = await addRecord('agreement_action_card', { financial_agreement_id: agreementId, action_card_id: cardId })
+    const agreements = await getFinancialAgreements()
+    return { id, financial_agreement_id: agreementId, action_card_id: cardId, agreement: agreements.find(a => a.id === agreementId)! }
+}
+
+export async function removeAgreementFromCard(linkId: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockAgreementActionCards.findIndex(a => a.id === linkId)
+        if (i !== -1) mockAgreementActionCards.splice(i, 1)
+        return
+    }
+    await deleteRecord('agreement_action_card', linkId)
+}
+
+// --- Membres ---
+
+export async function getMembersFull(): Promise<MemberFull[]> {
+    const [members, partners] = await (USE_MOCK
+        ? Promise.resolve([mockMembers, mockPartners])
+        : Promise.all([getMembers(), getPartners()])
+    )
+    const partnerMap = new Map((partners as Partner[]).map(p => [p.id, p]))
+    return (members as Member[]).map(m => ({
+        ...m,
+        partner: partnerMap.get(m.partner_id) ?? null,
+    }))
+}
+
+export async function addMember(fields: Omit<Member, 'id'>): Promise<Member> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockMembers.map(m => m.id)) + 1
+        const member: Member = { id: newId, ...fields }
+        mockMembers.push(member)
+        return member
+    }
+    const id = await addRecord('member', fields)
+    return { id, ...fields }
+}
+
+export async function updateMember(id: number, patch: Partial<Omit<Member, 'id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const m = mockMembers.find(m => m.id === id)
+        if (m) Object.assign(m, patch)
+        return
+    }
+    await updateRecord('member', id, patch)
+}
+
+export async function deleteMember(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockMembers.findIndex(m => m.id === id)
+        if (i !== -1) mockMembers.splice(i, 1)
+        return
+    }
+    await deleteRecord('member', id)
+}
+
+// --- Partenaires ---
+
+export async function addPartner(fields: Omit<Partner, 'id'>): Promise<Partner> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockPartners.map(p => p.id)) + 1
+        const partner: Partner = { id: newId, ...fields }
+        mockPartners.push(partner)
+        return partner
+    }
+    const id = await addRecord('partner', fields)
+    return { id, ...fields }
+}
+
+export async function updatePartner(id: number, patch: Partial<Omit<Partner, 'id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const p = mockPartners.find(p => p.id === id)
+        if (p) Object.assign(p, patch)
+        return
+    }
+    await updateRecord('partner', id, patch)
+}
+
+export async function deletePartner(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockPartners.findIndex(p => p.id === id)
+        if (i !== -1) mockPartners.splice(i, 1)
+        return
+    }
+    await deleteRecord('partner', id)
+}
+
+// --- Appels à projets ---
+
+export async function addProjectCall(fields: Omit<ProjectCall, 'id'>): Promise<ProjectCall> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockProjectCalls.map(p => p.id)) + 1
+        const pc: ProjectCall = { id: newId, ...fields }
+        mockProjectCalls.push(pc)
+        return pc
+    }
+    const id = await addRecord('project_call', fields)
+    return { id, ...fields }
+}
+
+export async function updateProjectCall(id: number, patch: Partial<Omit<ProjectCall, 'id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const pc = mockProjectCalls.find(p => p.id === id)
+        if (pc) Object.assign(pc, patch)
+        return
+    }
+    await updateRecord('project_call', id, patch)
+}
+
+export async function deleteProjectCall(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockProjectCalls.findIndex(p => p.id === id)
+        if (i !== -1) mockProjectCalls.splice(i, 1)
+        return
+    }
+    await deleteRecord('project_call', id)
+}
+
+// --- Projets ---
+
+export async function addProject(fields: Omit<Project, 'id'>): Promise<Project> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockProjects.map(p => p.id)) + 1
+        const project: Project = { id: newId, ...fields }
+        mockProjects.push(project)
+        return project
+    }
+    const id = await addRecord('project', fields)
+    return { id, ...fields }
+}
+
+export async function updateProject(id: number, patch: Partial<Omit<Project, 'id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const p = mockProjects.find(p => p.id === id)
+        if (p) Object.assign(p, patch)
+        return
+    }
+    await updateRecord('project', id, patch)
+}
+
+export async function deleteProject(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockProjects.findIndex(p => p.id === id)
+        if (i !== -1) mockProjects.splice(i, 1)
+        return
+    }
+    await deleteRecord('project', id)
+}
+
+// --- Conventions financières ---
+
+export async function getAgreementsByProject(projectId: number): Promise<(FinancialAgreement & { partner: Partner })[]> {
+    const [agreements, partners] = await (USE_MOCK
+        ? Promise.resolve([mockFinancialAgreements, mockPartners])
+        : Promise.all([
+            getFinancialAgreements(),
+            getPartners(),
+        ])
+    )
+    const partnerMap = new Map((partners as Partner[]).map(p => [p.id, p]))
+    return (agreements as FinancialAgreement[])
+        .filter(a => a.project_id === projectId)
+        .map(a => ({ ...a, partner: partnerMap.get(a.partner_id)! }))
+        .filter(a => a.partner)
+}
+
+export async function addAgreement(fields: Omit<FinancialAgreement, 'id'>): Promise<FinancialAgreement> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockFinancialAgreements.map(a => a.id)) + 1
+        const agreement: FinancialAgreement = { id: newId, ...fields }
+        mockFinancialAgreements.push(agreement)
+        return agreement
+    }
+    const id = await addRecord('financial_agreement', fields)
+    return { id, ...fields }
+}
+
+export async function updateAgreement(id: number, patch: Partial<Omit<FinancialAgreement, 'id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const a = mockFinancialAgreements.find(a => a.id === id)
+        if (a) Object.assign(a, patch)
+        return
+    }
+    await updateRecord('financial_agreement', id, patch)
+}
+
+export async function deleteAgreement(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockFinancialAgreements.findIndex(a => a.id === id)
+        if (i !== -1) mockFinancialAgreements.splice(i, 1)
+        return
+    }
+    await deleteRecord('financial_agreement', id)
+}
+
 // --- Catégories ---
 
 export async function createCategory(title: string, parentId: number | null, color?: string | null): Promise<Category> {
@@ -327,6 +549,15 @@ export async function updateActionCard(
     await updateRecord('action_card', id, patch)
 }
 
+export async function deleteActionCard(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockActionCards.findIndex(c => c.id === id)
+        if (i !== -1) mockActionCards.splice(i, 1)
+        return
+    }
+    await deleteRecord('action_card', id)
+}
+
 // --- Requête enrichie (jointures) ---
 
 export async function getActionCardsFull(): Promise<ActionCardFull[]> {
@@ -358,3 +589,51 @@ export async function getActionCardsFull(): Promise<ActionCardFull[]> {
 
     return normalizeActionCardsFull(rows, statuses, categories, members)
 }
+
+export async function getPartnerCardsFull(): Promise<PartnerCardFull[]> {
+    if (USE_MOCK) {
+
+        const membersByPartner = new Map<number, Member[]>()
+        for (const m of mockMembers) {
+            const existing = membersByPartner.get(m.partner_id) ?? []
+            membersByPartner.set(m.partner_id, [...existing, m])
+        }
+
+        // Agreements — boucle sur mockFinancialAgreements
+        const agreementsByPartner = new Map<number, FinancialAgreement[]>()
+        for (const a of mockFinancialAgreements) {
+            const existing = agreementsByPartner.get(a.partner_id) ?? []
+            agreementsByPartner.set(a.partner_id, [...existing, a])
+        }
+
+        // Projects — déduits depuis les conventions (pas de partner_id direct)
+        const projectsByPartner = new Map<number, Project[]>()
+        for (const a of mockFinancialAgreements) {
+            const project = mockProjects.find(p => p.id === a.project_id)
+            if (!project) continue
+            const existing = projectsByPartner.get(a.partner_id) ?? []
+            // éviter les doublons si plusieurs conventions sur le même projet
+            if (!existing.find(p => p.id === project.id)) {
+                projectsByPartner.set(a.partner_id, [...existing, project])
+            }
+        }
+
+        return mockPartners.map(partner => ({
+            ...partner,
+            members: membersByPartner.get(partner.id) ?? [],
+            agreements: agreementsByPartner.get(partner.id) ?? [],
+            projects: projectsByPartner.get(partner.id) ?? []
+
+        }))
+    }
+
+    const [rows, financial_agreements, projects, members] = await Promise.all([
+        fetchTable('partner'),
+        getFinancialAgreements(),
+        getProjects(),
+        getMembers(),
+    ])
+
+    return normalizePartnerCardsFull(rows, financial_agreements, projects, members)
+}
+

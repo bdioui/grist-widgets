@@ -3,43 +3,53 @@ import type {
     ActionCard, ProjectCall, Project, FinancialAgreement,
     Phd, MobilityGrant, ToDoList, ToDoItem,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
-    MemberActionCard, AxisActionCard, ProjectActionCard,
+    MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard,
 } from '@/lib/types'
 
 export const mockStatuses: Status[] = [
-    { id: 1, label: 'En cours',  context: 'action_card' },
-    { id: 2, label: 'Planifié',  context: 'action_card' },
-    { id: 3, label: 'Terminé',   context: 'action_card' },
-    { id: 4, label: 'Annulé',    context: 'action_card' },
-    { id: 5, label: 'À traiter', context: 'action_card' },
-    { id: 6, label: 'En cours',  context: 'project_call' },
-    { id: 7, label: 'Terminé',   context: 'project_call' },
-    { id: 8, label: 'En cours',  context: 'todo_item' },
-    { id: 9, label: 'Terminé',   context: 'todo_item' },
+    { id: 1,  label: 'En cours',           context: 'action_card' },
+    { id: 2,  label: 'Planifié',           context: 'action_card' },
+    { id: 3,  label: 'Terminé',            context: 'action_card' },
+    { id: 4,  label: 'Annulé',             context: 'action_card' },
+    { id: 5,  label: 'À traiter',          context: 'action_card' },
+    { id: 6,  label: 'En cours',           context: 'project_call' },
+    { id: 7,  label: 'Terminé',            context: 'project_call' },
+    { id: 8,  label: 'En cours',           context: 'todo_item' },
+    { id: 9,  label: 'Terminé',            context: 'todo_item' },
+    // --- Projet ---
+    { id: 10, label: 'En cours',           context: 'project' },
+    { id: 11, label: 'Terminé',            context: 'project' },
+    { id: 12, label: 'Suspendu',           context: 'project' },
+    { id: 13, label: 'En attente',         context: 'project' },
+    // --- Convention financière ---
+    { id: 14, label: 'Signée',             context: 'financial_agreement' },
+    { id: 15, label: 'En négociation',     context: 'financial_agreement' },
+    { id: 16, label: 'Terminée',           context: 'financial_agreement' },
+    { id: 17, label: 'Résiliée',           context: 'financial_agreement' },
 ]
 
 export const mockCategories: Category[] = [
-    { id: 1,  parent_category_id: null, title: 'Formation',      color: '#D3E5EF' },
+    { id: 1,  parent_category_id: null, title: 'Formation',      color: '#D8CFEE' },
     { id: 2,  parent_category_id: 1,    title: 'Sensibilisation', color: null },
     { id: 3,  parent_category_id: 1,    title: 'Doctorat',        color: null },
-    { id: 4,  parent_category_id: null, title: 'Recherche',       color: '#E8DEEE' },
+    { id: 4,  parent_category_id: null, title: 'Recherche',       color: '#EEC5EF' },
     { id: 5,  parent_category_id: 4,    title: 'Valorisation',    color: null },
-    { id: 6,  parent_category_id: null, title: 'Partenariat',     color: '#FDEFD4' },
+    { id: 6,  parent_category_id: null, title: 'Partenariat',     color: '#C5D2EF' },
     { id: 7,  parent_category_id: 6,    title: 'Gouvernance',     color: null },
-    { id: 8,  parent_category_id: null, title: 'Mobilité',        color: '#DDEFDF' },
-    { id: 9,  parent_category_id: null, title: 'Financier',       color: '#FFE2DD' },
-    { id: 10, parent_category_id: null, title: 'Communication',   color: '#FBF3CF' },
+    { id: 8,  parent_category_id: null, title: 'Mobilité',        color: '#E7E8E2' },
+    { id: 9,  parent_category_id: null, title: 'Financier',       color: '#EDD803' },
+    { id: 10, parent_category_id: null, title: 'Communication',   color: '#D8CFEE' },
     { id: 11, parent_category_id: 4,    title: 'Publication',     color: null },
     { id: 12, parent_category_id: 6,    title: 'Convention',      color: null },
 ]
 
 export const mockPartners: Partner[] = [
-    { id: 1, name: 'Université X',          description: 'Université partenaire principale',       color: '#D3E5EF', logo: '', status_id: 1, type: 'Université' },
-    { id: 2, name: 'Entreprise A',          description: 'Partenaire industriel stratégique',      color: '#DDEFDF', logo: '', status_id: 1, type: 'Entreprise privée' },
-    { id: 3, name: 'Association B',         description: 'Association de recherche appliquée',     color: '#E8DEEE', logo: '', status_id: 1, type: 'Association' },
-    { id: 4, name: 'Institut de Recherche', description: 'Institut national de recherche',         color: '#FDEFD4', logo: '', status_id: 1, type: 'Établissement public' },
-    { id: 5, name: 'Collectivité D',        description: 'Collectivité territoriale partenaire',  color: '#FFE2DD', logo: '', status_id: 1, type: 'Collectivité' },
-    { id: 6, name: 'Fondation E',           description: 'Fondation de financement scientifique', color: '#F5E0E9', logo: '', status_id: 1, type: 'Fondation' },
+    { id: 1, name: 'Université X',          description: 'Université partenaire principale',       color: '#D8CFEE', logo: '', status_id: 1, type: 'Université' },
+    { id: 2, name: 'Entreprise A',          description: 'Partenaire industriel stratégique',      color: '#E7E8E2', logo: '', status_id: 1, type: 'Entreprise privée' },
+    { id: 3, name: 'Association B',         description: 'Association de recherche appliquée',     color: '#EEC5EF', logo: '', status_id: 1, type: 'Association' },
+    { id: 4, name: 'Institut de Recherche', description: 'Institut national de recherche',         color: '#C5D2EF', logo: '', status_id: 1, type: 'Établissement public' },
+    { id: 5, name: 'Collectivité D',        description: 'Collectivité territoriale partenaire',  color: '#EDD803', logo: '', status_id: 1, type: 'Collectivité' },
+    { id: 6, name: 'Fondation E',           description: 'Fondation de financement scientifique', color: '#EEC5EF', logo: '', status_id: 1, type: 'Fondation' },
 ]
 
 export const mockMembers: Member[] = [
@@ -141,18 +151,18 @@ export const mockProjectCalls: ProjectCall[] = [
 ]
 
 export const mockProjects: Project[] = [
-    { id: 1, project_call_id: 1, title: 'Projet Formation Numérique',    budget: 120000, grant: 80000  },
-    { id: 2, project_call_id: 2, title: 'Projet Recherche IA',           budget: 200000, grant: 150000 },
-    { id: 3, project_call_id: 3, title: 'Projet Mobilités Europe',       budget:  85000, grant:  60000 },
-    { id: 4, project_call_id: 4, title: 'Projet Transfert Technologique', budget: 160000, grant: 120000 },
+    { id: 1, project_call_id: 1, status_id: 11, title: 'Projet Formation Numérique',     description: 'Développement d\'outils pédagogiques numériques pour les formations universitaires de premier cycle.',         budget: 120000, grant: 80000  },
+    { id: 2, project_call_id: 2, status_id: 10, title: 'Projet Recherche IA',            description: 'Programme de recherche appliquée sur l\'utilisation de l\'IA dans l\'analyse de données scientifiques.',        budget: 200000, grant: 150000 },
+    { id: 3, project_call_id: 3, status_id: 10, title: 'Projet Mobilités Europe',        description: 'Financement de mobilités sortantes et accueil de chercheurs européens dans le cadre du programme Erasmus+.',   budget:  85000, grant:  60000 },
+    { id: 4, project_call_id: 4, status_id: 10, title: 'Projet Transfert Technologique', description: 'Valorisation et transfert de brevets issus des travaux de recherche vers le secteur industriel partenaire.',   budget: 160000, grant: 120000 },
 ]
 
 export const mockFinancialAgreements: FinancialAgreement[] = [
-    { id: 1, project_id: 1, partner_id: 2, title: 'Convention Entreprise A',       description: 'Accord de co-financement formation',      budget: 45000,  grant: 30000,  signed_date: '2024-03-01' },
-    { id: 2, project_id: 2, partner_id: 3, title: 'Convention Association B',      description: 'Accord de partenariat recherche',          budget: 60000,  grant: 50000,  signed_date: '2024-06-15' },
-    { id: 3, project_id: 3, partner_id: 4, title: 'Convention Institut Recherche', description: 'Accord de coopération internationale',      budget: 30000,  grant: 25000,  signed_date: '2025-02-01' },
-    { id: 4, project_id: 4, partner_id: 6, title: 'Convention Fondation E',        description: 'Subvention innovation et transfert',        budget: 80000,  grant: 70000,  signed_date: '2025-07-01' },
-    { id: 5, project_id: 2, partner_id: 5, title: 'Convention Collectivité D',     description: 'Cofinancement recherche territoriale',       budget: 20000,  grant: 15000,  signed_date: '2025-03-15' },
+    { id: 1, project_id: 1, partner_id: 2, status_id: 16, title: 'Convention Entreprise A',       description: 'Accord de co-financement formation',      budget: 45000,  grant: 30000,  signed_date: '2024-03-01' },
+    { id: 2, project_id: 2, partner_id: 3, status_id: 14, title: 'Convention Association B',      description: 'Accord de partenariat recherche',          budget: 60000,  grant: 50000,  signed_date: '2024-06-15' },
+    { id: 3, project_id: 3, partner_id: 4, status_id: 14, title: 'Convention Institut Recherche', description: 'Accord de coopération internationale',      budget: 30000,  grant: 25000,  signed_date: '2025-02-01' },
+    { id: 4, project_id: 4, partner_id: 6, status_id: 15, title: 'Convention Fondation E',        description: 'Subvention innovation et transfert',        budget: 80000,  grant: 70000,  signed_date: '2025-07-01' },
+    { id: 5, project_id: 2, partner_id: 5, status_id: 14, title: 'Convention Collectivité D',     description: 'Cofinancement recherche territoriale',       budget: 20000,  grant: 15000,  signed_date: '2025-03-15' },
 ]
 
 export const mockPhds: Phd[] = [
@@ -303,4 +313,15 @@ export const mockProjectActionCards: ProjectActionCard[] = [
     { id: 8,  project_id: 4, action_card_id: 28 },
     { id: 9,  project_id: 2, action_card_id: 27 },
     { id: 10, project_id: 3, action_card_id: 32 },
+]
+
+export const mockAgreementActionCards: AgreementActionCard[] = [
+    { id: 1, financial_agreement_id: 1, action_card_id: 1  },
+    { id: 2, financial_agreement_id: 1, action_card_id: 2  },
+    { id: 3, financial_agreement_id: 2, action_card_id: 5  },
+    { id: 4, financial_agreement_id: 2, action_card_id: 14 },
+    { id: 5, financial_agreement_id: 3, action_card_id: 8  },
+    { id: 6, financial_agreement_id: 4, action_card_id: 13 },
+    { id: 7, financial_agreement_id: 4, action_card_id: 28 },
+    { id: 8, financial_agreement_id: 5, action_card_id: 9  },
 ]

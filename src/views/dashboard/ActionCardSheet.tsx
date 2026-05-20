@@ -7,13 +7,21 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
-import { X, Plus, Pencil } from 'lucide-react'
+import { X, Plus } from 'lucide-react'
 import {
     getStatuses, getCategories, getMembers, getPartners, getProjects, getAxes,
     getOrCreateOtherCategory, createActionCardFull, updateActionCard, type ActionCardCreateForm,
 } from '@/lib/api'
 import type { Status, Category, Member, Partner, Project, Axis } from '@/lib/types'
 import type { ActionCardData } from './ActionCard'
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 type Props = {
     open: boolean
@@ -101,10 +109,9 @@ function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputPro
 }
 
 export default function ActionCardSheet({ open, onClose, onCreated, editCard, onUpdated }: Props) {
-    const [form, setForm]           = useState<ActionCardCreateForm>(EMPTY_FORM)
+    const [form, setForm]             = useState<ActionCardCreateForm>(EMPTY_FORM)
     const [submitting, setSubmitting] = useState(false)
-    const [error, setError]         = useState<string | null>(null)
-    const [isEditing, setIsEditing] = useState(false)
+    const [error, setError]           = useState<string | null>(null)
 
     const [statuses,   setStatuses]   = useState<Status[]>([])
     const [categories, setCategories] = useState<Category[]>([])
@@ -116,8 +123,10 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
     const [roleToAdd,  setRoleToAdd]  = useState<string>(ROLES[1])
     const [todoInput,  setTodoInput]  = useState('')
 
+    const [memberModal, setMemberModal] = useState(false)
+
     useEffect(() => {
-        if (!open) { setIsEditing(false); return }
+        if (!open) return
         Promise.all([getStatuses(), getCategories(), getMembers(), getPartners(), getProjects(), getAxes()])
             .then(([s, c, m, pt, p, a]) => {
                 setStatuses(s.filter(s => s.context === 'action_card'))
@@ -248,77 +257,16 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
     // Toutes les catégories : parents en tête, enfants indentés
     const parentCategories = categories.filter(c => !c.parent_category_id)
 
-    const viewMode = !!editCard && !isEditing
 
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) onClose() }}>
             <SheetContent side="right" showCloseButton={false} className="!w-[480px] overflow-y-auto flex flex-col gap-0 p-0">
-                <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
+                <SheetHeader className="px-6 py-4 border-b">
                     <SheetTitle>
                         {editCard ? editCard.title : 'Nouvelle action card'}
                     </SheetTitle>
-                    {viewMode && (
-                        <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => setIsEditing(true)}>
-                            <Pencil size={13} />
-                            Modifier
-                        </Button>
-                    )}
                 </SheetHeader>
 
-                {/* --- Mode lecture --- */}
-                {viewMode && editCard ? (
-                    <>
-                        <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-5">
-                            {editCard.description && (
-                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{editCard.description}</p>
-                            )}
-
-                            <div className="flex flex-col gap-3">
-                                <div className="flex items-center gap-2 text-sm">
-                                    <span className="w-28 shrink-0 text-muted-foreground text-xs">Statut</span>
-                                    <Badge variant="secondary">{editCard.status.label}</Badge>
-                                </div>
-
-                                <div className="flex items-center gap-2 text-sm">
-                                    <span className="w-28 shrink-0 text-muted-foreground text-xs">Catégorie</span>
-                                    <span className="flex items-center gap-1.5">
-                                        {(editCard.category.color ?? editCard.category.parent?.color) && (
-                                            <span
-                                                className="w-2.5 h-2.5 rounded-full border border-border shrink-0"
-                                                style={{ backgroundColor: editCard.category.color ?? editCard.category.parent?.color ?? undefined }}
-                                            />
-                                        )}
-                                        {editCard.category.parent
-                                            ? `${editCard.category.parent.title} › ${editCard.category.title}`
-                                            : editCard.category.title}
-                                    </span>
-                                </div>
-
-                                {editCard.owner && (
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <span className="w-28 shrink-0 text-muted-foreground text-xs">Responsable</span>
-                                        <span>{editCard.owner.first_name} {editCard.owner.last_name}</span>
-                                    </div>
-                                )}
-
-                                {(editCard.start_date || editCard.end_date) && (
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <span className="w-28 shrink-0 text-muted-foreground text-xs">Dates</span>
-                                        <span>
-                                            {editCard.start_date && new Date(editCard.start_date).toLocaleDateString('fr-FR')}
-                                            {editCard.start_date && editCard.end_date && ' → '}
-                                            {editCard.end_date && new Date(editCard.end_date).toLocaleDateString('fr-FR')}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <SheetFooter className="px-6 py-4 border-t">
-                            <Button variant="outline" onClick={onClose}>Fermer</Button>
-                        </SheetFooter>
-                    </>
-                ) : (
-                <>
                 <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-6">
 
                     {/* Général */}
@@ -436,10 +384,20 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
                                     {form.members.map(fm => {
                                         const m = members.find(m => m.id === fm.member_id)
                                         return m ? (
-                                            <Badge key={fm.member_id} variant="secondary" className="gap-1.5">
-                                                {m.first_name} {m.last_name} · {fm.role}
-                                                <button onClick={() => removeMember(fm.member_id)}><X size={10} /></button>
-                                            </Badge>
+                                            <Popover key={fm.member_id}>
+                                            <PopoverTrigger asChild>
+                                                <Badge variant="secondary" className="gap-1.5">
+                                                        {m.first_name} {m.last_name} · {fm.role}
+                                                        <button onClick={(e) => {e.stopPropagation();removeMember(fm.member_id)}}><X size={10} /></button>
+                                                </Badge>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-64 p-3 flex flex-col gap-1">
+                                                <p className="text-sm font-medium">{m.first_name} {m.last_name}</p>
+                                                <p className="text-xs text-muted-foreground">{m.position ?? ''}</p>
+                                                <p className="text-xs text-muted-foreground">{m.email}</p>
+                                            </PopoverContent>
+                                            </Popover>
+                                            
                                         ) : null
                                     })}
                                 </div>
@@ -508,17 +466,14 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
                 <SheetFooter className="px-6 py-4 border-t flex flex-col gap-2">
                     {error && <p className="text-sm text-destructive">{error}</p>}
                     <div className="flex gap-2 justify-end">
-                        <Button variant="outline" onClick={() => isEditing ? setIsEditing(false) : onClose()} disabled={submitting}>
-                            {isEditing ? 'Retour' : 'Annuler'}
+                        <Button variant="outline" onClick={onClose} disabled={submitting}>
+                            Annuler
                         </Button>
                         <Button onClick={handleSubmit} disabled={submitting}>
                             {submitting ? (editCard ? 'Enregistrement...' : 'Création...') : (editCard ? 'Enregistrer' : 'Créer')}
                         </Button>
                     </div>
                 </SheetFooter>
-
-                </>
-                )} {/* fin du mode formulaire */}
             </SheetContent>
         </Sheet>
     )

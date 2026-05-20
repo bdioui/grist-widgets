@@ -262,6 +262,10 @@ export default function Tasks() {
             })
     }
 
+    function handleCardDeleted(id: number) {
+        setCards(prev => prev.filter(c => c.id !== id))
+    }
+
     if (error) return <p className="mt-6 text-sm text-destructive">Erreur : {error}</p>
 
     if (loading) {
@@ -431,7 +435,7 @@ export default function Tasks() {
                                 </div>
                                 <DroppableColumn id={`col-${s.id}`} isOver={overId === `col-${s.id}`}>
                                     {colCards.map(card => (
-                                        <DraggableCard key={card.id} card={card} />
+                                        <DraggableCard key={card.id} card={card} onDeleted={handleCardDeleted} />
                                     ))}
                                 </DroppableColumn>
                             </div>

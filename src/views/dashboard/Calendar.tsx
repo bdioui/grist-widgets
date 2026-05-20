@@ -3,10 +3,10 @@ import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar'
 import { format, parse, startOfWeek, getDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
+import '@/styles/calendar.css'
 import { getActionCardsFull, getStatuses, getAxes, getMembers, getPartners, getCategories, getAllAxisActionCards, getAllMemberActionCards } from '@/lib/api'
 import type { ActionCardFull, Axis, Member, Partner, Category, AxisActionCard, MemberActionCard } from '@/lib/types'
-import ActionCard, { type ActionCardData } from './ActionCard'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { type ActionCardData } from './ActionCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -381,7 +381,7 @@ export default function Calendar() {
                 </p>
             )}
 
-            <div style={{ height: 660 }}>
+            <div style={{ height: 900 }}>
                 <BigCalendar
                     localizer={localizer}
                     events={events}
@@ -390,10 +390,22 @@ export default function Calendar() {
                     culture="fr"
                     date={currentDate}
                     onNavigate={date => setCurrentDate(date)}
+                    messages={{
+                        today:    "Aujourd'hui",
+                        previous: 'Précédent',
+                        next:     'Suivant',
+                        month:    'Mois',
+                        week:     'Semaine',
+                        day:      'Jour',
+                        agenda:   'Agenda',
+                        noEventsInRange: 'Aucune carte sur cette période.',
+                        showMore: (count: number) => `+${count} de plus`,
+                    }}
                     formats={{
                         monthHeaderFormat: (date: Date) =>
                             date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
                     }}
+                    popup
                     startAccessor="start"
                     endAccessor="end"
                     onSelectEvent={event => {
@@ -409,7 +421,10 @@ export default function Calendar() {
                                 borderColor:     color,
                                 color:           '#2d2d2d',
                                 borderRadius:    '4px',
-                                fontSize:        '12px',
+                                fontSize:        '11px',
+                                padding:         '1px 4px',
+                                lineHeight:      '1.3',
+                                minHeight:       '16px',
                             },
                         }
                     }}
@@ -417,18 +432,13 @@ export default function Calendar() {
             </div>
         </div>
 
-        {/* Sheet détail carte (clic sur événement) */}
-        <Sheet open={sheetOpen && !!selectedCard} onOpenChange={v => { if (!v) { setSheetOpen(false); setSelectedCard(null) } }}>
-            <SheetContent side="right" className="!w-[380px] overflow-y-auto p-4">
-                {selectedCard && <ActionCard {...selectedCard} />}
-            </SheetContent>
-        </Sheet>
-
-        {/* Sheet nouvelle carte */}
+        {/* Sheet unique : lecture / édition / création */}
         <ActionCardSheet
-            open={sheetOpen && !selectedCard}
-            onClose={() => setSheetOpen(false)}
+            open={sheetOpen}
+            editCard={selectedCard ?? undefined}
+            onClose={() => { setSheetOpen(false); setSelectedCard(null) }}
             onCreated={card => { setCards(prev => [...prev, card]); setSheetOpen(false) }}
+            onUpdated={card => { setCards(prev => prev.map(c => c.id === card.id ? card : c)); setSheetOpen(false); setSelectedCard(null) }}
         />
         </>
     )

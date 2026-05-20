@@ -78,7 +78,9 @@ export type ProjectCall = {
 export type Project = {
     id: number
     project_call_id: number
+    status_id: number
     title: string
+    description: string
     budget: number
     grant: number
 }
@@ -87,6 +89,7 @@ export type FinancialAgreement = {
     id: number
     project_id: number
     partner_id: number
+    status_id: number
     title: string
     description: string
     budget: number
@@ -159,6 +162,12 @@ export type ProjectActionCard = {
     action_card_id: number
 }
 
+export type AgreementActionCard = {
+    id: number
+    financial_agreement_id: number
+    action_card_id: number
+}
+
 // --- To-do ---
 
 export type ToDoList = {
@@ -182,4 +191,14 @@ export type ActionCardFull = ActionCard & {
     status: Status
     category: Category & { parent: Category | null }
     owner: Member
+}
+
+export type MemberFull = Member & {
+    partner: Partner | null
+}
+
+export type PartnerCardFull = Partner & {
+    projects:   Project[]
+    agreements: FinancialAgreement[]
+    members:    Member[]
 }

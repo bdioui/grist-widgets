@@ -25,14 +25,11 @@ export default function CategorySheet({ open, category, onClose, onSaved }: Prop
     const isEdit = !!category
     
     const CAT_COLORS = [
-        { label: 'Bleu',    hexa: '#D3E5EF' },
-        { label: 'Vert',    hexa: '#DDEFDF' },
-        { label: 'Violet',  hexa: '#E8DEEE' },
-        { label: 'Orange',  hexa: '#FDEFD4' },
-        { label: 'Rouge',   hexa: '#FFE2DD' },
-        { label: 'Rose',    hexa: '#F5E0E9' },
-        { label: 'Jaune',   hexa: '#FBF3CF' },
-        { label: 'Gris',    hexa: '#F1F1EF' },
+        { label: 'Lavande', hexa: '#D8CFEE' },
+        { label: 'Rose',    hexa: '#EEC5EF' },
+        { label: 'Jaune',   hexa: '#EDD803' },
+        { label: 'Gris',    hexa: '#E7E8E2' },
+        { label: 'Bleu',    hexa: '#C5D2EF' },
     ]
 
     useEffect(() => {

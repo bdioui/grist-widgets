@@ -10,14 +10,33 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { X, Plus, Pencil, Check } from 'lucide-react'
+import { X, Plus, Pencil, Check, Trash2 } from 'lucide-react'
 import {
     getMemberActionCardsByCard, getProjectActionCardsByCard, getToDoListsWithItemsByCard,
-    getStatuses, getCategories, getMembers, getProjects, getPartners,
+    getStatuses, getCategories, getMembers, getProjects, getPartners, getFinancialAgreements,
     updateActionCard, updateToDoItem, addToDoItemToList, addToDoListToCard,
     addMemberToCard, removeMemberFromCard, addProjectToCard, removeProjectFromCard,
+    getAgreementActionCardsByCard, addAgreementToCard, removeAgreementFromCard,
+    deleteActionCard,
 } from '@/lib/api'
-import type { Status, Category, Member, Partner, Project, ToDoList, ToDoItem, MemberActionCard, ProjectActionCard } from '@/lib/types'
+import type { Status, Category, Member, Partner, Project, ToDoList, ToDoItem, MemberActionCard, ProjectActionCard, AgreementActionCard, FinancialAgreement } from '@/lib/types'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 // --- Types exportés (utilisés par Categories, DraggableCard, etc.) ---
 
@@ -212,6 +231,87 @@ function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputPro
     )
 }
 
+// --- Composant recherche convention avec suggestions ---
+
+type AgreementSearchInputProps = {
+    agreements: FinancialAgreement[]
+    partners:   Partner[]
+    projects:   Project[]
+    onSelect:   (agreement: FinancialAgreement) => void
+}
+
+function AgreementSearchInput({ agreements, partners, projects, onSelect }: AgreementSearchInputProps) {
+    const [query, setQuery] = useState('')
+    const [open, setOpen]   = useState(false)
+
+    const partnerMap = new Map(partners.map(p => [p.id, p]))
+    const projectMap = new Map(projects.map(p => [p.id, p]))
+
+    const filtered = query.trim().length === 0 ? agreements : agreements.filter(a => {
+        const partnerName = partnerMap.get(a.partner_id)?.name.toLowerCase() ?? ''
+        const projectTitle = projectMap.get(a.project_id)?.title.toLowerCase() ?? ''
+        return (
+            a.title.toLowerCase().includes(query.toLowerCase()) ||
+            partnerName.includes(query.toLowerCase()) ||
+            projectTitle.includes(query.toLowerCase())
+        )
+    })
+
+    function select(a: FinancialAgreement) {
+        onSelect(a)
+        setQuery('')
+        setOpen(false)
+    }
+
+    return (
+        <div className="relative">
+            <Input
+                value={query}
+                onChange={e => { setQuery(e.target.value); setOpen(true) }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                placeholder="Rechercher une convention..."
+                className="h-8 text-xs"
+            />
+            {open && filtered.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden">
+                    <ul className="max-h-56 overflow-y-auto py-1">
+                        {filtered.map(a => {
+                            const partner = partnerMap.get(a.partner_id)
+                            const project = projectMap.get(a.project_id)
+                            return (
+                                <li
+                                    key={a.id}
+                                    onMouseDown={() => select(a)}
+                                    className="flex flex-col gap-0.5 px-3 py-2 cursor-pointer hover:bg-muted"
+                                >
+                                    <span className="text-sm font-medium">{a.title}</span>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        {project && (
+                                            <span className="text-xs text-muted-foreground">{project.title}</span>
+                                        )}
+                                        {partner && (
+                                            <span
+                                                className="text-xs px-1.5 py-0.5 rounded-full border border-border"
+                                                style={partner.color ? { backgroundColor: partner.color } : {}}
+                                            >
+                                                {partner.name}
+                                            </span>
+                                        )}
+                                        {a.signed_date && (
+                                            <span className="text-xs text-muted-foreground">signé le {formatDate(a.signed_date)}</span>
+                                        )}
+                                    </div>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </div>
+            )}
+        </div>
+    )
+}
+
 // --- Sheet de détail / édition ---
 
 type DetailSheetProps = {
@@ -219,17 +319,20 @@ type DetailSheetProps = {
     open: boolean
     onClose: () => void
     onUpdated: (patch: Partial<ActionCardData>) => void
+    onDeleted?: (id: number) => void
 }
 
-type MemberLink = MemberActionCard & { member: Member }
-type ProjectLink = ProjectActionCard & { project: Project }
+type MemberLink    = MemberActionCard    & { member: Member }
+type ProjectLink   = ProjectActionCard   & { project: Project }
+type AgreementLink = AgreementActionCard & { agreement: FinancialAgreement }
 
-function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetProps) {
+function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: DetailSheetProps) {
     const [loading, setLoading] = useState(true)
 
     // Données associées
-    const [memberLinks, setMemberLinks] = useState<MemberLink[]>([])
-    const [projectLinks, setProjectLinks] = useState<ProjectLink[]>([])
+    const [memberLinks,    setMemberLinks]    = useState<MemberLink[]>([])
+    const [projectLinks,   setProjectLinks]   = useState<ProjectLink[]>([])
+    const [agreementLinks, setAgreementLinks] = useState<AgreementLink[]>([])
     const [todoLists, setTodoLists] = useState<(ToDoList & { items: ToDoItem[] })[]>([])
 
     // Données de référence pour les selects
@@ -238,10 +341,16 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
     const [allMembers,    setAllMembers]    = useState<Member[]>([])
     const [allPartners,   setAllPartners]   = useState<Partner[]>([])
     const [allProjects,   setAllProjects]   = useState<Project[]>([])
+    const [allAgreements, setAllAgreements] = useState<FinancialAgreement[]>([])
 
     // Edits en cours
     const [editing, setEditing] = useState(false)
     const [draft, setDraft]     = useState<ActionCardData>(card)
+
+    // Suppression
+    const [confirming, setConfirming] = useState(false)
+    const [deleting,   setDeleting]   = useState(false)
+
 
     // Ajout membres
     const [memberToAdd, setMemberToAdd] = useState(0)
@@ -258,25 +367,30 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
         if (!open) return
         setDraft(card)
         setEditing(false)
+        setConfirming(false)
         setLoading(true)
         Promise.all([
             getMemberActionCardsByCard(card.id),
             getProjectActionCardsByCard(card.id),
+            getAgreementActionCardsByCard(card.id),
             getToDoListsWithItemsByCard(card.id),
             getStatuses(),
             getCategories(),
             getMembers(),
             getPartners(),
             getProjects(),
-        ]).then(([ml, pl, tl, s, c, m, pt, p]) => {
+            getFinancialAgreements(),
+        ]).then(([ml, pl, al, tl, s, c, m, pt, p, agr]) => {
             setMemberLinks(ml as MemberLink[])
             setProjectLinks(pl as ProjectLink[])
+            setAgreementLinks(al as AgreementLink[])
             setTodoLists(tl)
             setAllStatuses(s.filter(st => st.context === 'action_card'))
             setAllCategories(c)
             setAllMembers(m)
             setAllPartners(pt)
             setAllProjects(p)
+            setAllAgreements(agr)
         }).finally(() => setLoading(false))
     }, [open, card.id])
 
@@ -378,18 +492,51 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
         setProjectLinks(prev => prev.filter(l => l.id !== linkId))
     }
 
+    // --- Conventions ---
+
+    async function handleAddAgreement(agreement: FinancialAgreement) {
+        const link = await addAgreementToCard(card.id, agreement.id)
+        setAgreementLinks(prev => [...prev, link as AgreementLink])
+    }
+
+    async function handleRemoveAgreement(linkId: number) {
+        await removeAgreementFromCard(linkId)
+        setAgreementLinks(prev => prev.filter(l => l.id !== linkId))
+    }
+
     const statusColor = STATUS_COLORS[card.status.label] ?? '#f3f4f6'
 
     const parentCategories = allCategories.filter(c => !c.parent_category_id)
 
-    // Membres et projets non encore liés
-    const linkedMemberIds  = memberLinks.map(l => l.member_id)
-    const linkedProjectIds = projectLinks.map(l => l.project_id)
-    const availableMembers  = allMembers.filter(m => !linkedMemberIds.includes(m.id))
-    const availableProjects = allProjects.filter(p => !linkedProjectIds.includes(p.id))
+    // Membres, projets et conventions non encore liés
+    const linkedMemberIds     = memberLinks.map(l => l.member_id)
+    const linkedProjectIds    = projectLinks.map(l => l.project_id)
+    const linkedAgreementIds  = agreementLinks.map(l => l.financial_agreement_id)
+    const availableMembers    = allMembers.filter(m => !linkedMemberIds.includes(m.id))
+    const availableProjects   = allProjects.filter(p => !linkedProjectIds.includes(p.id))
+    // Si des projets sont liés → on filtre les conventions à ces projets uniquement
+    const availableAgreements = allAgreements
+        .filter(a => !linkedAgreementIds.includes(a.id))
+        .filter(a => linkedProjectIds.length === 0 || linkedProjectIds.includes(a.project_id))
+
+    // Maps pour l'enrichissement dans les popovers
+    const partnerMap = new Map(allPartners.map(p => [p.id, p]))
+    const projectMap = new Map(allProjects.map(p => [p.id, p]))
+
+    async function handleDelete() {
+        setDeleting(true)
+        try {
+            await deleteActionCard(card.id)
+            onDeleted?.(card.id)
+            onClose()
+        } finally {
+            setDeleting(false)
+            setConfirming(false)
+        }
+    }
 
     return (
-        <Sheet open={open} onOpenChange={v => { if (!v) onClose() }}>
+        <Sheet open={open} onOpenChange={v => { if (!v) { setConfirming(false); onClose() } }}>
             <SheetContent side="right" showCloseButton={false} className="!w-[580px] overflow-y-auto flex flex-col gap-0 p-0">
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
                     <SheetTitle className="flex-1 min-w-0 text-base truncate">
@@ -402,15 +549,28 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
                         ) : card.title}
                     </SheetTitle>
                     <div className="flex items-center gap-2 shrink-0">
-                        {editing ? (
+                        {confirming ? (
                             <>
-                                <Button className="rounded-md"size="sm" variant="outline" onClick={cancelEdit}>Annuler</Button>
+                                <span className="text-xs text-destructive">Supprimer ?</span>
+                                <Button className="rounded-md h-7" size="sm" variant="destructive" onClick={handleDelete} disabled={deleting}>
+                                    {deleting ? '...' : 'Confirmer'}
+                                </Button>
+                                <Button className="rounded-md h-7" size="sm" variant="ghost" onClick={() => setConfirming(false)}>Annuler</Button>
+                            </>
+                        ) : editing ? (
+                            <>
+                                <Button className="rounded-md" size="sm" variant="outline" onClick={cancelEdit}>Annuler</Button>
                                 <Button className="rounded-md" size="sm" onClick={saveEdit}><Check size={13} className="mr-1" />Enregistrer</Button>
                             </>
                         ) : (
-                            <Button className="rounded-md" size="sm" variant="outline" onClick={() => setEditing(true)}>
-                                <Pencil size={13} className="mr-2" />Modifier
-                            </Button>
+                            <>
+                                <Button className="rounded-md" size="sm" variant="outline" onClick={() => setEditing(true)}>
+                                    <Pencil size={13} className="mr-2" />Modifier
+                                </Button>
+                                <Button className="rounded-md" size="sm" variant="ghost" onClick={() => setConfirming(true)}>
+                                    <Trash2 size={13} className="text-destructive" />
+                                </Button>
+                            </>
                         )}
                     </div>
                 </SheetHeader>
@@ -423,8 +583,8 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
                     <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
 
                         {/* Statut + catégorie */}
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="secondary" style={{ backgroundColor: statusColor }}>
+                        <div className="flex flex-wrap items-center gap-2 rounded-xl">
+                            <Badge variant="secondary" className="rounded-xl" style={{ backgroundColor: statusColor }}>
                                 {card.status.label}
                             </Badge>
                             <span className="text-xs text-muted-foreground">
@@ -585,28 +745,84 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
                                     {memberLinks.map(l => {
                                         const partner = allPartners.find(p => p.id === l.member.partner_id)
                                         return (
-                                            <div key={l.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <div className="flex flex-col min-w-0">
-                                                        <span className="text-sm">{l.member.first_name} {l.member.last_name}</span>
-                                                        <span className="text-xs text-muted-foreground">{l.role}</span>
+                                            <Popover key={l.id}>
+                                            <PopoverTrigger asChild>
+                                                <div className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="text-sm">{l.member.first_name} {l.member.last_name}</span>
+                                                            <span className="text-xs text-muted-foreground">{l.role}</span>
+                                                        </div>
+                                                        {partner && (
+                                                            <span
+                                                                className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
+                                                                style={partner.color ? { backgroundColor: partner.color } : {}}
+                                                            >
+                                                                {partner.name}
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    {partner && (
-                                                        <span
-                                                            className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
-                                                            style={partner.color ? { backgroundColor: partner.color } : {}}
-                                                        >
-                                                            {partner.name}
-                                                        </span>
-                                                    )}
+                                                    <div
+                                                        onClick={e => { e.stopPropagation(); handleRemoveMember(l.id) }}
+                                                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive ml-2 cursor-pointer"
+                                                    >
+                                                        <X size={13} />
+                                                    </div>
                                                 </div>
-                                                <button
-                                                    onClick={() => handleRemoveMember(l.id)}
-                                                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive ml-2"
-                                                >
-                                                    <X size={13} />
-                                                </button>
-                                            </div>
+                                            </PopoverTrigger>
+                                            <PopoverContent align="start" className="w-72 p-4 flex flex-col gap-3">
+                                                {/* En-tête */}
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0">
+                                                        {l.member.first_name[0]}{l.member.last_name[0]}
+                                                    </div>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-sm font-medium">{l.member.first_name} {l.member.last_name}</span>
+                                                        <span className="text-xs text-muted-foreground truncate">{l.member.position}</span>
+                                                    </div>
+                                                </div>
+
+                                                <Separator />
+
+                                                {/* Détails */}
+                                                <div className="flex flex-col gap-2 text-xs">
+                                                    {l.member.status && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-20 shrink-0 text-muted-foreground">Statut</span>
+                                                            <span>{l.member.status}</span>
+                                                        </div>
+                                                    )}
+                                                    {l.member.email && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-20 shrink-0 text-muted-foreground">Email</span>
+                                                            <a href={`mailto:${l.member.email}`} className="truncate text-blue-600 hover:underline">{l.member.email}</a>
+                                                        </div>
+                                                    )}
+                                                    {l.member.tel && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-20 shrink-0 text-muted-foreground">Téléphone</span>
+                                                            <a href={`tel:${l.member.tel}`} className="hover:underline">{l.member.tel}</a>
+                                                        </div>
+                                                    )}
+                                                    {partner && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-20 shrink-0 text-muted-foreground">Partenaire</span>
+                                                            <span
+                                                                className="px-1.5 py-0.5 rounded-full border border-border"
+                                                                style={partner.color ? { backgroundColor: partner.color } : {}}
+                                                            >
+                                                                {partner.name}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-20 shrink-0 text-muted-foreground">Rôle</span>
+                                                        <span>{l.role}</span>
+                                                    </div>
+                                                </div>
+                                            </PopoverContent>
+                                            </Popover>
+                                            
                                         )
                                     })}
                                 </div>
@@ -638,15 +854,49 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
                             {projectLinks.length > 0 && (
                                 <div className="flex flex-col gap-1">
                                     {projectLinks.map(l => (
-                                        <div key={l.id} className="flex items-center justify-between px-2 py-1 rounded hover:bg-muted group">
-                                            <span className="text-sm">{l.project.title}</span>
-                                            <button
-                                                onClick={() => handleRemoveProject(l.id)}
-                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-                                            >
-                                                <X size={13} />
-                                            </button>
-                                        </div>
+                                        <Popover key={l.id}>
+                                            <PopoverTrigger asChild>
+                                                <div className="flex items-center justify-between px-2 py-1 rounded hover:bg-muted group cursor-pointer">
+                                                    <span className="text-sm">{l.project.title}</span>
+                                                    <div
+                                                        onClick={e => { e.stopPropagation(); handleRemoveProject(l.id) }}
+                                                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer"
+                                                    >
+                                                        <X size={13} />
+                                                    </div>
+                                                </div>
+                                            </PopoverTrigger>
+                                            <PopoverContent align="start" className="w-72 p-4 flex flex-col gap-3">
+                                                {/* En-tête */}
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-sm font-medium">{l.project.title}</span>
+                                                </div>
+
+                                                <Separator />
+
+                                                {/* Détails financiers */}
+                                                <div className="flex flex-col gap-2 text-xs">
+                                                    {l.project.budget > 0 && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-24 shrink-0 text-muted-foreground">Budget total</span>
+                                                            <span>{l.project.budget.toLocaleString('fr-FR')} €</span>
+                                                        </div>
+                                                    )}
+                                                    {l.project.grant > 0 && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-24 shrink-0 text-muted-foreground">Subvention</span>
+                                                            <span>{l.project.grant.toLocaleString('fr-FR')} €</span>
+                                                        </div>
+                                                    )}
+                                                    {l.project.budget > 0 && l.project.grant > 0 && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-24 shrink-0 text-muted-foreground">Taux financ.</span>
+                                                            <span>{Math.round((l.project.grant / l.project.budget) * 100)} %</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
                                     ))}
                                 </div>
                             )}
@@ -666,6 +916,134 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
                             )}
                         </section>
 
+                        <Separator />
+
+                        {/* Conventions liées */}
+                        <section className="flex flex-col gap-3">
+                            <div className="flex items-center justify-between">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Conventions liées</p>
+                                {linkedProjectIds.length > 0 && (
+                                    <span className="text-xs text-muted-foreground italic">
+                                        Filtrées par {linkedProjectIds.length === 1 ? 'le projet lié' : 'les projets liés'}
+                                    </span>
+                                )}
+                            </div>
+
+                            {agreementLinks.length > 0 && (
+                                <div className="flex flex-col gap-1">
+                                    {agreementLinks.map(l => {
+                                        const agrPartner = partnerMap.get(l.agreement.partner_id)
+                                        const agrProject = projectMap.get(l.agreement.project_id)
+                                        return (
+                                            <Popover key={l.id}>
+                                                <PopoverTrigger asChild>
+                                                    <div className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group cursor-pointer">
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="text-sm truncate">{l.agreement.title}</span>
+                                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                                {agrProject && (
+                                                                    <span className="text-xs text-muted-foreground truncate">{agrProject.title}</span>
+                                                                )}
+                                                                {agrProject && agrPartner && (
+                                                                    <span className="text-xs text-muted-foreground">·</span>
+                                                                )}
+                                                                {agrPartner && (
+                                                                    <span
+                                                                        className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
+                                                                        style={agrPartner.color ? { backgroundColor: agrPartner.color } : {}}
+                                                                    >
+                                                                        {agrPartner.name}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div
+                                                            onClick={e => { e.stopPropagation(); handleRemoveAgreement(l.id) }}
+                                                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer ml-2 shrink-0"
+                                                        >
+                                                            <X size={13} />
+                                                        </div>
+                                                    </div>
+                                                </PopoverTrigger>
+                                                <PopoverContent align="start" className="w-80 p-4 flex flex-col gap-3">
+                                                    {/* En-tête */}
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-sm font-medium">{l.agreement.title}</span>
+                                                        {l.agreement.description && (
+                                                            <span className="text-xs text-muted-foreground">{l.agreement.description}</span>
+                                                        )}
+                                                    </div>
+
+                                                    <Separator />
+
+                                                    <div className="flex flex-col gap-2 text-xs">
+                                                        {agrProject && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-28 shrink-0 text-muted-foreground">Projet</span>
+                                                                <span>{agrProject.title}</span>
+                                                            </div>
+                                                        )}
+                                                        {agrPartner && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-28 shrink-0 text-muted-foreground">Partenaire</span>
+                                                                <span
+                                                                    className="px-1.5 py-0.5 rounded-full border border-border"
+                                                                    style={agrPartner.color ? { backgroundColor: agrPartner.color } : {}}
+                                                                >
+                                                                    {agrPartner.name}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {l.agreement.signed_date && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-28 shrink-0 text-muted-foreground">Date de signature</span>
+                                                                <span>{formatDate(l.agreement.signed_date)}</span>
+                                                            </div>
+                                                        )}
+                                                        {l.agreement.budget > 0 && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-28 shrink-0 text-muted-foreground">Budget</span>
+                                                                <span>{l.agreement.budget.toLocaleString('fr-FR')} €</span>
+                                                            </div>
+                                                        )}
+                                                        {l.agreement.grant > 0 && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-28 shrink-0 text-muted-foreground">Subvention</span>
+                                                                <span>{l.agreement.grant.toLocaleString('fr-FR')} €</span>
+                                                            </div>
+                                                        )}
+                                                        {l.agreement.budget > 0 && l.agreement.grant > 0 && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-28 shrink-0 text-muted-foreground">Taux financ.</span>
+                                                                <span>{Math.round((l.agreement.grant / l.agreement.budget) * 100)} %</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        )
+                                    })}
+                                </div>
+                            )}
+
+                            {availableAgreements.length > 0 && (
+                                <AgreementSearchInput
+                                    agreements={availableAgreements}
+                                    partners={allPartners}
+                                    projects={allProjects}
+                                    onSelect={handleAddAgreement}
+                                />
+                            )}
+
+                            {availableAgreements.length === 0 && agreementLinks.length === 0 && (
+                                <p className="text-xs text-muted-foreground italic">
+                                    {linkedProjectIds.length > 0
+                                        ? 'Toutes les conventions des projets liés ont été rattachées'
+                                        : 'Aucune convention disponible'}
+                                </p>
+                            )}
+                        </section>
+
                     </div>
                 )}
             </SheetContent>
@@ -675,8 +1053,8 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated }: DetailSheetPr
 
 // --- Composant principal carte ---
 
-export default function ActionCard(props: ActionCardData) {
-    const { title, status, category, owner, start_date, end_date } = props
+export default function ActionCard(props: ActionCardData & { onDeleted?: (id: number) => void }) {
+    const { title, status, category, owner, start_date, end_date, onDeleted } = props
     const [open, setOpen]     = useState(false)
     const [data, setData]     = useState<ActionCardData>(props)
 
@@ -720,6 +1098,7 @@ export default function ActionCard(props: ActionCardData) {
                 open={open}
                 onClose={() => setOpen(false)}
                 onUpdated={patch => setData(prev => ({ ...prev, ...patch }))}
+                onDeleted={onDeleted}
             />
         </>
     )
