@@ -80,11 +80,12 @@ export async function updateRecord(
     rowId: number,
     patch: Record<string, unknown>
 ): Promise<void> {
-    const cols = Object.keys(patch)
-    const vals = Object.values(patch)
     // Format Grist : ['BulkUpdateRecord', tableId, [rowId], { col: [val] }]
-    const colsObj: GristColumnarPatch = { id: [rowId] }
-    cols.forEach((col, i) => { colsObj[col] = [vals[i]] })
+    // Le dict des colonnes NE doit PAS contenir 'id' (déjà passé comme 3ème argument)
+    const colsObj: Record<string, unknown[]> = {}
+    for (const [col, val] of Object.entries(patch)) {
+        colsObj[col] = [val]
+    }
     await getGrist().docApi.applyUserActions([['BulkUpdateRecord', tableId, [rowId], colsObj]])
 }
 
