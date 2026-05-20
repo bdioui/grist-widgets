@@ -14,7 +14,7 @@ import {
     DropdownMenuCheckboxItem,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { SlidersHorizontal, Plus, Pencil, Search, X, Users } from 'lucide-react'
+import { SlidersHorizontal, Plus, Pencil, Search, Users } from 'lucide-react'
 import { getActionCardsFull, updateActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards } from '@/lib/api'
 import type { ActionCardFull, Category, Axis, Member, Partner, AxisActionCard, MemberActionCard } from '@/lib/types'
 import ActionCardSheet from './ActionCardSheet'
@@ -339,10 +339,6 @@ export default function Categories() {
 
     function toggleAxe(id: number) {
         setSelectedAxeIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
-    }
-
-    function toggleMember(id: number) {
-        setSelectedMemberIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
     }
 
     // Cartes filtrées selon les 3 critères

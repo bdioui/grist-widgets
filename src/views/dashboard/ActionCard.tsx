@@ -20,23 +20,7 @@ import {
     deleteActionCard,
 } from '@/lib/api'
 import type { Status, Category, Member, Partner, Project, ToDoList, ToDoItem, MemberActionCard, ProjectActionCard, AgreementActionCard, FinancialAgreement } from '@/lib/types'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 // --- Types exportés (utilisés par Categories, DraggableCard, etc.) ---
 
@@ -353,8 +337,7 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
 
 
     // Ajout membres
-    const [memberToAdd, setMemberToAdd] = useState(0)
-    const [roleToAdd, setRoleToAdd]     = useState(ROLES[1])
+    const [roleToAdd, setRoleToAdd] = useState(ROLES[1])
 
     // Ajout projet
     const [projectToAdd, setProjectToAdd] = useState('')

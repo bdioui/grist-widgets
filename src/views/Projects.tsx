@@ -13,7 +13,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, AlertTriangle } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X } from 'lucide-react'
 import {
     getProjectCalls, getProjects, getAxes, getStatuses, getPartners, getFinancialAgreements,
     addProjectCall, updateProjectCall, deleteProjectCall,
@@ -32,10 +32,10 @@ const PROJECT_STATUS_COLORS: Record<string, string> = {
 }
 
 const AGREEMENT_STATUS_COLORS: Record<string, string> = {
-    'Signée':          '#d1fae5',
-    'En négociation':  '#fef9c3',
-    'Terminée':        '#f3f4f6',
-    'Résiliée':        '#fee2e2',
+    'En préparation': '#dbeafe',
+    'Active':         '#d1fae5',
+    'Soldée':         '#f3f4f6',
+    'Annulée':        '#fee2e2',
 }
 
 // --- Types enrichis ---
@@ -639,7 +639,7 @@ type ProjectDetailSheetProps = {
     statuses: Status[]
 }
 
-function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses }: ProjectDetailSheetProps) {
+function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, statuses }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [loading,      setLoading]      = useState(false)
     const [editing,      setEditing]      = useState(false)
@@ -1182,7 +1182,7 @@ export default function Projects() {
                                             console.log("Calls :", calls)
                                             const pcProjects = filteredProjects.filter(p => p.project_call_id === pc.id)
                                             const pcStatus = statuses.find(s => s.id === pc.status_id)
-                                            const pcColor = pcStatus.label === "Terminé" ? "#f3f4f6" : "#d1fae5" ;
+                                            const pcColor = pcStatus?.label === "Terminé" ? "#f3f4f6" : "#d1fae5"
                                             return (
                                                 <div key={pc.id} className="w-72 shrink-0 flex flex-col h-full border-r last:border-r-0">
                                                     {/* Header AAP */}
@@ -1194,7 +1194,7 @@ export default function Projects() {
                                                                     {formatDate(pc.start_date)}{pc.end_date ? ` → ${formatDate(pc.end_date)}` : ''}
                                                                 </span>
                                                             )}
-                                                            <Badge className="rounded-md mt-1 text-xs text-black" style={{backgroundColor:pcColor}}>{pcStatus.label}</Badge>
+                                                            {pcStatus && <Badge className="rounded-md mt-1 text-xs text-black" style={{backgroundColor:pcColor}}>{pcStatus.label}</Badge>}
                                                         </div>
                                                         <div className="flex items-center gap-1 shrink-0">
                                                             <span className="text-xs text-muted-foreground">{pcProjects.length} projet{pcProjects.length > 1 ? 's' : ''}</span>

@@ -22,10 +22,10 @@ export const mockStatuses: Status[] = [
     { id: 12, label: 'Suspendu',           context: 'project' },
     { id: 13, label: 'En attente',         context: 'project' },
     // --- Convention financière ---
-    { id: 14, label: 'Signée',             context: 'financial_agreement' },
-    { id: 15, label: 'En négociation',     context: 'financial_agreement' },
-    { id: 16, label: 'Terminée',           context: 'financial_agreement' },
-    { id: 17, label: 'Résiliée',           context: 'financial_agreement' },
+    { id: 14, label: 'En préparation', context: 'financial_agreement' },
+    { id: 15, label: 'Active',         context: 'financial_agreement' },
+    { id: 16, label: 'Soldée',         context: 'financial_agreement' },
+    { id: 17, label: 'Annulée',        context: 'financial_agreement' },
 ]
 
 export const mockCategories: Category[] = [
@@ -159,10 +159,10 @@ export const mockProjects: Project[] = [
 
 export const mockFinancialAgreements: FinancialAgreement[] = [
     { id: 1, project_id: 1, partner_id: 2, status_id: 16, title: 'Convention Entreprise A',       description: 'Accord de co-financement formation',      budget: 45000,  grant: 30000,  signed_date: '2024-03-01' },
-    { id: 2, project_id: 2, partner_id: 3, status_id: 14, title: 'Convention Association B',      description: 'Accord de partenariat recherche',          budget: 60000,  grant: 50000,  signed_date: '2024-06-15' },
-    { id: 3, project_id: 3, partner_id: 4, status_id: 14, title: 'Convention Institut Recherche', description: 'Accord de coopération internationale',      budget: 30000,  grant: 25000,  signed_date: '2025-02-01' },
-    { id: 4, project_id: 4, partner_id: 6, status_id: 15, title: 'Convention Fondation E',        description: 'Subvention innovation et transfert',        budget: 80000,  grant: 70000,  signed_date: '2025-07-01' },
-    { id: 5, project_id: 2, partner_id: 5, status_id: 14, title: 'Convention Collectivité D',     description: 'Cofinancement recherche territoriale',       budget: 20000,  grant: 15000,  signed_date: '2025-03-15' },
+    { id: 2, project_id: 2, partner_id: 3, status_id: 15, title: 'Convention Association B',      description: 'Accord de partenariat recherche',          budget: 60000,  grant: 50000,  signed_date: '2024-06-15' },
+    { id: 3, project_id: 3, partner_id: 4, status_id: 15, title: 'Convention Institut Recherche', description: 'Accord de coopération internationale',      budget: 30000,  grant: 25000,  signed_date: '2025-02-01' },
+    { id: 4, project_id: 4, partner_id: 6, status_id: 14, title: 'Convention Fondation E',        description: 'Subvention innovation et transfert',        budget: 80000,  grant: 70000,  signed_date: '2025-07-01' },
+    { id: 5, project_id: 2, partner_id: 5, status_id: 15, title: 'Convention Collectivité D',     description: 'Cofinancement recherche territoriale',       budget: 20000,  grant: 15000,  signed_date: '2025-03-15' },
 ]
 
 export const mockPhds: Phd[] = [

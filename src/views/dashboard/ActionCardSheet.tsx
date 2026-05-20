@@ -14,14 +14,7 @@ import {
 } from '@/lib/api'
 import type { Status, Category, Member, Partner, Project, Axis } from '@/lib/types'
 import type { ActionCardData } from './ActionCard'
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 type Props = {
     open: boolean
@@ -123,7 +116,6 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
     const [roleToAdd,  setRoleToAdd]  = useState<string>(ROLES[1])
     const [todoInput,  setTodoInput]  = useState('')
 
-    const [memberModal, setMemberModal] = useState(false)
 
     useEffect(() => {
         if (!open) return
