@@ -40,8 +40,15 @@ function columnarToRows(data: GristColumnarData): Record<string, unknown>[] {
 }
 
 export async function fetchTable(tableId: string): Promise<Record<string, unknown>[]> {
-    const data = await getGrist().docApi.fetchTable(tableId)
-    return columnarToRows(data)
+    try {
+        const data = await getGrist().docApi.fetchTable(tableId)
+        return columnarToRows(data)
+    } catch (err) {
+        // Table inexistante ou pas encore créée → retourner un tableau vide
+        // plutôt que de bloquer le chargement de toute l'application
+        console.warn(`[Grist] fetchTable("${tableId}") a échoué :`, err)
+        return []
+    }
 }
 
 // Crée un enregistrement et retourne son id

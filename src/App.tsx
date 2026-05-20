@@ -1,13 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Dashboard from './views/Dashboard'
 import Partners from './views/Partners'
 import Members from './views/Members'
 import Projects from './views/Projects'
 import { motion } from "framer-motion"
+import { gristReady } from '@/lib/grist'
+
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 export default function App() {
 
   const [currentView, setCurrentView] = useState('dashboard')
+
+  // Initialise l'accès à l'API Grist dès le montage (seulement hors mode mock)
+  useEffect(() => {
+    if (!USE_MOCK) {
+      try {
+        gristReady({ requiredAccess: 'full' })
+      } catch {
+        // Widget chargé hors Grist (preview locale, etc.) — on ignore
+      }
+    }
+  }, [])
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Barre de navigation supérieure */}
