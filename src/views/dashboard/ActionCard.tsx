@@ -452,7 +452,6 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
         if (!memberId) return
         const link = await addMemberToCard(card.id, memberId, roleToAdd)
         setMemberLinks(prev => [...prev, link as MemberLink])
-        setMemberToAdd(0)
     }
 
     async function handleRemoveMember(linkId: number) {
