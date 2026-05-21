@@ -4,7 +4,6 @@
 
 type GristColumnarData = { id: number[]; [col: string]: unknown[] }
 
-type GristColumnarPatch = { id: number[]; [col: string]: unknown[] }
 
 type ApplyResult = { retValues: number[] }
 
