@@ -508,7 +508,7 @@ export default function Members() {
                 {/* Filtre statut — multi-select */}
                 <Popover>
                     <PopoverTrigger asChild>
-                        <button className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border bg-white transition-colors ${
+                        <button className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border transition-colors ${
                             statusFilter.length > 0
                                 ? 'bg-foreground text-background border-foreground'
                                 : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'
@@ -554,7 +554,7 @@ export default function Members() {
                 {/* Filtre partenaire — multi-select avec recherche */}
                 <Popover onOpenChange={open => { if (!open) setPartnerSearch('') }}>
                     <PopoverTrigger asChild>
-                        <button className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border bg-white transition-colors ${
+                        <button className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border transition-colors ${
                             partnerFilter.length > 0
                                 ? 'bg-foreground text-background border-foreground'
                                 : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'

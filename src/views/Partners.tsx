@@ -26,7 +26,7 @@ import type { PartnerCardFull, Partner, Lab, LabCardFull, Member } from '@/lib/t
 // --- Constantes ---
 
 const PARTNER_TYPES = [
-    'Université',
+    'Université et grandes écoles',
     'Entreprise privée',
     'Association',
     'Établissement public',
