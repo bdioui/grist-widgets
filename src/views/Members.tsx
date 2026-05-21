@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2 } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, Check, CheckCheck } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { MemberFull, Partner, Lab } from '@/lib/types'
@@ -377,12 +377,24 @@ function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, o
 
 // --- Carte contact ---
 
-function MemberCard({ member, onClick }: { member: MemberFull; onClick: () => void }) {
+function MemberCard({ member, onClick, selectOn, selected, onToggle }: {
+    member: MemberFull
+    onClick: () => void
+    selectOn: boolean
+    selected: boolean
+    onToggle: () => void
+}) {
     return (
         <Card
-            className="cursor-pointer hover:shadow-md transition-shadow duration-200"
-            onClick={onClick}
+            className={`cursor-pointer transition-all duration-200 ${
+                selected
+                    ? 'bg-muted border-foreground shadow-none'
+                    : 'hover:shadow-md'
+            }`}
+            onClick={selectOn ? onToggle : onClick}
         >
+
+        
             <CardHeader className="pb-2">
                 <div className="flex items-start gap-3">
                     <div
@@ -457,6 +469,16 @@ export default function Members() {
     const [selected,       setSelected]       = useState<MemberFull | null>(null)
     const [showCreate,     setShowCreate]     = useState(false)
     const [partnerSearch,  setPartnerSearch]  = useState('')
+    const [multipleSelect, setMultipleSelect] = useState(false)
+    const [selectedMembers, setSelectedMembers] = useState<MemberFull[]>([])
+
+    function toggleMember(member: MemberFull) {
+        setSelectedMembers(prev =>
+            prev.find(m => m.id === member.id)
+                ? prev.filter(m => m.id !== member.id)
+                : [...prev, member]
+        )
+    }
 
     useEffect(() => {
         setLoading(true)
@@ -618,6 +640,23 @@ export default function Members() {
                     {filtered.length} contact{filtered.length > 1 ? 's' : ''}
                 </span>
 
+            {multipleSelect ? (
+                <>
+                   
+                    <Button size="sm" className="gap-1.5 rounded-md border border-border bg-foreground text-background hover:bg-foreground/90" onClick={() => { setMultipleSelect(false) ; setSelectedMembers([])}}>
+                       {selectedMembers.length} sélectionné{selectedMembers.length > 1 ? 's' : ''}
+                    </Button>
+                </>
+            ) : (
+                <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
+                    <Check size={14} /> Sélectionner
+                </Button>
+            )}
+               
+               
+       
+                
+
                 <Button size="sm" className="gap-1.5 rounded-md" onClick={() => setShowCreate(true)}>
                     <Plus size={14} /> Nouveau contact
                 </Button>
@@ -634,6 +673,9 @@ export default function Members() {
                             key={member.id}
                             member={member}
                             onClick={() => setSelected(member)}
+                            selectOn= {multipleSelect}
+                            selected={!!selectedMembers.find(m => m.id === member.id)}
+                            onToggle={() => toggleMember(member)}
                         />
                     ))
                 }

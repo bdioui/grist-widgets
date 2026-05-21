@@ -700,7 +700,7 @@ function PartnerCard({ partner, onClick }: { partner: PartnerCardFull; onClick: 
                                 {partner.members.map(m => (
                                     <div key={m.id} className="text-xs whitespace-nowrap">
                                         {m.first_name} {m.last_name}
-                                        <span className="text-muted-foreground ml-1">— {m.position}</span>
+                                        {/* <span className="text-muted-foreground ml-1">— {m.position}</span> */}
                                     </div>
                                 ))}
                             </TooltipContent>
