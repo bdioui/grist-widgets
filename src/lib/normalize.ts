@@ -99,17 +99,21 @@ export function normalizeActionCardsFull(
     const categoryMap = new Map(categories.map(c => [c.id, c]))
     const memberMap = new Map(members.map(m => [m.id, m]))
 
+    const FALLBACK_STATUS:   Status   = { id: 0, label: '—', context: 'action_card' }
+    const FALLBACK_CATEGORY: Category = { id: 0, title: '—', parent_category_id: null, color: null }
+    const FALLBACK_MEMBER:   Member   = { id: 0, partner_id: 0, first_name: '?', last_name: '', position: '', email: '', tel: '', genre: '', status: '', profile_image: '' }
+
     return normalizeActionCards(rows).map(card => {
-        const category = categoryMap.get(card.category_id)
-        const parent = category?.parent_category_id
+        const category = categoryMap.get(card.category_id) ?? FALLBACK_CATEGORY
+        const parent = category.parent_category_id
             ? categoryMap.get(category.parent_category_id) ?? null
             : null
 
         return {
             ...card,
-            status: statusMap.get(card.status_id)!,
-            category: { ...category!, parent },
-            owner: memberMap.get(card.owner_id)!,
+            status:   statusMap.get(card.status_id)   ?? FALLBACK_STATUS,
+            category: { ...category, parent },
+            owner:    memberMap.get(card.owner_id)    ?? FALLBACK_MEMBER,
         }
     })
 }

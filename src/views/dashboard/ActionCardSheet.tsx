@@ -190,12 +190,16 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
                     category_id: categoryId,
                     owner_id:    form.owner_id,
                 })
-                const status     = statuses.find(s => s.id === form.status_id)!
-                const category   = categories.find(c => c.id === categoryId)!
-                const parentCat  = category.parent_category_id
+                const status     = statuses.find(s => s.id === form.status_id)
+                const category   = categories.find(c => c.id === categoryId)
+                const parentCat  = category?.parent_category_id
                     ? categories.find(c => c.id === category.parent_category_id)
                     : undefined
-                const owner      = members.find(m => m.id === form.owner_id)!
+                const owner      = members.find(m => m.id === form.owner_id)
+                if (!status || !category || !owner) {
+                    setError('Statut, catégorie ou responsable introuvable — veuillez vérifier les données.')
+                    return
+                }
                 onUpdated?.({
                     ...editCard,
                     title:       form.title,
