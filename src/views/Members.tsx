@@ -454,8 +454,9 @@ export default function Members() {
     const [query,         setQuery]         = useState('')
     const [statusFilter,  setStatusFilter]  = useState<string[]>([])
     const [partnerFilter, setPartnerFilter] = useState<number[]>([])
-    const [selected,   setSelected]   = useState<MemberFull | null>(null)
-    const [showCreate, setShowCreate] = useState(false)
+    const [selected,       setSelected]       = useState<MemberFull | null>(null)
+    const [showCreate,     setShowCreate]     = useState(false)
+    const [partnerSearch,  setPartnerSearch]  = useState('')
 
     useEffect(() => {
         setLoading(true)
@@ -550,8 +551,8 @@ export default function Members() {
                     </PopoverContent>
                 </Popover>
 
-                {/* Filtre partenaire — multi-select */}
-                <Popover>
+                {/* Filtre partenaire — multi-select avec recherche */}
+                <Popover onOpenChange={open => { if (!open) setPartnerSearch('') }}>
                     <PopoverTrigger asChild>
                         <button className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border bg-white transition-colors ${
                             partnerFilter.length > 0
@@ -567,7 +568,14 @@ export default function Members() {
                             <ChevronDown size={12} />
                         </button>
                     </PopoverTrigger>
-                    <PopoverContent align="start" className="w-56 p-2 flex flex-col gap-0.5">
+                    <PopoverContent align="start" className="w-64 p-2 flex flex-col gap-0.5">
+                        <Input
+                            placeholder="Rechercher..."
+                            value={partnerSearch}
+                            onChange={e => setPartnerSearch(e.target.value)}
+                            className="h-7 text-xs mb-1"
+                            autoFocus
+                        />
                         {partnerFilter.length > 0 && (
                             <>
                                 <button
@@ -579,25 +587,30 @@ export default function Members() {
                                 <Separator className="my-1" />
                             </>
                         )}
-                        {partners.map(p => (
-                            <label
-                                key={p.id}
-                                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-xs"
-                            >
-                                <Checkbox
-                                    checked={partnerFilter.includes(p.id)}
-                                    onCheckedChange={checked => setPartnerFilter(prev =>
-                                        checked ? [...prev, p.id] : prev.filter(x => x !== p.id)
-                                    )}
-                                />
-                                <span className="flex items-center gap-1.5">
-                                    {p.color && (
-                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-                                    )}
-                                    {p.name}
-                                </span>
-                            </label>
-                        ))}
+                        <div className="max-h-56 overflow-y-auto flex flex-col gap-0.5">
+                            {partners
+                                .filter(p => p.name.toLowerCase().includes(partnerSearch.toLowerCase()))
+                                .map(p => (
+                                    <label
+                                        key={p.id}
+                                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-xs"
+                                    >
+                                        <Checkbox
+                                            checked={partnerFilter.includes(p.id)}
+                                            onCheckedChange={checked => setPartnerFilter(prev =>
+                                                checked ? [...prev, p.id] : prev.filter(x => x !== p.id)
+                                            )}
+                                        />
+                                        <span className="flex items-center gap-1.5">
+                                            {p.color && (
+                                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                                            )}
+                                            {p.name}
+                                        </span>
+                                    </label>
+                                ))
+                            }
+                        </div>
                     </PopoverContent>
                 </Popover>
 
