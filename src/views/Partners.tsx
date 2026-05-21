@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
-import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical } from 'lucide-react'
+import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { PartnerCardFull, Partner, Lab, LabCardFull, Member } from '@/lib/types'
@@ -30,6 +30,7 @@ const PARTNER_TYPES = [
     'Entreprise privée',
     'Association',
     'Établissement public',
+    'Administration',
     'Collectivité',
     'Fondation',
     'Autre',
@@ -95,8 +96,8 @@ const PALETTE = [
 // PARTNER FORMS & SHEETS
 // =============================================================================
 
-type PartnerForm = { name: string; description: string; color: string; logo: string; type: string; status_id: number }
-const EMPTY_PARTNER_FORM: PartnerForm = { name: '', description: '', color: '#E7E8E2', logo: '', type: 'Université', status_id: 1 }
+type PartnerForm = { name: string; description: string; color: string; logo: string; type: string; status_id: number; consortium: boolean }
+const EMPTY_PARTNER_FORM: PartnerForm = { name: '', description: '', color: '#E7E8E2', logo: '', type: 'Université et grandes écoles', status_id: 1, consortium: false }
 
 type PartnerSheetProps =
     | { mode: 'create'; onCreated: (p: Partner) => void; onClose: () => void }
@@ -105,7 +106,7 @@ type PartnerSheetProps =
 function PartnerFormSheet(props: PartnerSheetProps) {
     const isEdit = props.mode === 'edit'
     const [form, setForm] = useState<PartnerForm>(
-        isEdit ? { name: props.partner.name, description: props.partner.description, color: props.partner.color, logo: props.partner.logo, type: props.partner.type, status_id: props.partner.status_id }
+        isEdit ? { name: props.partner.name, description: props.partner.description, color: props.partner.color, logo: props.partner.logo, type: props.partner.type, status_id: props.partner.status_id, consortium: props.partner.consortium }
                : EMPTY_PARTNER_FORM
     )
     const [saving, setSaving] = useState(false)
@@ -165,6 +166,16 @@ function PartnerFormSheet(props: PartnerSheetProps) {
                 <Label>Logo (URL)</Label>
                 <Input value={form.logo} onChange={e => setField('logo', e.target.value)} placeholder="https://..." />
             </div>
+            <label className="flex items-center gap-3 px-1 cursor-pointer">
+                <Checkbox
+                    checked={form.consortium}
+                    onCheckedChange={checked => setField('consortium', Boolean(checked))}
+                />
+                <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Membre du consortium</span>
+                    <span className="text-xs text-muted-foreground">Ce partenaire fait partie du consortium principal</span>
+                </div>
+            </label>
             <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1" onClick={props.onClose}>Annuler</Button>
                 <Button className="flex-1" onClick={handleSave} disabled={saving || !form.name.trim()}>
@@ -208,6 +219,11 @@ function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDeleted }: Pa
                         {partner.color && <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: partner.color }} />}
                         <SheetTitle className="text-base truncate">{partner.name}</SheetTitle>
                         <Badge variant="outline" className="text-xs shrink-0">{partner.type}</Badge>
+                        {partner.consortium && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 shrink-0">
+                                <Users size={10} /> Consortium
+                            </span>
+                        )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                         {confirming ? (
@@ -646,7 +662,19 @@ function PartnerCard({ partner, onClick }: { partner: PartnerCardFull; onClick: 
             <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-sm leading-snug">{partner.name}</CardTitle>
-                    <Badge variant="outline" className="text-xs shrink-0">{partner.type}</Badge>
+                    <div className="flex items-center gap-1 shrink-0">
+                        {partner.consortium && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 cursor-default">
+                                        <Users size={10} /> Consortium
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent>Membre du consortium</TooltipContent>
+                            </Tooltip>
+                        )}
+                        <Badge variant="outline" className="text-xs">{partner.type}</Badge>
+                    </div>
                 </div>
                 <CardDescription className="text-xs line-clamp-2">{partner.description}</CardDescription>
             </CardHeader>
@@ -776,8 +804,9 @@ export default function Partners() {
     const [showCreateL, setShowCreateL] = useState(false)
 
     // Shared filters
-    const [query,      setQuery]      = useState('')
-    const [typeFilter, setTypeFilter] = useState<string[]>([])
+    const [query,           setQuery]           = useState('')
+    const [typeFilter,      setTypeFilter]      = useState<string[]>([])
+    const [consortiumOnly,  setConsortiumOnly]  = useState(false)
 
     useEffect(() => {
         setLoadingP(true)
@@ -794,13 +823,15 @@ export default function Partners() {
         setViewMode(mode)
         setQuery('')
         setTypeFilter([])
+        setConsortiumOnly(false)
     }
 
     // Partners handlers
     const filteredPartners = partners.filter(p => {
-        const matchesQuery = !query.trim() || p.name.toLowerCase().includes(query.toLowerCase()) || p.description.toLowerCase().includes(query.toLowerCase())
-        const matchesType  = typeFilter.length === 0 || typeFilter.includes(p.type)
-        return matchesQuery && matchesType
+        const matchesQuery      = !query.trim() || p.name.toLowerCase().includes(query.toLowerCase()) || p.description.toLowerCase().includes(query.toLowerCase())
+        const matchesType       = typeFilter.length === 0 || typeFilter.includes(p.type)
+        const matchesConsortium = !consortiumOnly || p.consortium
+        return matchesQuery && matchesType && matchesConsortium
     })
     const availablePartnerTypes = [...new Set(partners.map(p => p.type))].sort()
 
@@ -903,6 +934,19 @@ export default function Partners() {
                         ))}
                     </PopoverContent>
                 </Popover>
+
+                {isPartners && (
+                    <button
+                        onClick={() => setConsortiumOnly(v => !v)}
+                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                            consortiumOnly
+                                ? 'bg-amber-500 text-white border-amber-500'
+                                : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'
+                        }`}
+                    >
+                        <Users size={12} /> Consortium
+                    </button>
+                )}
 
                 <span className="text-sm text-muted-foreground flex-1">
                     {isPartners

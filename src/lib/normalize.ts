@@ -62,6 +62,7 @@ export function normalizePartners(rows: Record<string, unknown>[]): Partner[] {
         logo: str(r.logo),
         status_id: num(r.status_id),
         type: str(r.type),
+        consortium: Boolean(r.consortium),
     }))
 }
 
@@ -280,6 +281,7 @@ export function normalizePartnerCardsFull(
         logo: str(r.logo),
         status_id: num(r.status_id),
         type: str(r.type),
+        consortium: Boolean(r.consortium),
         members: membersByPartner.get(num(r.id)) ?? [],
         agreements: agreementsByPartner.get(num(r.id)) ?? [],
         projects: projectsByPartner.get(num(r.id)) ?? [],

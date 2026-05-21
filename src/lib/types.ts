@@ -21,6 +21,7 @@ export type Partner = {
     logo: string
     status_id: number
     type: string // 'Entreprise privée' | 'Association' | ...
+    consortium: boolean
 }
 
 export type Lab = {

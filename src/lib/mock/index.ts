@@ -44,12 +44,12 @@ export const mockCategories: Category[] = [
 ]
 
 export const mockPartners: Partner[] = [
-    { id: 1, name: 'Université X',          description: 'Université partenaire principale',       color: '#D8CFEE', logo: '', status_id: 1, type: 'Université' },
-    { id: 2, name: 'Entreprise A',          description: 'Partenaire industriel stratégique',      color: '#E7E8E2', logo: '', status_id: 1, type: 'Entreprise privée' },
-    { id: 3, name: 'Association B',         description: 'Association de recherche appliquée',     color: '#EEC5EF', logo: '', status_id: 1, type: 'Association' },
-    { id: 4, name: 'Institut de Recherche', description: 'Institut national de recherche',         color: '#C5D2EF', logo: '', status_id: 1, type: 'Établissement public' },
-    { id: 5, name: 'Collectivité D',        description: 'Collectivité territoriale partenaire',  color: '#EDD803', logo: '', status_id: 1, type: 'Collectivité' },
-    { id: 6, name: 'Fondation E',           description: 'Fondation de financement scientifique', color: '#EEC5EF', logo: '', status_id: 1, type: 'Fondation' },
+    { id: 1, name: 'Université X',          description: 'Université partenaire principale',       color: '#D8CFEE', logo: '', status_id: 1, type: 'Université et grandes écoles', consortium: true  },
+    { id: 2, name: 'Entreprise A',          description: 'Partenaire industriel stratégique',      color: '#E7E8E2', logo: '', status_id: 1, type: 'Entreprise privée',            consortium: false },
+    { id: 3, name: 'Association B',         description: 'Association de recherche appliquée',     color: '#EEC5EF', logo: '', status_id: 1, type: 'Association',                  consortium: true  },
+    { id: 4, name: 'Institut de Recherche', description: 'Institut national de recherche',         color: '#C5D2EF', logo: '', status_id: 1, type: 'Établissement public',         consortium: false },
+    { id: 5, name: 'Collectivité D',        description: 'Collectivité territoriale partenaire',  color: '#EDD803', logo: '', status_id: 1, type: 'Collectivité',                  consortium: false },
+    { id: 6, name: 'Fondation E',           description: 'Fondation de financement scientifique', color: '#EEC5EF', logo: '', status_id: 1, type: 'Fondation',                    consortium: false },
 ]
 
 export const mockLabs: Lab[] = [
