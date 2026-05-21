@@ -36,10 +36,37 @@ const PARTNER_TYPES = [
 ]
 
 const LAB_TYPES = [
-    'Laboratoire académique',
+    "Unité d'appui à la recherche",
+    'Chaire de recherche',
     'Unité mixte de recherche',
-    'Équipe de recherche',
-    'Centre de recherche',
+    'Laboratoire commun',
+    'Équipe de recherche labelisée',
+]
+
+const LAB_TOPICS = [
+    'Société et sciences humaines',
+    'Aménagement et urbanisme',
+    'Politique et société',
+    'Économie et management',
+    'Droit',
+    'Arts, culture, philosophie',
+    'Histoire et archéologie',
+    'Communication, langues et éducation',
+    'Psychologie',
+    'Environnement',
+    'Écosystèmes et biodiversité',
+    'Agrosystèmes',
+    'Biologie et santé',
+    'Santé publique',
+    'Médecine',
+    'Cancérologie',
+    'Sports',
+    'Biologie',
+    'Mathématiques',
+    'Chimie',
+    'Physique',
+    'Imagerie et électronique',
+    'Mécanique',
     'Autre',
 ]
 
@@ -281,14 +308,38 @@ type LabSheetProps =
 
 function LabFormSheet(props: LabSheetProps) {
     const isEdit = props.mode === 'edit'
+
+    const initTopic = isEdit ? props.lab.topic : ''
+    const initTopicSelect = isEdit
+        ? (LAB_TOPICS.includes(props.lab.topic) ? props.lab.topic : 'Autre')
+        : ''
+    const initTopicCustom = isEdit && !LAB_TOPICS.includes(props.lab.topic) ? props.lab.topic : ''
+
     const [form, setForm] = useState<LabForm>(
-        isEdit ? { name: props.lab.name, description: props.lab.description, type: props.lab.type, topic: props.lab.topic }
+        isEdit ? { name: props.lab.name, description: props.lab.description, type: props.lab.type, topic: initTopic }
                : EMPTY_LAB_FORM
     )
+    const [topicSelect, setTopicSelect] = useState(initTopicSelect)
+    const [topicCustom, setTopicCustom] = useState(initTopicCustom)
     const [saving, setSaving] = useState(false)
 
     function setField<K extends keyof LabForm>(key: K, value: LabForm[K]) {
         setForm(prev => ({ ...prev, [key]: value }))
+    }
+
+    function handleTopicSelect(value: string) {
+        setTopicSelect(value)
+        if (value !== 'Autre') {
+            setTopicCustom('')
+            setField('topic', value)
+        } else {
+            setField('topic', topicCustom)
+        }
+    }
+
+    function handleTopicCustom(value: string) {
+        setTopicCustom(value)
+        setField('topic', value)
     }
 
     async function handleSave() {
@@ -329,7 +380,20 @@ function LabFormSheet(props: LabSheetProps) {
             </div>
             <div className="flex flex-col gap-1.5">
                 <Label>Thématique</Label>
-                <Input value={form.topic} onChange={e => setField('topic', e.target.value)} placeholder="Ex : Environnement, IA, Innovation…" />
+                <Select value={topicSelect} onValueChange={handleTopicSelect}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionner une thématique…" /></SelectTrigger>
+                    <SelectContent>
+                        {LAB_TOPICS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                {topicSelect === 'Autre' && (
+                    <Input
+                        value={topicCustom}
+                        onChange={e => handleTopicCustom(e.target.value)}
+                        placeholder="Préciser la thématique…"
+                        className="mt-1.5"
+                    />
+                )}
             </div>
             <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1" onClick={props.onClose}>Annuler</Button>
