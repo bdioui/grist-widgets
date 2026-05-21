@@ -486,7 +486,7 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
         setAgreementLinks(prev => prev.filter(l => l.id !== linkId))
     }
 
-    const statusColor = STATUS_COLORS[card.status.label] ?? '#f3f4f6'
+    const statusColor = STATUS_COLORS[draft.status.label] ?? '#f3f4f6'
 
     const parentCategories = allCategories.filter(c => !c.parent_category_id)
 
@@ -528,7 +528,7 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
                                 onChange={e => setDraftField('title', e.target.value)}
                                 className="w-full h-8 text-sm font-semibold"
                             />
-                        ) : card.title}
+                        ) : draft.title}
                     </SheetTitle>
                     <div className="flex items-center gap-2 shrink-0">
                         {confirming ? (
@@ -567,10 +567,10 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
                         {/* Statut + catégorie */}
                         <div className="flex flex-wrap items-center gap-2 rounded-xl">
                             <Badge variant="secondary" className="rounded-xl" style={{ backgroundColor: statusColor }}>
-                                {card.status.label}
+                                {draft.status.label}
                             </Badge>
                             <span className="text-xs text-muted-foreground">
-                                {card.category.parent ? `${card.category.parent.title} › ${card.category.title}` : card.category.title}
+                                {draft.category.parent ? `${draft.category.parent.title} › ${draft.category.title}` : draft.category.title}
                             </span>
                         </div>
 
