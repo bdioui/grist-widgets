@@ -323,7 +323,11 @@ export async function updateMember(id: number, patch: Partial<Omit<Member, 'id'>
         if (m) Object.assign(m, patch)
         return
     }
-    await updateRecord(T.member, id, patch)
+    const { lab_id, ...gristPatch } = patch
+    if (Object.keys(gristPatch).length > 0) await updateRecord(T.member, id, gristPatch)
+    if (lab_id !== undefined) {
+        try { await updateRecord(T.member, id, { lab_id }) } catch { /* colonne lab_id absente de Grist */ }
+    }
 }
 
 export async function deleteMember(id: number): Promise<void> {
