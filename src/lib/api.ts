@@ -1,6 +1,6 @@
 import { fetchTable, updateRecord, addRecord, addRecords, deleteRecord } from '@/lib/grist'
 import {
-    mockStatuses, mockCategories, mockMembers, mockPartners,
+    mockStatuses, mockCategories, mockMembers, mockPartners, mockLabs, mockPartnerLabs,
     mockAxes, mockActionCards, mockProjectCalls, mockProjects,
     mockFinancialAgreements, mockPhds, mockMobilityGrants,
     mockIndicatorDefinitions, mockBudgetCategories, mockBudgetDetails,
@@ -14,10 +14,11 @@ import {
     normalizePhds, normalizeMobilityGrants, normalizeIndicatorDefinitions,
     normalizeBudgetCategories, normalizeBudgetDetails,
     normalizeToDoLists, normalizeToDoItems,
-    normalizeMemberActionCards, normalizeProjectActionCards, normalizeAgreementActionCards, normalizePartnerCardsFull
+    normalizeMemberActionCards, normalizeProjectActionCards, normalizeAgreementActionCards,
+    normalizePartnerCardsFull, normalizeLabs, normalizePartnerLabs, normalizeLabCardsFull,
 } from '@/lib/normalize'
 import type {
-    Status, Category, Member, Partner, Axis,
+    Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
     ActionCard, ActionCardFull, PartnerCardFull, ProjectCall, Project,
     FinancialAgreement, Phd, MobilityGrant,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
@@ -49,6 +50,8 @@ const T = {
     member_action_card:   'Member_action_card',
     agreement_action_card:'Agreement_action_card',
     project_action_card:  'Project_action_card',
+    lab:                  'Lab',
+    partner_lab:          'Partner_lab',
 }
 
 // --- Tables de référence ---
@@ -58,6 +61,8 @@ export async function getCategories(): Promise<Category[]> { return USE_MOCK ? m
 export async function getMembers(): Promise<Member[]> { return USE_MOCK ? mockMembers : normalizeMembers(await fetchTable(T.member)) }
 export async function getPartners(): Promise<Partner[]> { return USE_MOCK ? mockPartners : normalizePartners(await fetchTable(T.partner)) }
 export async function getAxes(): Promise<Axis[]> { return USE_MOCK ? mockAxes : normalizeAxes(await fetchTable(T.axis)) }
+export async function getLabs(): Promise<Lab[]> { return USE_MOCK ? mockLabs : normalizeLabs(await fetchTable(T.lab)) }
+export async function getPartnerLabs(): Promise<PartnerLab[]> { return USE_MOCK ? mockPartnerLabs : normalizePartnerLabs(await fetchTable(T.partner_lab)) }
 
 // --- Cœur du système ---
 
@@ -262,15 +267,43 @@ export async function removeAgreementFromCard(linkId: number): Promise<void> {
 // --- Membres ---
 
 export async function getMembersFull(): Promise<MemberFull[]> {
-    const [members, partners] = await (USE_MOCK
-        ? Promise.resolve([mockMembers, mockPartners])
-        : Promise.all([getMembers(), getPartners()])
+    const [members, partners, labs] = await (USE_MOCK
+        ? Promise.resolve([mockMembers, mockPartners, mockLabs])
+        : Promise.all([getMembers(), getPartners(), getLabs()])
     )
     const partnerMap = new Map((partners as Partner[]).map(p => [p.id, p]))
+    const labMap     = new Map((labs    as Lab[])    .map(l => [l.id, l]))
     return (members as Member[]).map(m => ({
         ...m,
         partner: partnerMap.get(m.partner_id) ?? null,
+        lab:     labMap.get(m.lab_id)         ?? null,
     }))
+}
+
+export async function getLabCardsFull(): Promise<LabCardFull[]> {
+    const [labRows, partnerLabs, partners, members] = await (USE_MOCK
+        ? Promise.resolve([mockLabs, mockPartnerLabs, mockPartners, mockMembers])
+        : Promise.all([
+            fetchTable(T.lab),
+            getPartnerLabs(),
+            getPartners(),
+            getMembers(),
+        ])
+    )
+    if (USE_MOCK) {
+        return normalizeLabCardsFull(
+            (labRows as Lab[]).map(l => l as unknown as Record<string, unknown>),
+            partnerLabs as PartnerLab[],
+            partners as Partner[],
+            members as Member[],
+        )
+    }
+    return normalizeLabCardsFull(
+        labRows as Record<string, unknown>[],
+        partnerLabs as PartnerLab[],
+        partners as Partner[],
+        members as Member[],
+    )
 }
 
 export async function addMember(fields: Omit<Member, 'id'>): Promise<Member> {
@@ -331,6 +364,75 @@ export async function deletePartner(id: number): Promise<void> {
         return
     }
     await deleteRecord(T.partner, id)
+}
+
+// --- Laboratoires ---
+
+export async function addLab(fields: Omit<Lab, 'id'>): Promise<Lab> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockLabs.map(l => l.id)) + 1
+        const lab: Lab = { id: newId, ...fields }
+        mockLabs.push(lab)
+        return lab
+    }
+    const id = await addRecord(T.lab, fields)
+    return { id, ...fields }
+}
+
+export async function updateLab(id: number, patch: Partial<Omit<Lab, 'id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const l = mockLabs.find(l => l.id === id)
+        if (l) Object.assign(l, patch)
+        return
+    }
+    await updateRecord(T.lab, id, patch)
+}
+
+export async function deleteLab(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockLabs.findIndex(l => l.id === id)
+        if (i !== -1) mockLabs.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.lab, id)
+}
+
+export async function addPartnerToLab(labId: number, partnerId: number): Promise<PartnerLab> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockPartnerLabs.map(pl => pl.id)) + 1
+        const link: PartnerLab = { id: newId, lab_id: labId, partner_id: partnerId }
+        mockPartnerLabs.push(link)
+        return link
+    }
+    const id = await addRecord(T.partner_lab, { lab_id: labId, partner_id: partnerId })
+    return { id, lab_id: labId, partner_id: partnerId }
+}
+
+export async function removePartnerFromLab(linkId: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockPartnerLabs.findIndex(pl => pl.id === linkId)
+        if (i !== -1) mockPartnerLabs.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.partner_lab, linkId)
+}
+
+export async function attachMemberToLab(memberId: number, labId: number): Promise<void> {
+    if (USE_MOCK) {
+        const m = mockMembers.find(m => m.id === memberId)
+        if (m) m.lab_id = labId
+        return
+    }
+    await updateRecord(T.member, memberId, { lab_id: labId })
+}
+
+export async function detachMemberFromLab(memberId: number): Promise<void> {
+    if (USE_MOCK) {
+        const m = mockMembers.find(m => m.id === memberId)
+        if (m) m.lab_id = 0
+        return
+    }
+    await updateRecord(T.member, memberId, { lab_id: 0 })
 }
 
 // --- Appels à projets ---

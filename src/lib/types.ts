@@ -23,9 +23,24 @@ export type Partner = {
     type: string // 'Entreprise privée' | 'Association' | ...
 }
 
+export type Lab = {
+    id: number
+    name: string
+    description: string
+    type: string // 'Laboratoire académique' | 'UMR' | 'Équipe de recherche' | ...
+    topic: string
+}
+
+export type PartnerLab = {
+    id: number
+    lab_id: number
+    partner_id: number
+}
+
 export type Member = {
     id: number
     partner_id: number
+    lab_id: number
     first_name: string
     last_name: string
     position: string
@@ -195,10 +210,16 @@ export type ActionCardFull = ActionCard & {
 
 export type MemberFull = Member & {
     partner: Partner | null
+    lab:     Lab | null
 }
 
 export type PartnerCardFull = Partner & {
     projects:   Project[]
     agreements: FinancialAgreement[]
     members:    Member[]
+}
+
+export type LabCardFull = Lab & {
+    partners: Partner[]
+    members:  Member[]
 }

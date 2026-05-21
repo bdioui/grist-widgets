@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getMembersFull, getPartners, addMember, updateMember, deleteMember } from '@/lib/api'
+import { getMembersFull, getPartners, getLabs, addMember, updateMember, deleteMember } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import type { MemberFull, Partner } from '@/lib/types'
+import type { MemberFull, Partner, Lab } from '@/lib/types'
 
 // --- Constantes ---
 
@@ -39,6 +39,7 @@ type MemberForm = {
     genre:         string
     status:        string
     partner_id:    number
+    lab_id:        number
     profile_image: string
 }
 
@@ -51,14 +52,15 @@ const EMPTY_FORM: MemberForm = {
     genre:         'F',
     status:        'Enseignant-chercheur',
     partner_id:    0,
+    lab_id:        0,
     profile_image: '',
 }
 
 // --- Formulaire création / édition ---
 
 type MemberFormSheetProps =
-    | { mode: 'create'; partners: Partner[]; onCreated: (m: MemberFull) => void; onClose: () => void }
-    | { mode: 'edit';   partners: Partner[]; member: MemberFull; onUpdated: (m: MemberFull) => void; onClose: () => void }
+    | { mode: 'create'; partners: Partner[]; labs: Lab[]; onCreated: (m: MemberFull) => void; onClose: () => void }
+    | { mode: 'edit';   partners: Partner[]; labs: Lab[]; member: MemberFull; onUpdated: (m: MemberFull) => void; onClose: () => void }
 
 function MemberFormSheet(props: MemberFormSheetProps) {
     const isEdit = props.mode === 'edit'
@@ -73,6 +75,7 @@ function MemberFormSheet(props: MemberFormSheetProps) {
                 genre:         props.member.genre,
                 status:        props.member.status,
                 partner_id:    props.member.partner_id,
+                lab_id:        props.member.lab_id,
                 profile_image: props.member.profile_image,
             }
             : EMPTY_FORM
@@ -88,12 +91,13 @@ function MemberFormSheet(props: MemberFormSheetProps) {
         setSaving(true)
         try {
             const partner = props.partners.find(p => p.id === form.partner_id) ?? null
+            const lab     = props.labs.find(l => l.id === form.lab_id) ?? null
             if (isEdit) {
                 await updateMember(props.member.id, form)
-                props.onUpdated({ ...props.member, ...form, partner })
+                props.onUpdated({ ...props.member, ...form, partner, lab })
             } else {
                 const created = await addMember(form)
-                props.onCreated({ ...created, partner })
+                props.onCreated({ ...created, partner, lab })
             }
             props.onClose()
         } finally {
@@ -155,6 +159,20 @@ function MemberFormSheet(props: MemberFormSheetProps) {
             </div>
 
             <div className="flex flex-col gap-1.5">
+                <Label>Laboratoire</Label>
+                <Select
+                    value={form.lab_id ? String(form.lab_id) : '0'}
+                    onValueChange={v => setField('lab_id', Number(v))}
+                >
+                    <SelectTrigger><SelectValue placeholder="Aucun laboratoire" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="0">Aucun laboratoire</SelectItem>
+                        {props.labs.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
                 <Label>Email</Label>
                 <Input type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="email@exemple.fr" />
             </div>
@@ -202,13 +220,14 @@ function MemberFormSheet(props: MemberFormSheetProps) {
 type MemberDetailSheetProps = {
     member:    MemberFull
     partners:  Partner[]
+    labs:      Lab[]
     open:      boolean
     onClose:   () => void
     onUpdated: (m: MemberFull) => void
     onDeleted: (id: number) => void
 }
 
-function MemberDetailSheet({ member, partners, open, onClose, onUpdated, onDeleted }: MemberDetailSheetProps) {
+function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, onDeleted }: MemberDetailSheetProps) {
     const [editing,    setEditing]    = useState(false)
     const [confirming, setConfirming] = useState(false)
     const [deleting,   setDeleting]   = useState(false)
@@ -278,6 +297,7 @@ function MemberDetailSheet({ member, partners, open, onClose, onUpdated, onDelet
                         <MemberFormSheet
                             mode="edit"
                             partners={partners}
+                            labs={labs}
                             member={member}
                             onUpdated={m => { onUpdated(m); setEditing(false) }}
                             onClose={() => setEditing(false)}
@@ -303,12 +323,17 @@ function MemberDetailSheet({ member, partners, open, onClose, onUpdated, onDelet
                             <div className="flex items-center gap-3">
                                 <span className="w-24 shrink-0 text-xs text-muted-foreground">Partenaire</span>
                                 {member.partner ? (
-                                    <span
-                                        className="text-xs px-2 py-0.5 rounded-full border border-border"
-                                        style={{ backgroundColor: member.partner.color }}
-                                    >
+                                    <span className="text-xs px-2 py-0.5 rounded-full border border-border" style={{ backgroundColor: member.partner.color }}>
                                         {member.partner.name}
                                     </span>
+                                ) : (
+                                    <span className="text-xs text-muted-foreground italic">Aucun</span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="w-24 shrink-0 text-xs text-muted-foreground">Laboratoire</span>
+                                {member.lab ? (
+                                    <Badge variant="secondary" className="text-xs">{member.lab.name}</Badge>
                                 ) : (
                                     <span className="text-xs text-muted-foreground italic">Aucun</span>
                                 )}
@@ -423,6 +448,7 @@ function MemberCardSkeleton() {
 export default function Members() {
     const [members,  setMembers]  = useState<MemberFull[]>([])
     const [partners, setPartners] = useState<Partner[]>([])
+    const [labs,     setLabs]     = useState<Lab[]>([])
     const [loading,  setLoading]  = useState(false)
     const [error,    setError]    = useState('')
     const [query,         setQuery]         = useState('')
@@ -433,8 +459,8 @@ export default function Members() {
 
     useEffect(() => {
         setLoading(true)
-        Promise.all([getMembersFull(), getPartners()])
-            .then(([m, p]) => { setMembers(m); setPartners(p) })
+        Promise.all([getMembersFull(), getPartners(), getLabs()])
+            .then(([m, p, l]) => { setMembers(m); setPartners(p); setLabs(l) })
             .catch(err => setError(err.message))
             .finally(() => setLoading(false))
     }, [])
@@ -610,6 +636,7 @@ export default function Members() {
                 <MemberDetailSheet
                     member={selected}
                     partners={partners}
+                    labs={labs}
                     open={!!selected}
                     onClose={() => setSelected(null)}
                     onUpdated={handleUpdated}
@@ -629,6 +656,7 @@ export default function Members() {
                     <MemberFormSheet
                         mode="create"
                         partners={partners}
+                        labs={labs}
                         onCreated={handleCreated}
                         onClose={() => setShowCreate(false)}
                     />

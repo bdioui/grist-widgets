@@ -2,7 +2,7 @@
 // identiques au format des mocks, utilisables directement par le front.
 
 import type {
-    Status, Category, Member, Partner, Axis,
+    Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
     ActionCard, ActionCardFull,
     ProjectCall, Project, FinancialAgreement,
     Phd, MobilityGrant, ToDoList, ToDoItem,
@@ -41,6 +41,7 @@ export function normalizeMembers(rows: Record<string, unknown>[]): Member[] {
     return rows.map(r => ({
         id: num(r.id),
         partner_id: num(r.partner_id),
+        lab_id: num(r.lab_id),
         first_name: str(r.first_name),
         last_name: str(r.last_name),
         position: str(r.position),
@@ -101,7 +102,7 @@ export function normalizeActionCardsFull(
 
     const FALLBACK_STATUS:   Status   = { id: 0, label: '—', context: 'action_card' }
     const FALLBACK_CATEGORY: Category = { id: 0, title: '—', parent_category_id: null, color: null }
-    const FALLBACK_MEMBER:   Member   = { id: 0, partner_id: 0, first_name: '?', last_name: '', position: '', email: '', tel: '', genre: '', status: '', profile_image: '' }
+    const FALLBACK_MEMBER:   Member   = { id: 0, partner_id: 0, lab_id: 0, first_name: '?', last_name: '', position: '', email: '', tel: '', genre: '', status: '', profile_image: '' }
 
     return normalizeActionCards(rows).map(card => {
         const category = categoryMap.get(card.category_id) ?? FALLBACK_CATEGORY
@@ -290,5 +291,55 @@ export function normalizeAgreementActionCards(rows: Record<string, unknown>[]): 
         id: num(r.id),
         financial_agreement_id: num(r.financial_agreement_id),
         action_card_id: num(r.action_card_id),
+    }))
+}
+
+export function normalizeLabs(rows: Record<string, unknown>[]): Lab[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        name: str(r.name),
+        description: str(r.description),
+        type: str(r.type),
+        topic: str(r.topic),
+    }))
+}
+
+export function normalizePartnerLabs(rows: Record<string, unknown>[]): PartnerLab[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        lab_id: num(r.lab_id),
+        partner_id: num(r.partner_id),
+    }))
+}
+
+export function normalizeLabCardsFull(
+    rows: Record<string, unknown>[],
+    partnerLabs: PartnerLab[],
+    partners: Partner[],
+    members: Member[],
+): LabCardFull[] {
+    const partnerMap = new Map(partners.map(p => [p.id, p]))
+
+    const partnersByLab = new Map<number, Partner[]>()
+    for (const pl of partnerLabs) {
+        const partner = partnerMap.get(pl.partner_id)
+        if (partner) {
+            const existing = partnersByLab.get(pl.lab_id) ?? []
+            partnersByLab.set(pl.lab_id, [...existing, partner])
+        }
+    }
+
+    const membersByLab = new Map<number, Member[]>()
+    for (const m of members) {
+        if (m.lab_id) {
+            const existing = membersByLab.get(m.lab_id) ?? []
+            membersByLab.set(m.lab_id, [...existing, m])
+        }
+    }
+
+    return normalizeLabs(rows).map(lab => ({
+        ...lab,
+        partners: partnersByLab.get(lab.id) ?? [],
+        members:  membersByLab.get(lab.id)  ?? [],
     }))
 }

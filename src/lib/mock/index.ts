@@ -1,5 +1,5 @@
 import type {
-    Status, Category, Member, Partner, Axis,
+    Status, Category, Member, Partner, Axis, Lab, PartnerLab,
     ActionCard, ProjectCall, Project, FinancialAgreement,
     Phd, MobilityGrant, ToDoList, ToDoItem,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
@@ -52,31 +52,45 @@ export const mockPartners: Partner[] = [
     { id: 6, name: 'Fondation E',           description: 'Fondation de financement scientifique', color: '#EEC5EF', logo: '', status_id: 1, type: 'Fondation' },
 ]
 
+export const mockLabs: Lab[] = [
+    { id: 1, name: 'LRGE',  description: 'Laboratoire de Recherche en Génie Environnemental', type: 'Laboratoire académique',    topic: 'Environnement, énergie' },
+    { id: 2, name: 'UMR 42', description: 'Unité mixte de recherche en sciences cognitives',  type: 'Unité mixte de recherche',  topic: 'Sciences cognitives, IA' },
+    { id: 3, name: 'CERI',   description: 'Centre d\'Études et de Recherche en Innovation',    type: 'Centre de recherche',       topic: 'Innovation, transfert techno' },
+]
+
+export const mockPartnerLabs: PartnerLab[] = [
+    { id: 1, lab_id: 1, partner_id: 1 },
+    { id: 2, lab_id: 1, partner_id: 4 },
+    { id: 3, lab_id: 2, partner_id: 1 },
+    { id: 4, lab_id: 3, partner_id: 2 },
+    { id: 5, lab_id: 3, partner_id: 4 },
+]
+
 export const mockMembers: Member[] = [
     // Université X
-    { id: 1,  partner_id: 1, first_name: 'Marie',     last_name: 'Dupont',    position: 'Coordinatrice de projet',    email: 'marie.dupont@univ.fr',       tel: '0600000001', genre: 'F', status: 'Enseignant-chercheur', profile_image: '' },
-    { id: 2,  partner_id: 1, first_name: 'Thomas',    last_name: 'Martin',    position: 'Enseignant-chercheur',       email: 'thomas.martin@univ.fr',      tel: '0600000002', genre: 'M', status: 'Enseignant-chercheur', profile_image: '' },
-    { id: 3,  partner_id: 1, first_name: 'Claire',    last_name: 'Bernard',   position: 'Gestionnaire',               email: 'claire.bernard@univ.fr',     tel: '0600000003', genre: 'F', status: 'BIATSS',               profile_image: '' },
-    { id: 4,  partner_id: 1, first_name: 'Antoine',   last_name: 'Leroy',     position: 'Doctorant',                  email: 'antoine.leroy@univ.fr',      tel: '0600000004', genre: 'M', status: 'Doctorant',             profile_image: '' },
-    { id: 5,  partner_id: 1, first_name: 'Sophie',    last_name: 'Girard',    position: 'Maîtresse de conférences',   email: 'sophie.girard@univ.fr',      tel: '0600000005', genre: 'F', status: 'Enseignant-chercheur', profile_image: '' },
+    { id: 1,  partner_id: 1, lab_id: 1, first_name: 'Marie',     last_name: 'Dupont',    position: 'Coordinatrice de projet',    email: 'marie.dupont@univ.fr',       tel: '0600000001', genre: 'F', status: 'Enseignant-chercheur', profile_image: '' },
+    { id: 2,  partner_id: 1, lab_id: 1, first_name: 'Thomas',    last_name: 'Martin',    position: 'Enseignant-chercheur',       email: 'thomas.martin@univ.fr',      tel: '0600000002', genre: 'M', status: 'Enseignant-chercheur', profile_image: '' },
+    { id: 3,  partner_id: 1, lab_id: 0, first_name: 'Claire',    last_name: 'Bernard',   position: 'Gestionnaire',               email: 'claire.bernard@univ.fr',     tel: '0600000003', genre: 'F', status: 'BIATSS',               profile_image: '' },
+    { id: 4,  partner_id: 1, lab_id: 2, first_name: 'Antoine',   last_name: 'Leroy',     position: 'Doctorant',                  email: 'antoine.leroy@univ.fr',      tel: '0600000004', genre: 'M', status: 'Doctorant',             profile_image: '' },
+    { id: 5,  partner_id: 1, lab_id: 2, first_name: 'Sophie',    last_name: 'Girard',    position: 'Maîtresse de conférences',   email: 'sophie.girard@univ.fr',      tel: '0600000005', genre: 'F', status: 'Enseignant-chercheur', profile_image: '' },
     // Entreprise A
-    { id: 6,  partner_id: 2, first_name: 'Julien',    last_name: 'Moreau',    position: 'Responsable R&D',            email: 'julien.moreau@entreprise.fr', tel: '0600000006', genre: 'M', status: 'Salarié',               profile_image: '' },
-    { id: 7,  partner_id: 2, first_name: 'Isabelle',  last_name: 'Petit',     position: 'Chargée de partenariats',   email: 'isabelle.petit@entreprise.fr',tel: '0600000007', genre: 'F', status: 'Salarié',               profile_image: '' },
-    { id: 8,  partner_id: 2, first_name: 'Nicolas',   last_name: 'Roux',      position: 'Ingénieur senior',           email: 'nicolas.roux@entreprise.fr',  tel: '0600000008', genre: 'M', status: 'Salarié',               profile_image: '' },
+    { id: 6,  partner_id: 2, lab_id: 3, first_name: 'Julien',    last_name: 'Moreau',    position: 'Responsable R&D',            email: 'julien.moreau@entreprise.fr', tel: '0600000006', genre: 'M', status: 'Salarié',               profile_image: '' },
+    { id: 7,  partner_id: 2, lab_id: 0, first_name: 'Isabelle',  last_name: 'Petit',     position: 'Chargée de partenariats',   email: 'isabelle.petit@entreprise.fr',tel: '0600000007', genre: 'F', status: 'Salarié',               profile_image: '' },
+    { id: 8,  partner_id: 2, lab_id: 0, first_name: 'Nicolas',   last_name: 'Roux',      position: 'Ingénieur senior',           email: 'nicolas.roux@entreprise.fr',  tel: '0600000008', genre: 'M', status: 'Salarié',               profile_image: '' },
     // Association B
-    { id: 9,  partner_id: 3, first_name: 'Lucie',     last_name: 'Fontaine',  position: 'Directrice',                 email: 'lucie.fontaine@assoc.fr',    tel: '0600000009', genre: 'F', status: 'Salarié',               profile_image: '' },
-    { id: 10, partner_id: 3, first_name: 'Paul',      last_name: 'Chevalier', position: 'Chargé de mission',          email: 'paul.chevalier@assoc.fr',    tel: '0600000010', genre: 'M', status: 'Salarié',               profile_image: '' },
-    { id: 11, partner_id: 3, first_name: 'Emma',      last_name: 'Simon',     position: 'Coordinatrice scientifique', email: 'emma.simon@assoc.fr',        tel: '0600000011', genre: 'F', status: 'Salarié',               profile_image: '' },
+    { id: 9,  partner_id: 3, lab_id: 0, first_name: 'Lucie',     last_name: 'Fontaine',  position: 'Directrice',                 email: 'lucie.fontaine@assoc.fr',    tel: '0600000009', genre: 'F', status: 'Salarié',               profile_image: '' },
+    { id: 10, partner_id: 3, lab_id: 0, first_name: 'Paul',      last_name: 'Chevalier', position: 'Chargé de mission',          email: 'paul.chevalier@assoc.fr',    tel: '0600000010', genre: 'M', status: 'Salarié',               profile_image: '' },
+    { id: 11, partner_id: 3, lab_id: 0, first_name: 'Emma',      last_name: 'Simon',     position: 'Coordinatrice scientifique', email: 'emma.simon@assoc.fr',        tel: '0600000011', genre: 'F', status: 'Salarié',               profile_image: '' },
     // Institut de Recherche
-    { id: 12, partner_id: 4, first_name: 'François',  last_name: 'Lambert',   position: 'Directeur de recherche',     email: 'f.lambert@inr.fr',           tel: '0600000012', genre: 'M', status: 'Chercheur',             profile_image: '' },
-    { id: 13, partner_id: 4, first_name: 'Nathalie',  last_name: 'Mercier',   position: 'Ingénieure de recherche',    email: 'n.mercier@inr.fr',           tel: '0600000013', genre: 'F', status: 'Chercheur',             profile_image: '' },
-    { id: 14, partner_id: 4, first_name: 'Adrien',    last_name: 'Blanc',     position: 'Post-doctorant',             email: 'a.blanc@inr.fr',             tel: '0600000014', genre: 'M', status: 'Post-doc',              profile_image: '' },
+    { id: 12, partner_id: 4, lab_id: 1, first_name: 'François',  last_name: 'Lambert',   position: 'Directeur de recherche',     email: 'f.lambert@inr.fr',           tel: '0600000012', genre: 'M', status: 'Chercheur',             profile_image: '' },
+    { id: 13, partner_id: 4, lab_id: 1, first_name: 'Nathalie',  last_name: 'Mercier',   position: 'Ingénieure de recherche',    email: 'n.mercier@inr.fr',           tel: '0600000013', genre: 'F', status: 'Chercheur',             profile_image: '' },
+    { id: 14, partner_id: 4, lab_id: 3, first_name: 'Adrien',    last_name: 'Blanc',     position: 'Post-doctorant',             email: 'a.blanc@inr.fr',             tel: '0600000014', genre: 'M', status: 'Post-doc',              profile_image: '' },
     // Collectivité D
-    { id: 15, partner_id: 5, first_name: 'Christine', last_name: 'Rousseau',  position: 'Élue référente',             email: 'c.rousseau@collectivite.fr', tel: '0600000015', genre: 'F', status: 'Élu',                  profile_image: '' },
-    { id: 16, partner_id: 5, first_name: 'Marc',      last_name: 'Garnier',   position: 'Chargé de coopération',     email: 'm.garnier@collectivite.fr',  tel: '0600000016', genre: 'M', status: 'Fonctionnaire',         profile_image: '' },
+    { id: 15, partner_id: 5, lab_id: 0, first_name: 'Christine', last_name: 'Rousseau',  position: 'Élue référente',             email: 'c.rousseau@collectivite.fr', tel: '0600000015', genre: 'F', status: 'Élu',                  profile_image: '' },
+    { id: 16, partner_id: 5, lab_id: 0, first_name: 'Marc',      last_name: 'Garnier',   position: 'Chargé de coopération',     email: 'm.garnier@collectivite.fr',  tel: '0600000016', genre: 'M', status: 'Fonctionnaire',         profile_image: '' },
     // Fondation E
-    { id: 17, partner_id: 6, first_name: 'Alice',     last_name: 'Fournier',  position: 'Responsable programmes',     email: 'a.fournier@fondation.fr',    tel: '0600000017', genre: 'F', status: 'Salarié',               profile_image: '' },
-    { id: 18, partner_id: 6, first_name: 'Bruno',     last_name: 'Morin',     position: 'Analyste financier',         email: 'b.morin@fondation.fr',       tel: '0600000018', genre: 'M', status: 'Salarié',               profile_image: '' },
+    { id: 17, partner_id: 6, lab_id: 0, first_name: 'Alice',     last_name: 'Fournier',  position: 'Responsable programmes',     email: 'a.fournier@fondation.fr',    tel: '0600000017', genre: 'F', status: 'Salarié',               profile_image: '' },
+    { id: 18, partner_id: 6, lab_id: 0, first_name: 'Bruno',     last_name: 'Morin',     position: 'Analyste financier',         email: 'b.morin@fondation.fr',       tel: '0600000018', genre: 'M', status: 'Salarié',               profile_image: '' },
 ]
 
 export const mockAxes: Axis[] = [
