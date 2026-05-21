@@ -606,7 +606,12 @@ export default function Categories() {
                                                     isOver={overId === `col-${child.id}`}
                                                 >
                                                     {childCards.map(card => (
-                                                        <DraggableCard key={card.id} card={card} />
+                                                        <DraggableCard
+                                                            key={card.id}
+                                                            card={card}
+                                                            onDeleted={id => setCards(prev => prev.filter(c => c.id !== id))}
+                                                            onUpdated={patch => setCards(prev => prev.map(c => c.id === card.id ? { ...c, ...patch } : c))}
+                                                        />
                                                     ))}
                                                 </DroppableColumn>
                                             </div>
