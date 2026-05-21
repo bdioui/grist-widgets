@@ -1035,14 +1035,15 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
 
 // --- Composant principal carte ---
 
-export default function ActionCard(props: ActionCardData & { onDeleted?: (id: number) => void }) {
-    const { title, status, category, owner, start_date, end_date, onDeleted } = props
+export default function ActionCard(props: ActionCardData & { onDeleted?: (id: number) => void; onUpdated?: (patch: Partial<ActionCardData>) => void }) {
+    const { onDeleted, onUpdated: onUpdatedProp } = props
     const [open, setOpen]     = useState(false)
     const [data, setData]     = useState<ActionCardData>(props)
 
     // Synchroniser si les props changent (drag & drop change la catégorie)
     useEffect(() => { setData(props) }, [props])
 
+    const { title, status, category, owner, start_date, end_date } = data
     const statusColor = STATUS_COLORS[data.status.label] ?? '#f3f4f6'
 
     return (
@@ -1079,7 +1080,10 @@ export default function ActionCard(props: ActionCardData & { onDeleted?: (id: nu
                 card={data}
                 open={open}
                 onClose={() => setOpen(false)}
-                onUpdated={patch => setData(prev => ({ ...prev, ...patch }))}
+                onUpdated={patch => {
+                    setData(prev => ({ ...prev, ...patch }))
+                    onUpdatedProp?.(patch)
+                }}
                 onDeleted={onDeleted}
             />
         </>

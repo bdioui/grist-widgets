@@ -435,7 +435,12 @@ export default function Tasks() {
                                 </div>
                                 <DroppableColumn id={`col-${s.id}`} isOver={overId === `col-${s.id}`}>
                                     {colCards.map(card => (
-                                        <DraggableCard key={card.id} card={card} onDeleted={handleCardDeleted} />
+                                        <DraggableCard
+                                            key={card.id}
+                                            card={card}
+                                            onDeleted={handleCardDeleted}
+                                            onUpdated={patch => setCards(prev => prev.map(c => c.id === card.id ? { ...c, ...patch } : c))}
+                                        />
                                     ))}
                                 </DroppableColumn>
                             </div>
