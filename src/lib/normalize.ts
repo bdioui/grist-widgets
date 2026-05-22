@@ -7,7 +7,9 @@ import type {
     ProjectCall, Project, FinancialAgreement,
     Phd, MobilityGrant, ToDoList, ToDoItem,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
-    MemberActionCard, ProjectActionCard, AgreementActionCard, PartnerCardFull
+    MemberActionCard, ProjectActionCard, AgreementActionCard, PartnerCardFull,
+    Group,
+    GroupMember
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -50,6 +52,21 @@ export function normalizeMembers(rows: Record<string, unknown>[]): Member[] {
         genre: str(r.genre),
         status: str(r.status),
         profile_image: str(r.profile_image),
+    }))
+}
+
+export function normalizeGroup(rows: Record<string, unknown>[]): Group[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        name: str(r.name)
+    }))
+}
+
+export function normalizeGroupMember(rows: Record<string, unknown>[]): GroupMember[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        member_id: num(r.member_id),
+        group_id: num(r.group_id)
     }))
 }
 
@@ -101,9 +118,9 @@ export function normalizeActionCardsFull(
     const categoryMap = new Map(categories.map(c => [c.id, c]))
     const memberMap = new Map(members.map(m => [m.id, m]))
 
-    const FALLBACK_STATUS:   Status   = { id: 0, label: '—', context: 'action_card' }
+    const FALLBACK_STATUS: Status = { id: 0, label: '—', context: 'action_card' }
     const FALLBACK_CATEGORY: Category = { id: 0, title: '—', parent_category_id: null, color: null }
-    const FALLBACK_MEMBER:   Member   = { id: 0, partner_id: 0, lab_id: 0, first_name: '?', last_name: '', position: '', email: '', tel: '', genre: '', status: '', profile_image: '' }
+    const FALLBACK_MEMBER: Member = { id: 0, partner_id: 0, lab_id: 0, first_name: '?', last_name: '', position: '', email: '', tel: '', genre: '', status: '', profile_image: '' }
 
     return normalizeActionCards(rows).map(card => {
         const category = categoryMap.get(card.category_id) ?? FALLBACK_CATEGORY
@@ -113,9 +130,9 @@ export function normalizeActionCardsFull(
 
         return {
             ...card,
-            status:   statusMap.get(card.status_id)   ?? FALLBACK_STATUS,
+            status: statusMap.get(card.status_id) ?? FALLBACK_STATUS,
             category: { ...category, parent },
-            owner:    memberMap.get(card.owner_id)    ?? FALLBACK_MEMBER,
+            owner: memberMap.get(card.owner_id) ?? FALLBACK_MEMBER,
         }
     })
 }
@@ -342,6 +359,6 @@ export function normalizeLabCardsFull(
     return normalizeLabs(rows).map(lab => ({
         ...lab,
         partners: partnersByLab.get(lab.id) ?? [],
-        members:  membersByLab.get(lab.id)  ?? [],
+        members: membersByLab.get(lab.id) ?? [],
     }))
 }

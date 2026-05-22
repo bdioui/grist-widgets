@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getMembersFull, getPartners, getLabs, addMember, updateMember, deleteMember } from '@/lib/api'
+import { getMembersFull, getPartners, getLabs, addMember, updateMember, deleteMember, getGroups, getGroupMembers, removeMemberFromGroup, addMemberToGroup, addGroup, deleteGroup } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,11 +9,11 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, Check, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import type { MemberFull, Partner, Lab } from '@/lib/types'
-import {ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator} from '@/components/ui/context-menu'
+import { type MemberFull, type Partner, type Lab, type Group, type GroupMember } from '@/lib/types'
+import {ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger,}  from '@/components/ui/context-menu'
 
 // --- Constantes ---
 
@@ -378,7 +378,7 @@ function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, o
 
 // --- Carte contact ---
 
-function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, selectedMembers }: {
+function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, selectedMembers, groups, groupLinks, onToggleGroup, onToggleMultipleGroup}: {
     member: MemberFull
     onClick: () => void
     selectOn: boolean
@@ -386,6 +386,10 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
     onToggle: () => void
     onDelete: (id: number) => void
     selectedMembers: MemberFull[]
+    groups: Group[]
+    groupLinks: GroupMember[]
+    onToggleGroup: (member: MemberFull, groupId: number) => void
+    onToggleMultipleGroup: (groupId: number) => void
 }) {
 
     const [copied, setCopied] = useState(false)
@@ -463,8 +467,6 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
         }
     }
 
-
-
     return (
         
 
@@ -532,6 +534,21 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                             {memberCopied ? <CheckIcon /> : <ShareIcon />}
                             {memberCopied ? 'Infos copiées !' : 'Partager'}
                         </ContextMenuItem>
+                        <ContextMenuSub>
+                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter à</ContextMenuSubTrigger>
+                            <ContextMenuSubContent>
+                                {groups.map(g => {
+                                    const memberIdsInGroup = groupLinks.filter(l => l.group_id === g.id).map(l => l.member_id)
+                                    const allInGroup = selectedMembers.length > 0 && selectedMembers.every(m => memberIdsInGroup.includes(m.id))
+                                    return (
+                                        <ContextMenuItem key={g.id} onSelect={e => e.preventDefault()} onClick={() => onToggleMultipleGroup(g.id)}>
+                                            {allInGroup ? <CheckIcon size={14} /> : <div className="w-[14px]" />}
+                                            {g.name}
+                                        </ContextMenuItem>
+                                    )
+                                })}
+                            </ContextMenuSubContent>
+                        </ContextMenuSub>
                         </>
                         
                     
@@ -546,6 +563,20 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                             {memberCopied ? <CheckIcon /> : <ShareIcon />}
                             {memberCopied ? 'Infos copiées !' : 'Partager'}
                         </ContextMenuItem>
+                        <ContextMenuSub>
+                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter à</ContextMenuSubTrigger>
+                            <ContextMenuSubContent>
+                                {groups.map(g => {
+                                    const isInGroup = groupLinks.some(l => l.member_id === member.id && l.group_id === g.id)
+                                    return (
+                                        <ContextMenuItem key={g.id} onSelect={e => e.preventDefault()} onClick={() => onToggleGroup(member, g.id)}>
+                                            {isInGroup ? <CheckIcon size={14} /> : <div className="w-[14px]" />}
+                                            {g.name}
+                                        </ContextMenuItem>
+                                    )
+                                })}
+                            </ContextMenuSubContent>
+                        </ContextMenuSub>
                         </>
                     )}
                     
@@ -555,7 +586,7 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                     {selectOn ? (
                         <>
                             {confirming ? (
-                            <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                            <ContextMenuItem onSelect={e => e.preventDefault()}className="flex gap-2 p-1">
                                 <Button variant="outline" size="sm" className="h-7 flex-1 border-md" onClick={() => setConfirming(false)}>
                                     Annuler
                                 </Button>
@@ -563,8 +594,9 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                                     {deleting ? '...' : `Confirmer (${selectedMembers.length} contacts)`}
                                 </Button>
                             </ContextMenuItem>
+                            
                         ) : (
-                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
+                            <ContextMenuItem className="text-destructive focus:text-destructive" variant="destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
                                 <Trash size={14} /> Supprimer
                             </ContextMenuItem>
                         )}
@@ -581,7 +613,7 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                                 </Button>
                             </ContextMenuItem>
                         ) : (
-                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
+                            <ContextMenuItem className="text-destructive focus:text-destructive" variant="destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
                                 <Trash size={14} /> Supprimer
                             </ContextMenuItem>
                         )}
@@ -624,17 +656,22 @@ export default function Members() {
     const [members,  setMembers]  = useState<MemberFull[]>([])
     const [partners, setPartners] = useState<Partner[]>([])
     const [labs,     setLabs]     = useState<Lab[]>([])
+    const [groups, setGroups]     = useState<Group[]>([])
+    const [groupLinks, setGroupLinks] = useState<GroupMember[]>([])
     const [loading,  setLoading]  = useState(false)
     const [error,    setError]    = useState('')
     const [query,         setQuery]         = useState('')
     const [statusFilter,  setStatusFilter]  = useState<string[]>([])
     const [partnerFilter, setPartnerFilter] = useState<number[]>([])
+    const [groupFilter, setGroupFilter] = useState<number[]>([])
+    const [groupSearch, setGroupSearch] = useState('')
     const [selected,       setSelected]       = useState<MemberFull | null>(null)
     const [showCreate,     setShowCreate]     = useState(false)
     const [partnerSearch,  setPartnerSearch]  = useState('')
     const [multipleSelect, setMultipleSelect] = useState(false)
     const [selectedMembers, setSelectedMembers] = useState<MemberFull[]>([])
     const [confirmingDelete, setConfirmingDelete] = useState(false)
+    const [confirmDeleteGroupId, setConfirmDeleteGroupId] = useState<number | null>(null)
 
     function copyEmailsGroup() {
         const emails = selectedMembers.map(m => m.email).filter(Boolean).join(', ')
@@ -671,13 +708,59 @@ export default function Members() {
         console.log(selectedMembers)
     }
 
+    async function handleDeleteGroup(groupId: number) {
+        await deleteGroup(groupId)
+        setGroups(prev => prev.filter(g => g.id !== groupId))
+        setGroupLinks(prev => prev.filter(l => l.group_id !== groupId))
+        setGroupFilter(prev => prev.filter(id => id !== groupId))
+        setConfirmDeleteGroupId(null)
+    }
+
+    async function handleCreateGroup(name: string) {
+        const group = await addGroup(name)
+        setGroups(prev => [...prev, group])
+        setGroupSearch('')
+    }
+
+    async function handleToggleGroup(member: MemberFull, groupId: number) {
+        const existingLink = groupLinks.find(l => l.member_id === member.id && l.group_id === groupId)
+        if (existingLink) {
+            await removeMemberFromGroup(existingLink.id)
+            setGroupLinks(prev => prev.filter(l => l.id !== existingLink.id))
+        } else {
+            const link = await addMemberToGroup(member.id, groupId)
+            setGroupLinks(prev => [...prev, link])
+        }
+    }
+
+    async function handleToggleMultipleGroup(groupId: number) {
+        const memberIdsInGroup = groupLinks.filter(l => l.group_id === groupId).map(l => l.member_id)
+        const allInGroup = selectedMembers.length > 0 && selectedMembers.every(m => memberIdsInGroup.includes(m.id))
+
+        if (allInGroup) {
+            const linksToRemove = groupLinks.filter(l => l.group_id === groupId && selectedMembers.some(m => m.id === l.member_id))
+            await Promise.all(linksToRemove.map(l => removeMemberFromGroup(l.id)))
+            setGroupLinks(prev => prev.filter(l => !linksToRemove.find(lr => lr.id === l.id)))
+        } else {
+            const toAdd = selectedMembers.filter(m => !memberIdsInGroup.includes(m.id))
+            const links = await Promise.all(toAdd.map(m => addMemberToGroup(m.id, groupId)))
+            setGroupLinks(prev => [...prev, ...links])
+        }
+    }
+
     useEffect(() => {
-        setLoading(true)
-        Promise.all([getMembersFull(), getPartners(), getLabs()])
-            .then(([m, p, l]) => { setMembers(m); setPartners(p); setLabs(l) })
-            .catch(err => setError(err.message))
-            .finally(() => setLoading(false))
-    }, [])
+    setLoading(true)
+    Promise.all([getMembersFull(), getPartners(), getLabs(), getGroups(), getGroupMembers()])
+        .then(([m, p, l, g, gm]) => {
+            setMembers(m)
+            setPartners(p)
+            setLabs(l)
+            setGroups(g)
+            setGroupLinks(gm) 
+        })
+        .catch(err => setError(err.message))
+        .finally(() => setLoading(false))
+}, [])
 
     const availableStatuses = [...new Set(members.map(m => m.status))].sort()
 
@@ -688,7 +771,8 @@ export default function Members() {
             m.email.toLowerCase().includes(query.toLowerCase())
         const matchesStatus  = statusFilter.length === 0 || statusFilter.includes(m.status)
         const matchesPartner = partnerFilter.length === 0 || partnerFilter.includes(m.partner_id)
-        return matchesQuery && matchesStatus && matchesPartner
+        const matchesGroup = groupFilter.length === 0 || groupLinks.some(l => groupFilter.includes(l.group_id) && l.member_id === m.id)
+        return matchesQuery && matchesStatus && matchesPartner && matchesGroup
     })
 
     function handleUpdated(updated: MemberFull) {
@@ -764,6 +848,7 @@ export default function Members() {
                     </PopoverContent>
                 </Popover>
 
+
                 {/* Filtre partenaire — multi-select avec recherche */}
                 <Popover onOpenChange={open => { if (!open) setPartnerSearch('') }}>
                     <PopoverTrigger asChild>
@@ -827,6 +912,98 @@ export default function Members() {
                     </PopoverContent>
                 </Popover>
 
+                {/* Filtre partenaire — multi-select avec recherche */}
+                <Popover onOpenChange={open => { if (!open) { setGroupSearch(''); setConfirmDeleteGroupId(null) } }}>
+                    <PopoverTrigger asChild>
+                        <button className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                            groupFilter.length > 0
+                                ? 'bg-foreground text-background border-foreground'
+                                : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'
+                        }`}>
+                            {groupFilter.length === 0
+                                ? 'Tous les groupes'
+                                : groupFilter.length === 1
+                                    ? groups.find(g => g.id === groupFilter[0])?.name ?? '1 groupe'
+                                    : `${groupFilter.length} groupes`
+                            }
+                            <ChevronDown size={12} />
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-64 p-2 flex flex-col gap-0.5">
+                        <Input
+                            placeholder="Rechercher ou créer un groupe"
+                            value={groupSearch}
+                            onChange={e => setGroupSearch(e.target.value)}
+                            className="h-7 text-xs mb-1"
+                            autoFocus
+                        />
+                        {groupFilter.length > 0 && (
+                            <>
+                                <button
+                                    onClick={() => setGroupFilter([])}
+                                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 text-left"
+                                >
+                                    Tout déselectionner
+                                </button>
+                                <Separator className="my-1" />
+                            </>
+                        )}
+                        <div className="max-h-56 overflow-y-auto flex flex-col gap-0.5">
+                            {groups
+                                .filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase()))
+                                .map(g => (
+                                    <div key={g.id} className="flex items-center rounded hover:bg-muted group/item">
+                                        {confirmDeleteGroupId === g.id ? (
+                                            <div className="flex items-center gap-1 px-2 py-1 w-full">
+                                                <span className="text-xs text-destructive flex-1">Supprimer ?</span>
+                                                <button
+                                                    onClick={() => setConfirmDeleteGroupId(null)}
+                                                    className="text-xs px-1.5 py-0.5 rounded hover:bg-muted-foreground/20"
+                                                >
+                                                    Non
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteGroup(g.id)}
+                                                    className="text-xs px-1.5 py-0.5 rounded text-destructive hover:bg-destructive/10 font-medium"
+                                                >
+                                                    Oui
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <label className="flex items-center gap-2 px-2 py-1.5 cursor-pointer text-xs flex-1 min-w-0">
+                                                    <Checkbox
+                                                        checked={groupFilter.includes(g.id)}
+                                                        onCheckedChange={checked => setGroupFilter(prev =>
+                                                            checked ? [...prev, g.id] : prev.filter(x => x !== g.id)
+                                                        )}
+                                                    />
+                                                    <span className="truncate">{g.name}</span>
+                                                </label>
+                                                <button
+                                                    onClick={e => { e.stopPropagation(); setConfirmDeleteGroupId(g.id) }}
+                                                    className="opacity-0 group-hover/item:opacity-100 p-1 mr-1 rounded text-muted-foreground hover:text-destructive transition-opacity shrink-0"
+                                                >
+                                                    <Trash size={12} />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                ))
+                            }
+                            {groupSearch.trim() && !groups.some(g => g.name.toLowerCase() === groupSearch.trim().toLowerCase()) && (
+                                <button
+                                    onClick={() => handleCreateGroup(groupSearch.trim())}
+                                    className="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted text-xs text-muted-foreground hover:text-foreground w-full text-left"
+                                >
+                                    <Plus size={12} />
+                                    Créer « {groupSearch.trim()} »
+                                </button>
+                            )}
+                        </div>
+                    </PopoverContent>
+                </Popover>
+
                 <span className="text-sm text-muted-foreground flex-1">
                     {filtered.length} contact{filtered.length > 1 ? 's' : ''}
                 </span>
@@ -840,10 +1017,6 @@ export default function Members() {
                     <ListChecks size={14} /> Sélection multiple
                 </Button>
             )}
-               
-               
-       
-                
 
                 <Button size="sm" className="gap-1.5 rounded-md" onClick={() => setShowCreate(true)}>
                     <Plus size={14} /> Nouveau contact
@@ -866,6 +1039,10 @@ export default function Members() {
                             onToggle={() => toggleMember(member)}
                             onDelete={handleDeleted}
                             selectedMembers={selectedMembers}
+                            groups={groups}
+                            groupLinks={groupLinks}
+                            onToggleGroup={handleToggleGroup}
+                            onToggleMultipleGroup={(groupId) => handleToggleMultipleGroup(groupId)}
                         />
                     ))
                 }

@@ -52,6 +52,17 @@ export type Member = {
     profile_image: string
 }
 
+export type GroupMember = {
+    id: number
+    member_id: number
+    group_id: number
+}
+
+export type Group = {
+    id: number
+    name: string
+}
+
 export type Axis = {
     id: number
     name: string
@@ -211,16 +222,16 @@ export type ActionCardFull = ActionCard & {
 
 export type MemberFull = Member & {
     partner: Partner | null
-    lab:     Lab | null
+    lab: Lab | null
 }
 
 export type PartnerCardFull = Partner & {
-    projects:   Project[]
+    projects: Project[]
     agreements: FinancialAgreement[]
-    members:    Member[]
+    members: Member[]
 }
 
 export type LabCardFull = Lab & {
     partners: Partner[]
-    members:  Member[]
+    members: Member[]
 }

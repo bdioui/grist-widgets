@@ -5,7 +5,7 @@ import {
     mockFinancialAgreements, mockPhds, mockMobilityGrants,
     mockIndicatorDefinitions, mockBudgetCategories, mockBudgetDetails,
     mockToDoLists, mockToDoItems, mockMemberActionCards, mockAxisActionCards, mockProjectActionCards,
-    mockAgreementActionCards,
+    mockAgreementActionCards, mockGroup, mockGroupMember
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -16,6 +16,7 @@ import {
     normalizeToDoLists, normalizeToDoItems,
     normalizeMemberActionCards, normalizeProjectActionCards, normalizeAgreementActionCards,
     normalizePartnerCardsFull, normalizeLabs, normalizePartnerLabs, normalizeLabCardsFull,
+    normalizeGroup, normalizeGroupMember
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -23,6 +24,7 @@ import type {
     FinancialAgreement, Phd, MobilityGrant,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
     ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard, MemberFull,
+    Group, GroupMember
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -30,28 +32,30 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 // --- IDs des tables Grist (Grist capitalise automatiquement la 1ère lettre) ---
 // Si vos tables ont un ID différent, modifiez uniquement ici.
 const T = {
-    status:               'Status',
-    category:             'Category',
-    member:               'Member',
-    partner:              'Partner',
-    axis:                 'Axis',
-    action_card:          'Action_card',
-    project_call:         'Project_call',
-    project:              'Project',
-    financial_agreement:  'Financial_agreement',
-    phd:                  'Phd',
-    mobility_grant:       'Mobility_grant',
+    status: 'Status',
+    category: 'Category',
+    member: 'Member',
+    partner: 'Partner',
+    axis: 'Axis',
+    action_card: 'Action_card',
+    project_call: 'Project_call',
+    project: 'Project',
+    financial_agreement: 'Financial_agreement',
+    phd: 'Phd',
+    mobility_grant: 'Mobility_grant',
     indicator_definition: 'Indicator_definition',
-    budget_category:      'Budget_category',
-    budget_detail:        'Budget_detail',
-    to_do_list:           'To_do_list',
-    to_do_item:           'To_do_item',
-    axis_action_card:     'Axis_action_card',
-    member_action_card:   'Member_action_card',
-    agreement_action_card:'Agreement_action_card',
-    project_action_card:  'Project_action_card',
-    lab:                  'Lab',
-    partner_lab:          'Partner_lab',
+    budget_category: 'Budget_category',
+    budget_detail: 'Budget_detail',
+    to_do_list: 'To_do_list',
+    to_do_item: 'To_do_item',
+    axis_action_card: 'Axis_action_card',
+    member_action_card: 'Member_action_card',
+    agreement_action_card: 'Agreement_action_card',
+    project_action_card: 'Project_action_card',
+    lab: 'Lab',
+    partner_lab: 'Partner_lab',
+    group: 'Group',
+    group_member: 'Group_member'
 }
 
 // --- Tables de référence ---
@@ -59,6 +63,8 @@ const T = {
 export async function getStatuses(): Promise<Status[]> { return USE_MOCK ? mockStatuses : normalizeStatuses(await fetchTable(T.status)) }
 export async function getCategories(): Promise<Category[]> { return USE_MOCK ? mockCategories : normalizeCategories(await fetchTable(T.category)) }
 export async function getMembers(): Promise<Member[]> { return USE_MOCK ? mockMembers : normalizeMembers(await fetchTable(T.member)) }
+export async function getGroups(): Promise<Group[]> { return USE_MOCK ? mockGroup : normalizeGroup(await fetchTable(T.group)) }
+export async function getGroupMembers(): Promise<GroupMember[]> { return USE_MOCK ? mockGroupMember : normalizeGroupMember(await fetchTable(T.group_member)) }
 export async function getPartners(): Promise<Partner[]> { return USE_MOCK ? mockPartners : normalizePartners(await fetchTable(T.partner)) }
 export async function getAxes(): Promise<Axis[]> { return USE_MOCK ? mockAxes : normalizeAxes(await fetchTable(T.axis)) }
 export async function getLabs(): Promise<Lab[]> { return USE_MOCK ? mockLabs : normalizeLabs(await fetchTable(T.lab)) }
@@ -225,6 +231,65 @@ export async function removeProjectFromCard(linkId: number): Promise<void> {
     await deleteRecord(T.project_action_card, linkId)
 }
 
+export async function addGroup(name: string): Promise<Group> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockGroup.map(g => g.id)) + 1
+        const group: Group = { id, name }
+        mockGroup.push(group)
+        return group
+    }
+    const id = await addRecord(T.group, { name })
+    return { id, name }
+}
+
+export async function deleteGroup(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockGroup.findIndex(g => g.id === id)
+        if (i !== -1) mockGroup.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.group, id)
+}
+
+export async function addMemberToGroup(memberId: number, groupId: number): Promise<GroupMember> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockGroupMember.map(g => g.id)) + 1
+        const link: GroupMember = { id, member_id: memberId, group_id: groupId }
+        mockGroupMember.push(link)
+        return link
+    }
+    const id = await addRecord(T.group_member, { member_id: memberId, group_id: groupId })
+    return { id, member_id: memberId, group_id: groupId }
+}
+
+export async function removeMemberFromGroup(linkId: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockGroupMember.findIndex(g => g.id === linkId)
+        if (i !== -1) mockGroupMember.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.group_member, linkId)
+}
+
+export async function getMembersByGroup(groupId: number): Promise<Member[]> {
+    const [links, members] = await Promise.all([
+        USE_MOCK ? mockGroupMember : normalizeGroupMember(await fetchTable(T.group_member)),
+        getMembers()
+    ])
+    const memberIds = links.filter(l => l.group_id === groupId).map(l => l.member_id)
+    return members.filter(m => memberIds.includes(m.id))
+}
+
+// Renvoie les groupes d'un membre spécifique
+export async function getGroupsByMember(memberId: number): Promise<Group[]> {
+    const [links, groups] = await Promise.all([
+        USE_MOCK ? mockGroupMember : normalizeGroupMember(await fetchTable(T.group_member)),
+        getGroups()
+    ])
+    const groupIds = links.filter(l => l.member_id === memberId).map(l => l.group_id)
+    return groups.filter(g => groupIds.includes(g.id))
+}
+
 export async function getAgreementActionCardsByCard(cardId: number): Promise<(AgreementActionCard & { agreement: FinancialAgreement })[]> {
     const [links, agreements] = await (USE_MOCK
         ? Promise.resolve([
@@ -272,11 +337,11 @@ export async function getMembersFull(): Promise<MemberFull[]> {
         : Promise.all([getMembers(), getPartners(), getLabs()])
     )
     const partnerMap = new Map((partners as Partner[]).map(p => [p.id, p]))
-    const labMap     = new Map((labs    as Lab[])    .map(l => [l.id, l]))
+    const labMap = new Map((labs as Lab[]).map(l => [l.id, l]))
     return (members as Member[]).map(m => ({
         ...m,
         partner: partnerMap.get(m.partner_id) ?? null,
-        lab:     labMap.get(m.lab_id)         ?? null,
+        lab: labMap.get(m.lab_id) ?? null,
     }))
 }
 
