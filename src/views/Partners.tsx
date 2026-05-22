@@ -692,7 +692,11 @@ function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete,
 
     function copyPartnersInfo() {
         const info = selectedPartners
-            .map(p => [p.name, p.type, p.description].filter(Boolean).join('\n'))
+            .map(p => [
+                p.name,
+                `Type : ${p.type}`,
+                p.description ? `Description : ${p.description}` : null,
+            ].filter(Boolean).join('\n'))
             .join('\n\n')
         navigator.clipboard.writeText(info)
         setPartnerCopied(true)
@@ -926,6 +930,7 @@ export default function Partners() {
     // Multi-select (partners only)
     const [multipleSelect,    setMultipleSelect]    = useState(false)
     const [selectedPartners,  setSelectedPartners]  = useState<PartnerCardFull[]>([])
+    const [confirmingDeleteP, setConfirmingDeleteP] = useState(false)
 
     useEffect(() => {
         setLoadingP(true)
@@ -937,6 +942,29 @@ export default function Partners() {
         setLoadingL(true)
         getLabCardsFull().then(setLabs).finally(() => setLoadingL(false))
     }, [viewMode])
+
+    function copyPartnerNamesGroup() {
+        navigator.clipboard.writeText(selectedPartners.map(p => p.name).join(', '))
+    }
+
+    function copyPartnersInfoGroup() {
+        const info = selectedPartners
+            .map(p => [
+                p.name,
+                `Type : ${p.type}`,
+                p.description ? `Description : ${p.description}` : null,
+            ].filter(Boolean).join('\n'))
+            .join('\n\n')
+        navigator.clipboard.writeText(info)
+    }
+
+    async function handleDeleteSelectedPartners() {
+        await Promise.all(selectedPartners.map(p => deletePartner(p.id)))
+        setPartners(prev => prev.filter(p => !selectedPartners.find(sp => sp.id === p.id)))
+        setSelectedPartners([])
+        setMultipleSelect(false)
+        setConfirmingDeleteP(false)
+    }
 
     function togglePartner(partner: PartnerCardFull) {
         setSelectedPartners(prev =>
@@ -1087,13 +1115,11 @@ export default function Partners() {
 
                 {isPartners && (
                     multipleSelect ? (
-                        <Button size="sm" className="gap-1.5 rounded-md border border-border bg-foreground text-background hover:bg-foreground/90"
-                            onClick={() => { setMultipleSelect(false); setSelectedPartners([]) }}>
-                            {selectedPartners.length} sélectionné{selectedPartners.length > 1 ? 's' : ''}
+                        <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedPartners([]) }}>
+                            <X size={14} /> Terminer
                         </Button>
                     ) : (
-                        <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted"
-                            onClick={() => setMultipleSelect(true)}>
+                        <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
                             <Check size={14} /> Sélectionner
                         </Button>
                     )
@@ -1180,6 +1206,38 @@ export default function Partners() {
                     <LabFormSheet mode="create" onCreated={handleLabCreated} onClose={() => setShowCreateL(false)} />
                 </SheetContent>
             </Sheet>
+
+            {/* Floating selection bar */}
+            {isPartners && multipleSelect && selectedPartners.length > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full bg-foreground text-background shadow-xl">
+                    {confirmingDeleteP ? (
+                        <>
+                            <span className="text-sm px-2">Supprimer {selectedPartners.length} partenaire{selectedPartners.length > 1 ? 's' : ''} ?</span>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDeleteP(false)}>Annuler</Button>
+                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelectedPartners}>Confirmer</Button>
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-sm font-medium px-2">{selectedPartners.length} sélectionné{selectedPartners.length > 1 ? 's' : ''}</span>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyPartnerNamesGroup}>
+                                <CopyIcon size={13} /> Copier les noms
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyPartnersInfoGroup}>
+                                <ShareIcon size={13} /> Partager
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDeleteP(true)}>
+                                <Trash size={13} /> Supprimer
+                            </Button>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(false); setSelectedPartners([]) }}>
+                                <X size={13} />
+                            </Button>
+                        </>
+                    )}
+                </div>
+            )}
 
         </div>
     )

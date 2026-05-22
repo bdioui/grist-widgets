@@ -634,6 +634,33 @@ export default function Members() {
     const [partnerSearch,  setPartnerSearch]  = useState('')
     const [multipleSelect, setMultipleSelect] = useState(false)
     const [selectedMembers, setSelectedMembers] = useState<MemberFull[]>([])
+    const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+    function copyEmailsGroup() {
+        const emails = selectedMembers.map(m => m.email).filter(Boolean).join(', ')
+        navigator.clipboard.writeText(emails)
+    }
+
+    function copyMembersGroup() {
+        const info = selectedMembers
+            .map(m => [
+                `${m.first_name} ${m.last_name}`,
+                m.partner?.name ? `Partenaire : ${m.partner.name}` : null,
+                m.position    ? `Poste : ${m.position}`            : null,
+                m.email       ? `Email : ${m.email}`               : null,
+                m.tel         ? `Tél : ${m.tel}`                   : null,
+            ].filter(Boolean).join('\n'))
+            .join('\n\n')
+        navigator.clipboard.writeText(info)
+    }
+
+    async function handleDeleteSelected() {
+        await Promise.all(selectedMembers.map(m => deleteMember(m.id)))
+        setMembers(prev => prev.filter(m => !selectedMembers.find(sm => sm.id === m.id)))
+        setSelectedMembers([])
+        setMultipleSelect(false)
+        setConfirmingDelete(false)
+    }
 
     function toggleMember(member: MemberFull) {
         setSelectedMembers(prev =>
@@ -805,12 +832,9 @@ export default function Members() {
                 </span>
 
             {multipleSelect ? (
-                <>
-                   
-                    <Button size="sm" className="gap-1.5 rounded-md border border-border bg-foreground text-background hover:bg-foreground/90" onClick={() => { setMultipleSelect(false) ; setSelectedMembers([])}}>
-                       {selectedMembers.length} sélectionné{selectedMembers.length > 1 ? 's' : ''}
-                    </Button>
-                </>
+                <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedMembers([]) }}>
+                    <X size={14} /> Terminer
+                </Button>
             ) : (
                 <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
                     <Check size={14} /> Sélectionner
@@ -883,6 +907,38 @@ export default function Members() {
                     />
                 </SheetContent>
             </Sheet>
+
+            {/* Floating selection bar */}
+            {multipleSelect && selectedMembers.length > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full bg-foreground text-background shadow-xl">
+                    {confirmingDelete ? (
+                        <>
+                            <span className="text-sm px-2">Supprimer {selectedMembers.length} contact{selectedMembers.length > 1 ? 's' : ''} ?</span>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDelete(false)}>Annuler</Button>
+                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelected}>Confirmer</Button>
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-sm font-medium px-2">{selectedMembers.length} sélectionné{selectedMembers.length > 1 ? 's' : ''}</span>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyEmailsGroup}>
+                                <CopyIcon size={13} /> Copier emails
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyMembersGroup}>
+                                <ShareIcon size={13} /> Partager
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDelete(true)}>
+                                <Trash size={13} /> Supprimer
+                            </Button>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(false); setSelectedMembers([]) }}>
+                                <X size={13} />
+                            </Button>
+                        </>
+                    )}
+                </div>
+            )}
 
         </div>
     )
