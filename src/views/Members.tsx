@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, Check, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, Check, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { MemberFull, Partner, Lab } from '@/lib/types'
@@ -837,7 +837,7 @@ export default function Members() {
                 </Button>
             ) : (
                 <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
-                    <Check size={14} /> Sélectionner
+                    <ListChecks size={14} /> Sélection multiple
                 </Button>
             )}
                
