@@ -18,9 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
-import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users } from 'lucide-react'
+import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Check, Trash, CopyIcon, ShareIcon, CheckIcon } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator } from '@/components/ui/context-menu'
 import type { PartnerCardFull, Partner, Lab, LabCardFull, Member } from '@/lib/types'
 
 // --- Constantes ---
@@ -652,13 +653,81 @@ function LabDetailSheet({ lab, open, onClose, onUpdated, onDeleted }: LabDetailS
 // CARDS
 // =============================================================================
 
-function PartnerCard({ partner, onClick }: { partner: PartnerCardFull; onClick: () => void }) {
+function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete, selectedPartners }: {
+    partner: PartnerCardFull
+    onClick: () => void
+    selectOn: boolean
+    selected: boolean
+    onToggle: () => void
+    onDelete: (id: number) => void
+    selectedPartners: PartnerCardFull[]
+}) {
     const totalBudget = partner.agreements.reduce((sum, a) => sum + a.budget, 0)
     const totalGrant  = partner.agreements.reduce((sum, a) => sum + a.grant,  0)
     const rate        = totalBudget > 0 ? Math.round((totalGrant / totalBudget) * 100) : null
 
+    const [copied,        setCopied]        = useState(false)
+    const [partnerCopied, setPartnerCopied] = useState(false)
+    const [confirming,    setConfirming]    = useState(false)
+    const [deleting,      setDeleting]      = useState(false)
+
+    function copyName() {
+        navigator.clipboard.writeText(partner.name)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    function copyNames() {
+        navigator.clipboard.writeText(selectedPartners.map(p => p.name).join(', '))
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    function copyPartnerInfo() {
+        const info = [partner.name, partner.type, partner.description].filter(Boolean).join('\n')
+        navigator.clipboard.writeText(info)
+        setPartnerCopied(true)
+        setTimeout(() => setPartnerCopied(false), 2000)
+    }
+
+    function copyPartnersInfo() {
+        const info = selectedPartners
+            .map(p => [p.name, p.type, p.description].filter(Boolean).join('\n'))
+            .join('\n\n')
+        navigator.clipboard.writeText(info)
+        setPartnerCopied(true)
+        setTimeout(() => setPartnerCopied(false), 2000)
+    }
+
+    async function handleDelete() {
+        setDeleting(true)
+        try {
+            await deletePartner(partner.id)
+            onDelete(partner.id)
+        } finally {
+            setDeleting(false)
+            setConfirming(false)
+        }
+    }
+
+    async function handleDeleteMultiple() {
+        setDeleting(true)
+        try {
+            await Promise.all(selectedPartners.map(p => deletePartner(p.id)))
+            selectedPartners.forEach(p => onDelete(p.id))
+            setConfirming(false)
+        } finally {
+            setDeleting(false)
+        }
+    }
+
     return (
-        <Card className="cursor-pointer hover:shadow-md transition-shadow duration-200" onClick={onClick}>
+        <ContextMenu onOpenChange={open => { if (!open) setConfirming(false) }}>
+            <ContextMenuTrigger>
+        <Card
+            className={`cursor-pointer transition-all duration-200 ${selected ? 'ring-2 ring-foreground shadow-none' : 'hover:shadow-md'}`}
+            onClick={selectOn ? onToggle : onClick}
+        >
             <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-sm leading-snug">{partner.name}</CardTitle>
@@ -728,6 +797,52 @@ function PartnerCard({ partner, onClick }: { partner: PartnerCardFull; onClick: 
                 </div>
             </CardContent>
         </Card>
+            </ContextMenuTrigger>
+
+            <ContextMenuContent>
+                <ContextMenuGroup>
+                    {selectOn ? (
+                        <>
+                            <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyNames}>
+                                {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                                {copied ? 'Copié !' : 'Copier les noms'}
+                            </ContextMenuItem>
+                            <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyPartnersInfo}>
+                                {partnerCopied ? <CheckIcon size={14} /> : <ShareIcon size={14} />}
+                                {partnerCopied ? 'Infos copiées !' : 'Partager'}
+                            </ContextMenuItem>
+                        </>
+                    ) : (
+                        <>
+                            <ContextMenuItem onClick={onClick}><Pencil size={14} /> Éditer</ContextMenuItem>
+                            <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyName}>
+                                {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                                {copied ? 'Copié !' : 'Copier le nom'}
+                            </ContextMenuItem>
+                            <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyPartnerInfo}>
+                                {partnerCopied ? <CheckIcon size={14} /> : <ShareIcon size={14} />}
+                                {partnerCopied ? 'Infos copiées !' : 'Partager'}
+                            </ContextMenuItem>
+                        </>
+                    )}
+                </ContextMenuGroup>
+                <ContextMenuSeparator />
+                <ContextMenuGroup>
+                    {confirming ? (
+                        <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                            <Button variant="outline" size="sm" className="h-7 flex-1" onClick={() => setConfirming(false)}>Annuler</Button>
+                            <Button variant="destructive" size="sm" className="h-7 flex-1" onClick={selectOn ? handleDeleteMultiple : handleDelete} disabled={deleting}>
+                                {deleting ? '...' : selectOn ? `Confirmer (${selectedPartners.length})` : 'Confirmer'}
+                            </Button>
+                        </ContextMenuItem>
+                    ) : (
+                        <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
+                            <Trash size={14} /> Supprimer
+                        </ContextMenuItem>
+                    )}
+                </ContextMenuGroup>
+            </ContextMenuContent>
+        </ContextMenu>
     )
 }
 
@@ -808,6 +923,10 @@ export default function Partners() {
     const [typeFilter,      setTypeFilter]      = useState<string[]>([])
     const [consortiumOnly,  setConsortiumOnly]  = useState(false)
 
+    // Multi-select (partners only)
+    const [multipleSelect,    setMultipleSelect]    = useState(false)
+    const [selectedPartners,  setSelectedPartners]  = useState<PartnerCardFull[]>([])
+
     useEffect(() => {
         setLoadingP(true)
         getPartnerCardsFull().then(setPartners).finally(() => setLoadingP(false))
@@ -819,11 +938,21 @@ export default function Partners() {
         getLabCardsFull().then(setLabs).finally(() => setLoadingL(false))
     }, [viewMode])
 
+    function togglePartner(partner: PartnerCardFull) {
+        setSelectedPartners(prev =>
+            prev.find(p => p.id === partner.id)
+                ? prev.filter(p => p.id !== partner.id)
+                : [...prev, partner]
+        )
+    }
+
     function handleViewMode(mode: ViewMode) {
         setViewMode(mode)
         setQuery('')
         setTypeFilter([])
         setConsortiumOnly(false)
+        setMultipleSelect(false)
+        setSelectedPartners([])
     }
 
     // Partners handlers
@@ -846,6 +975,7 @@ export default function Partners() {
     }
     function handlePartnerDeleted(id: number) {
         setPartners(prev => prev.filter(p => p.id !== id))
+        setSelectedPartners(prev => prev.filter(p => p.id !== id))
         setSelectedP(null)
     }
 
@@ -955,6 +1085,20 @@ export default function Partners() {
                     }
                 </span>
 
+                {isPartners && (
+                    multipleSelect ? (
+                        <Button size="sm" className="gap-1.5 rounded-md border border-border bg-foreground text-background hover:bg-foreground/90"
+                            onClick={() => { setMultipleSelect(false); setSelectedPartners([]) }}>
+                            {selectedPartners.length} sélectionné{selectedPartners.length > 1 ? 's' : ''}
+                        </Button>
+                    ) : (
+                        <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted"
+                            onClick={() => setMultipleSelect(true)}>
+                            <Check size={14} /> Sélectionner
+                        </Button>
+                    )
+                )}
+
                 {isPartners ? (
                     <Button size="sm" className="gap-1.5 rounded-md" onClick={() => setShowCreateP(true)}>
                         <Plus size={14} /> Nouveau partenaire
@@ -971,7 +1115,18 @@ export default function Partners() {
                 {loading
                     ? [...Array(6)].map((_, i) => <CardSkeleton key={i} />)
                     : isPartners
-                        ? filteredPartners.map(p => <PartnerCard key={p.id} partner={p} onClick={() => setSelectedP(p)} />)
+                        ? filteredPartners.map(p => (
+                            <PartnerCard
+                                key={p.id}
+                                partner={p}
+                                onClick={() => setSelectedP(p)}
+                                selectOn={multipleSelect}
+                                selected={!!selectedPartners.find(sp => sp.id === p.id)}
+                                onToggle={() => togglePartner(p)}
+                                onDelete={handlePartnerDeleted}
+                                selectedPartners={selectedPartners}
+                            />
+                        ))
                         : filteredLabs.map(l => <LabCard key={l.id} lab={l} onClick={() => setSelectedL(l)} />)
                 }
                 {!loading && isPartners && filteredPartners.length === 0 && (

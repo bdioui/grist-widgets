@@ -9,10 +9,11 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, Check } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, Check, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { MemberFull, Partner, Lab } from '@/lib/types'
+import {ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator} from '@/components/ui/context-menu'
 
 // --- Constantes ---
 
@@ -377,60 +378,222 @@ function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, o
 
 // --- Carte contact ---
 
-function MemberCard({ member, onClick, selectOn, selected, onToggle }: {
+function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, selectedMembers }: {
     member: MemberFull
     onClick: () => void
     selectOn: boolean
     selected: boolean
     onToggle: () => void
+    onDelete: (id: number) => void
+    selectedMembers: MemberFull[]
 }) {
+
+    const [copied, setCopied] = useState(false)
+    const [memberCopied, setMemberCopied] = useState(false)
+    const [confirming, setConfirming] = useState(false)
+    const [deleting,   setDeleting]   = useState(false)
+
+    function copyEmail() {
+        navigator.clipboard.writeText(member.email)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    function copyEmails() {
+        const emails = selectedMembers
+            .map(m => m.email)
+            .filter(Boolean)
+            .join(', ')
+
+        navigator.clipboard.writeText(emails)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    function copyMember() {
+        const memberInfos = [
+            `${member.first_name} ${member.last_name}`,
+            member.partner?.name,
+            member.position,
+            member.email,
+            member.tel,
+        ].filter(Boolean).join('\n')
+
+        navigator.clipboard.writeText(memberInfos)
+        setMemberCopied(true)
+        setTimeout(() => setMemberCopied(false), 2000)
+    }
+
+    function copyMembers() {
+        const membersInfos = selectedMembers
+            .map(m => [
+                `${m.first_name} ${m.last_name}`,
+                m.partner?.name,
+                m.position,
+                m.email,
+                m.tel,
+            ].filter(Boolean).join('\n'))
+            .join('\n\n')
+
+        navigator.clipboard.writeText(membersInfos)
+        setMemberCopied(true)
+        setTimeout(() => setMemberCopied(false), 2000)
+    }
+
+
+    async function handleDelete() {
+        setDeleting(true)
+        try {
+            await deleteMember(member.id)
+            onDelete(member.id)
+        } finally {
+            setDeleting(false)
+            setConfirming(false)
+        }
+    }
+
+    async function handleDeleteMultiple() {
+        setDeleting(true)
+        try {
+            await Promise.all(selectedMembers.map(m => deleteMember(m.id)))
+            selectedMembers.forEach(m => onDelete(m.id))
+            setConfirming(false)
+        } finally {
+            setDeleting(false)
+        }
+    }
+
+
+
     return (
-        <Card
-            className={`cursor-pointer transition-all duration-200 ${
-                selected
-                    ? 'bg-muted border-foreground shadow-none'
-                    : 'hover:shadow-md'
-            }`}
-            onClick={selectOn ? onToggle : onClick}
-        >
-
         
-            <CardHeader className="pb-2">
-                <div className="flex items-start gap-3">
-                    <div
-                        className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 mt-0.5"
-                        style={{ backgroundColor: member.partner?.color ?? '#E7E8E2' }}
-                    >
-                        {member.first_name[0]}{member.last_name[0]}
-                    </div>
-                    <div className="flex flex-col min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                            <CardTitle className="text-sm leading-snug">
-                                {member.first_name} {member.last_name}
-                            </CardTitle>
-                            <Badge variant="outline" className="text-xs shrink-0">{member.status}</Badge>
-                        </div>
-                        <CardDescription className="text-xs">{member.position}</CardDescription>
-                    </div>
-                </div>
-            </CardHeader>
 
-            <CardContent className="pt-0 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                {member.partner ? (
-                    <span
-                        className="px-1.5 py-0.5 rounded-full border border-border text-xs shrink-0"
-                        style={{ backgroundColor: member.partner.color }}
-                    >
-                        {member.partner.name}
-                    </span>
-                ) : (
-                    <span className="italic shrink-0">Sans partenaire</span>
-                )}
-                {member.email && (
-                    <span className="truncate">{member.email}</span>
-                )}
-            </CardContent>
-        </Card>
+        <ContextMenu onOpenChange={open => { if (!open) setConfirming(false) }}>
+
+            <ContextMenuTrigger>
+
+            <Card
+                className={`cursor-pointer transition-all duration-200 ${
+                    selected
+                        ? 'bg-muted border-foreground shadow-none'
+                        : 'hover:shadow-md'
+                }`}
+                onClick={selectOn ? onToggle : onClick}
+            >
+
+                <CardHeader className="pb-2">
+                    <div className="flex items-start gap-3">
+                        <div
+                            className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 mt-0.5"
+                            style={{ backgroundColor: member.partner?.color ?? '#E7E8E2' }}
+                        >
+                            {member.first_name[0]}{member.last_name[0]}
+                        </div>
+                        <div className="flex flex-col min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                                <CardTitle className="text-sm leading-snug">
+                                    {member.first_name} {member.last_name}
+                                </CardTitle>
+                                <Badge variant="outline" className="text-xs shrink-0">{member.status}</Badge>
+                            </div>
+                            <CardDescription className="text-xs">{member.position}</CardDescription>
+                        </div>
+                    </div>
+                </CardHeader>
+
+                <CardContent className="pt-0 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    {member.partner ? (
+                        <span
+                            className="px-1.5 py-0.5 rounded-full border border-border text-xs shrink-0"
+                            style={{ backgroundColor: member.partner.color }}
+                        >
+                            {member.partner.name}
+                        </span>
+                    ) : (
+                        <span className="italic shrink-0">Sans partenaire</span>
+                    )}
+                    {member.email && (
+                        <span className="truncate">{member.email}</span>
+                    )}
+                </CardContent>
+            </Card>
+
+        </ContextMenuTrigger>
+            
+            <ContextMenuContent>
+                <ContextMenuGroup>
+                    {selectOn ? (
+                        <>
+                         <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyEmails}>
+                            {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                            {copied ? 'Copié !' : 'Copier email'}
+                        </ContextMenuItem>
+                        <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyMembers}>
+                            {memberCopied ? <CheckIcon /> : <ShareIcon />}
+                            {memberCopied ? 'Infos copiées !' : 'Partager'}
+                        </ContextMenuItem>
+                        </>
+                        
+                    
+                    ) : (
+                        <>
+                        <ContextMenuItem onClick={onClick}><PencilIcon /> Editer </ContextMenuItem>
+                        <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyEmail}>
+                            {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                            {copied ? 'Copié !' : 'Copier email'}
+                        </ContextMenuItem>
+                        <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyMember}>
+                            {memberCopied ? <CheckIcon /> : <ShareIcon />}
+                            {memberCopied ? 'Infos copiées !' : 'Partager'}
+                        </ContextMenuItem>
+                        </>
+                    )}
+                    
+                </ContextMenuGroup>
+                    <ContextMenuSeparator />
+                <ContextMenuGroup>
+                    {selectOn ? (
+                        <>
+                            {confirming ? (
+                            <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                                <Button variant="outline" size="sm" className="h-7 flex-1 border-md" onClick={() => setConfirming(false)}>
+                                    Annuler
+                                </Button>
+                                <Button variant="destructive" size="sm" className="h-7 flex-1 border-md" onClick={handleDeleteMultiple} disabled={deleting}>
+                                    {deleting ? '...' : `Confirmer (${selectedMembers.length} contacts)`}
+                                </Button>
+                            </ContextMenuItem>
+                        ) : (
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
+                                <Trash size={14} /> Supprimer
+                            </ContextMenuItem>
+                        )}
+                        </>
+                    ): (
+                        <>
+                            {confirming ? (
+                            <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                                <Button variant="outline" size="sm" className="h-7 flex-1 border-md" onClick={() => setConfirming(false)}>
+                                    Annuler
+                                </Button>
+                                <Button variant="destructive" size="sm" className="h-7 flex-1 border-md" onClick={handleDelete} disabled={deleting}>
+                                    {deleting ? '...' : 'Confirmer'}
+                                </Button>
+                            </ContextMenuItem>
+                        ) : (
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
+                                <Trash size={14} /> Supprimer
+                            </ContextMenuItem>
+                        )}
+                        </>
+                    )}
+                    
+                </ContextMenuGroup>
+            </ContextMenuContent>
+
+
+        </ContextMenu>
+        
     )
 }
 
@@ -478,6 +641,7 @@ export default function Members() {
                 ? prev.filter(m => m.id !== member.id)
                 : [...prev, member]
         )
+        console.log(selectedMembers)
     }
 
     useEffect(() => {
@@ -676,6 +840,8 @@ export default function Members() {
                             selectOn= {multipleSelect}
                             selected={!!selectedMembers.find(m => m.id === member.id)}
                             onToggle={() => toggleMember(member)}
+                            onDelete={handleDeleted}
+                            selectedMembers={selectedMembers}
                         />
                     ))
                 }
