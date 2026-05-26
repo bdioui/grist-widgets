@@ -505,7 +505,7 @@ export async function attachMemberToLab(memberId: number, labId: number): Promis
         if (m) m.lab_id = labId
         return
     }
-    await updateRecord(T.member, memberId, { lab_id: labId })
+    try { await updateRecord(T.member, memberId, { lab_id: labId }) } catch { /* colonne lab_id absente */ }
 }
 
 export async function detachMemberFromLab(memberId: number): Promise<void> {
@@ -514,7 +514,7 @@ export async function detachMemberFromLab(memberId: number): Promise<void> {
         if (m) m.lab_id = 0
         return
     }
-    await updateRecord(T.member, memberId, { lab_id: 0 })
+    try { await updateRecord(T.member, memberId, { lab_id: 0 }) } catch { /* colonne lab_id absente */ }
 }
 
 // --- Appels à projets ---
