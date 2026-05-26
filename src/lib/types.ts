@@ -1,5 +1,12 @@
 // --- Tables de référence ---
 
+export type User = {
+    first_name: string
+    last_name: string
+    email: string
+    picture?: string
+}
+
 export type Status = {
     id: number
     label: string   // 'En cours' | 'Terminé' | 'Annulé' | 'Planifié'

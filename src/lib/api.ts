@@ -5,7 +5,7 @@ import {
     mockFinancialAgreements, mockPhds, mockMobilityGrants,
     mockIndicatorDefinitions, mockBudgetCategories, mockBudgetDetails,
     mockToDoLists, mockToDoItems, mockMemberActionCards, mockAxisActionCards, mockProjectActionCards,
-    mockAgreementActionCards, mockGroup, mockGroupMember
+    mockAgreementActionCards, mockGroup, mockGroupMember, mockUser
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -24,7 +24,7 @@ import type {
     FinancialAgreement, Phd, MobilityGrant,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
     ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard, MemberFull,
-    Group, GroupMember
+    Group, GroupMember, User
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -59,7 +59,16 @@ const T = {
 }
 
 // --- Tables de référence ---
-
+export async function getCurrentUser(): Promise<User> {
+    if (USE_MOCK) return mockUser
+    const info = await grist.docApi.getUserInfo()
+    return {
+        first_name: info.name.split(' ')[0],
+        last_name: info.name.split(' ').slice(1).join(' '),
+        email: info.email,
+        picture: info.picture ?? undefined,
+    }
+}
 export async function getStatuses(): Promise<Status[]> { return USE_MOCK ? mockStatuses : normalizeStatuses(await fetchTable(T.status)) }
 export async function getCategories(): Promise<Category[]> { return USE_MOCK ? mockCategories : normalizeCategories(await fetchTable(T.category)) }
 export async function getMembers(): Promise<Member[]> { return USE_MOCK ? mockMembers : normalizeMembers(await fetchTable(T.member)) }

@@ -18,6 +18,7 @@ import { SlidersHorizontal, Plus, Pencil, Search, Users } from 'lucide-react'
 import { getActionCardsFull, updateActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards } from '@/lib/api'
 import type { ActionCardFull, Category, Axis, Member, Partner, AxisActionCard, MemberActionCard } from '@/lib/types'
 import ActionCardSheet from './ActionCardSheet'
+import { useCurrentUser } from '@/lib/userContext'
 import CategorySheet from './CategorySheet'
 
 // --- Mapping API → ActionCardData ---
@@ -207,6 +208,7 @@ function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: Mem
 // --- Composant ---
 
 export default function Categories() {
+    const currentUser = useCurrentUser()
     const [cards, setCards]               = useState<ActionCardData[]>([])
     const [loading, setLoading]           = useState(true)
     const [error, setError]               = useState<string | null>(null)
@@ -535,6 +537,28 @@ export default function Categories() {
                     selectedIds={selectedMemberIds}
                     onChangeIds={setSelectedMemberIds}
                 />
+
+                {/* Filtre "Mes cartes" */}
+                {currentUser && (
+                    <Button
+                        variant={selectedMemberIds.includes(currentUser.id) ? 'default' : 'outline'}
+                        size="sm"
+                        className="gap-1.5 rounded-md"
+                        onClick={() => setSelectedMemberIds(prev =>
+                            prev.includes(currentUser.id)
+                                ? prev.filter(id => id !== currentUser.id)
+                                : [...prev, currentUser.id]
+                        )}
+                    >
+                        <div
+                            className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-medium shrink-0"
+                            style={{ backgroundColor: currentUser.partner?.color ?? '#E7E8E2' }}
+                        >
+                            {currentUser.first_name[0]}{currentUser.last_name[0]}
+                        </div>
+                        Mes cartes
+                    </Button>
+                )}
 
                 {/* Barre de recherche */}
                 <div className="relative">

@@ -6,7 +6,14 @@ import type {
     MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard,
     Group,
     GroupMember,
+    User
 } from '@/lib/types'
+
+export const mockUser: User = {
+    first_name: 'Isabelle',
+    last_name: 'Petit',
+    email: 'isabelle.petit@entreprise.fr'
+}
 
 export const mockStatuses: Status[] = [
     { id: 1, label: 'En cours', context: 'action_card' },
@@ -93,6 +100,7 @@ export const mockMembers: Member[] = [
     // Fondation E
     { id: 17, partner_id: 6, lab_id: 0, first_name: 'Alice', last_name: 'Fournier', position: 'Responsable programmes', email: 'a.fournier@fondation.fr', tel: '0600000017', genre: 'F', status: 'Salarié', profile_image: '' },
     { id: 18, partner_id: 6, lab_id: 0, first_name: 'Bruno', last_name: 'Morin', position: 'Analyste financier', email: 'b.morin@fondation.fr', tel: '0600000018', genre: 'M', status: 'Salarié', profile_image: '' },
+
 ]
 
 export const mockGroup: Group[] = [

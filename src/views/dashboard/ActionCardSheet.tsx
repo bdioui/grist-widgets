@@ -15,6 +15,7 @@ import {
 import type { Status, Category, Member, Partner, Project, Axis } from '@/lib/types'
 import type { ActionCardData } from './ActionCard'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { useCurrentUser } from '@/lib/userContext'
 
 type Props = {
     open: boolean
@@ -102,6 +103,7 @@ function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputPro
 }
 
 export default function ActionCardSheet({ open, onClose, onCreated, editCard, onUpdated }: Props) {
+    const currentUser = useCurrentUser()
     const [form, setForm]             = useState<ActionCardCreateForm>(EMPTY_FORM)
     const [submitting, setSubmitting] = useState(false)
     const [error, setError]           = useState<string | null>(null)
@@ -139,10 +141,13 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
                         owner_id:    editCard.owner?.id ?? m[0]?.id ?? 0,
                     })
                 } else {
+                    const defaultOwnerId = currentUser
+                        ? (m.find(mb => mb.id === currentUser.id)?.id ?? m[0]?.id ?? 0)
+                        : (m[0]?.id ?? 0)
                     setForm(f => ({
                         ...f,
                         status_id: s.find(s => s.context === 'action_card')?.id ?? 0,
-                        owner_id:  m[0]?.id ?? 0,
+                        owner_id:  defaultOwnerId,
                     }))
                 }
             })

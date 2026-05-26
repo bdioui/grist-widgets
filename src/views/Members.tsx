@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { type MemberFull, type Partner, type Lab, type Group, type GroupMember } from '@/lib/types'
@@ -378,7 +378,7 @@ function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, o
 
 // --- Carte contact ---
 
-function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, selectedMembers, groups, groupLinks, onToggleGroup, onToggleMultipleGroup}: {
+function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, selectedMembers, groups, groupLinks, onToggleGroup, onToggleMultipleGroup, onSelectAll}: {
     member: MemberFull
     onClick: () => void
     selectOn: boolean
@@ -390,6 +390,7 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
     groupLinks: GroupMember[]
     onToggleGroup: (member: MemberFull, groupId: number) => void
     onToggleMultipleGroup: (groupId: number) => void
+    onSelectAll: () => void
 }) {
 
     const [copied, setCopied] = useState(false)
@@ -444,6 +445,36 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
         setTimeout(() => setMemberCopied(false), 2000)
     }
 
+    function exportSelectedCSV() {
+        const columns = [
+            { key: 'first_name', label: 'Prénom' },
+            { key: 'last_name',  label: 'Nom' },
+            { key: 'position',   label: 'Poste' },
+            { key: 'email',      label: 'Email' },
+            { key: 'tel',        label: 'Téléphone' },
+            { key: 'status',     label: 'Statut' },
+            { key: 'partner',    label: 'Partenaire' },
+        ]
+        const rows = selectedMembers.map(m => ({
+            first_name: m.first_name,
+            last_name:  m.last_name,
+            position:   m.position,
+            email:      m.email,
+            tel:        m.tel,
+            status:     m.status,
+            partner:    m.partner?.name ?? '',
+        }))
+        const header = columns.map(c => `"${c.label}"`).join(',')
+        const body   = rows.map(r => columns.map(c => `"${(r[c.key as keyof typeof r] ?? '').replace(/"/g, '""')}"`).join(','))
+        const csv    = ['﻿' + header, ...body].join('\n')
+        const blob   = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+        const url    = URL.createObjectURL(blob)
+        const a      = document.createElement('a')
+        a.href       = url
+        a.download   = 'contacts.csv'
+        a.click()
+        URL.revokeObjectURL(url)
+    }
 
     async function handleDelete() {
         setDeleting(true)
@@ -526,6 +557,10 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                 <ContextMenuGroup>
                     {selectOn ? (
                         <>
+                        <ContextMenuItem onClick={onSelectAll}>
+                            <CheckIcon size={14} /> Tout sélectionner
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
                          <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyEmails}>
                             {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
                             {copied ? 'Copié !' : 'Copier email'}
@@ -533,6 +568,9 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                         <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyMembers}>
                             {memberCopied ? <CheckIcon /> : <ShareIcon />}
                             {memberCopied ? 'Infos copiées !' : 'Partager'}
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={exportSelectedCSV}>
+                            <Download size={14} /> Exporter CSV ({selectedMembers.length})
                         </ContextMenuItem>
                         <ContextMenuSub>
                             <ContextMenuSubTrigger><Plus size={14} /> Ajouter à</ContextMenuSubTrigger>
@@ -697,6 +735,10 @@ export default function Members() {
         setSelectedMembers([])
         setMultipleSelect(false)
         setConfirmingDelete(false)
+    }
+
+    function selectAll() {
+        setSelectedMembers(filtered)
     }
 
     function toggleMember(member: MemberFull) {
@@ -1043,6 +1085,7 @@ export default function Members() {
                             groupLinks={groupLinks}
                             onToggleGroup={handleToggleGroup}
                             onToggleMultipleGroup={(groupId) => handleToggleMultipleGroup(groupId)}
+                            onSelectAll={selectAll}
                         />
                     ))
                 }
