@@ -23,10 +23,13 @@ export default function App() {
   useEffect(() => {
         Promise.all([getCurrentUser(), getMembersFull()])
             .then(([user, members]) => {
-                console.log(currentMember)
+                console.log('[UserContext] user:', user)
+                console.log('[UserContext] members emails:', members.map(m => m.email))
                 const match = members.find(m => m.email === user.email)
+                console.log('[UserContext] match:', match)
                 setCurrentMember(match ?? null)
             })
+            .catch(err => console.error('[UserContext] error:', err))
     }, [])
 
   function toggleFullScreen() {
