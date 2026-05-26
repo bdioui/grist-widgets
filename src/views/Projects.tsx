@@ -13,7 +13,8 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy } from 'lucide-react'
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import {
     getProjectCalls, getProjects, getAxes, getStatuses, getPartners, getFinancialAgreements,
     addProjectCall, updateProjectCall, deleteProjectCall,
@@ -67,17 +68,64 @@ type ProjectCardProps = {
     agreements: AgreementFull[]
     statuses: Status[]
     onClick: () => void
+    selectOn: boolean
+    selected: boolean
+    onToggle: () => void
+    onDelete: (id: number) => void
+    onEdit: () => void
+    selectedProjects: ProjectFull[]
+    onSelectMultiple: () => void
 }
 
-function ProjectCard({ project, agreements, statuses, onClick }: ProjectCardProps) {
+function ProjectCard({ project, agreements, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple }: ProjectCardProps) {
     const rate    = financingRate(project.budget, project.grant)
     const partners = [...new Map(agreements.map(a => [a.partner_id, a.partner])).values()]
     const status  = statuses.find(s => s.id === project.status_id)
 
+    const [copied,      setCopied]      = useState(false)
+    const [confirming,  setConfirming]  = useState(false)
+    const [deleting,    setDeleting]    = useState(false)
+
+    function copyTitle() {
+        navigator.clipboard.writeText(project.title)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    function copyTitles() {
+        navigator.clipboard.writeText(selectedProjects.map(p => p.title).join('\n'))
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    async function handleDelete() {
+        setDeleting(true)
+        try {
+            await deleteProject(project.id)
+            onDelete(project.id)
+        } finally {
+            setDeleting(false)
+            setConfirming(false)
+        }
+    }
+
+    async function handleDeleteMultiple() {
+        setDeleting(true)
+        try {
+            await Promise.all(selectedProjects.map(p => deleteProject(p.id)))
+            selectedProjects.forEach(p => onDelete(p.id))
+            setConfirming(false)
+        } finally {
+            setDeleting(false)
+        }
+    }
+
     return (
+        <ContextMenu onOpenChange={open => { if (!open) setConfirming(false) }}>
+            <ContextMenuTrigger>
         <div
-            onClick={onClick}
-            className="bg-white border border-border rounded-xl p-4 flex flex-col gap-3 cursor-pointer hover:shadow-md transition-shadow"
+            onClick={selectOn ? onToggle : onClick}
+            className={`bg-white border border-border rounded-xl p-4 flex flex-col gap-3 cursor-pointer transition-all duration-200 ${selected ? 'ring-2 ring-foreground shadow-none' : 'hover:shadow-md'}`}
         >
             {/* Titre + taux */}
             <div className="flex items-start justify-between gap-2">
@@ -138,6 +186,60 @@ function ProjectCard({ project, agreements, statuses, onClick }: ProjectCardProp
                 </div>
             )}
         </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-52">
+                {selectedProjects.length > 1 ? (
+                    <>
+                        <ContextMenuItem onClick={copyTitles}>
+                            <Copy size={13} className="mr-2" />
+                            {copied ? 'Copié !' : `Copier les titres (${selectedProjects.length})`}
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {confirming ? (
+                            <div className="px-2 py-1.5 flex flex-col gap-1">
+                                <span className="text-xs text-muted-foreground">Supprimer {selectedProjects.length} projets ?</span>
+                                <div className="flex gap-1">
+                                    <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
+                                    <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDeleteMultiple} disabled={deleting}>Confirmer</Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onClick={() => setConfirming(true)}>
+                                <Trash2 size={13} className="mr-2" /> Supprimer ({selectedProjects.length})
+                            </ContextMenuItem>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <ContextMenuItem onClick={copyTitle}>
+                            <Copy size={13} className="mr-2" />
+                            {copied ? 'Copié !' : 'Copier le titre'}
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={onEdit}>
+                            <Pencil size={13} className="mr-2" /> Modifier
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {confirming ? (
+                            <div className="px-2 py-1.5 flex flex-col gap-1">
+                                <span className="text-xs text-muted-foreground">Supprimer ce projet ?</span>
+                                <div className="flex gap-1">
+                                    <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
+                                    <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDelete} disabled={deleting}>Confirmer</Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onClick={() => setConfirming(true)}>
+                                <Trash2 size={13} className="mr-2" /> Supprimer
+                            </ContextMenuItem>
+                        )}
+                    </>
+                )}
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={onSelectMultiple}>
+                    <ListChecks size={13} className="mr-2" /> Sélection multiple
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     )
 }
 
@@ -954,6 +1056,10 @@ export default function Projects() {
     const [editingCall,      setEditingCall]      = useState<ProjectCall | undefined>()
     const [defaultCallId,    setDefaultCallId]    = useState<number | undefined>()
 
+    const [multipleSelect,           setMultipleSelect]           = useState(false)
+    const [selectedProjects,         setSelectedProjects]         = useState<ProjectFull[]>([])
+    const [confirmingDeleteProjects, setConfirmingDeleteProjects] = useState(false)
+
     useEffect(() => {
         Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements()])
             .then(([pcs, ps, axs, sts, pts, agrs]) => {
@@ -1037,6 +1143,26 @@ export default function Projects() {
         setProjectCalls(prev => prev.filter(pc => pc.id !== id))
         // retire aussi les projets liés à cet AAP
         setProjects(prev => prev.filter(p => p.project_call_id !== id))
+    }
+
+    function toggleProject(p: ProjectFull) {
+        setSelectedProjects(prev =>
+            prev.find(x => x.id === p.id)
+                ? prev.filter(x => x.id !== p.id)
+                : [...prev, p]
+        )
+    }
+
+    async function handleDeleteSelectedProjects() {
+        await Promise.all(selectedProjects.map(p => deleteProject(p.id)))
+        setProjects(prev => prev.filter(p => !selectedProjects.find(sp => sp.id === p.id)))
+        setSelectedProjects([])
+        setMultipleSelect(false)
+        setConfirmingDeleteProjects(false)
+    }
+
+    function copyProjectTitlesGroup() {
+        navigator.clipboard.writeText(selectedProjects.map(p => p.title).join('\n'))
     }
 
     function handleAgreementAdded(a: FinancialAgreement) {
@@ -1144,6 +1270,15 @@ export default function Projects() {
                 })()}
 
                 <div className="ml-auto flex items-center gap-2">
+                    {multipleSelect ? (
+                        <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
+                            <X size={14} /> Terminer
+                        </Button>
+                    ) : (
+                        <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
+                            <ListChecks size={14} /> Sélection multiple
+                        </Button>
+                    )}
                     <Button variant="outline" size="sm" className="gap-1.5 rounded-md" onClick={() => { setEditingCall(undefined); setCallSheetOpen(true) }}>
                         <Plus size={14} />Nouvel AAP
                     </Button>
@@ -1222,6 +1357,16 @@ export default function Projects() {
                                                                 agreements={agreementsByProject.get(p.id) ?? []}
                                                                 statuses={statuses}
                                                                 onClick={() => { setSelectedProject(p); setDetailOpen(true) }}
+                                                                selectOn={multipleSelect}
+                                                                selected={!!selectedProjects.find(sp => sp.id === p.id)}
+                                                                onToggle={() => toggleProject(p)}
+                                                                onDelete={id => {
+                                                                    setProjects(prev => prev.filter(x => x.id !== id))
+                                                                    setSelectedProjects(prev => prev.filter(x => x.id !== id))
+                                                                }}
+                                                                onEdit={() => { setSelectedProject(p); setProjectSheetOpen(true) }}
+                                                                selectedProjects={selectedProjects}
+                                                                onSelectMultiple={() => { setMultipleSelect(true); toggleProject(p) }}
                                                             />
                                                         ))}
                                                         {pcProjects.length === 0 && (
@@ -1242,6 +1387,35 @@ export default function Projects() {
                             </div>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* Floating selection bar */}
+            {multipleSelect && selectedProjects.length > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full bg-foreground text-background shadow-xl">
+                    {confirmingDeleteProjects ? (
+                        <>
+                            <span className="text-sm px-2">Supprimer {selectedProjects.length} projet{selectedProjects.length > 1 ? 's' : ''} ?</span>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(false)}>Annuler</Button>
+                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelectedProjects}>Confirmer</Button>
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-sm font-medium px-2">{selectedProjects.length} sélectionné{selectedProjects.length > 1 ? 's' : ''}</span>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyProjectTitlesGroup}>
+                                <Copy size={13} /> Copier les titres
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(true)}>
+                                <Trash2 size={13} /> Supprimer
+                            </Button>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
+                                <X size={13} />
+                            </Button>
+                        </>
+                    )}
                 </div>
             )}
 

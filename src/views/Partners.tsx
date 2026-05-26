@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
-import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Trash, CopyIcon, ShareIcon, CheckIcon, ListChecks } from 'lucide-react'
+import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Trash, CopyIcon, Copy, ShareIcon, CheckIcon, ListChecks } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator } from '@/components/ui/context-menu'
@@ -850,9 +850,61 @@ function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete,
     )
 }
 
-function LabCard({ lab, onClick }: { lab: LabCardFull; onClick: () => void }) {
+function LabCard({ lab, onClick, selectOn, selected, onToggle, onDelete, selectedLabs, onSelectMultiple }: {
+    lab: LabCardFull
+    onClick: () => void
+    selectOn: boolean
+    selected: boolean
+    onToggle: () => void
+    onDelete: (id: number) => void
+    selectedLabs: LabCardFull[]
+    onSelectMultiple: () => void
+}) {
+    const [copied,     setCopied]     = useState(false)
+    const [confirming, setConfirming] = useState(false)
+    const [deleting,   setDeleting]   = useState(false)
+
+    function copyName() {
+        navigator.clipboard.writeText(lab.name)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    function copyNames() {
+        navigator.clipboard.writeText(selectedLabs.map(l => l.name).join('\n'))
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    async function handleDelete() {
+        setDeleting(true)
+        try {
+            await deleteLab(lab.id)
+            onDelete(lab.id)
+        } finally {
+            setDeleting(false)
+            setConfirming(false)
+        }
+    }
+
+    async function handleDeleteMultiple() {
+        setDeleting(true)
+        try {
+            await Promise.all(selectedLabs.map(l => deleteLab(l.id)))
+            selectedLabs.forEach(l => onDelete(l.id))
+            setConfirming(false)
+        } finally {
+            setDeleting(false)
+        }
+    }
+
     return (
-        <Card className="cursor-pointer hover:shadow-md transition-shadow duration-200" onClick={onClick}>
+        <ContextMenu onOpenChange={open => { if (!open) setConfirming(false) }}>
+            <ContextMenuTrigger>
+        <Card
+            className={`cursor-pointer transition-all duration-200 ${selected ? 'ring-2 ring-foreground shadow-none' : 'hover:shadow-md'}`}
+            onClick={selectOn ? onToggle : onClick}
+        >
             <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
@@ -882,6 +934,55 @@ function LabCard({ lab, onClick }: { lab: LabCardFull; onClick: () => void }) {
                 )}
             </CardContent>
         </Card>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-52">
+                {selectedLabs.length > 1 ? (
+                    <>
+                        <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyNames}>
+                            {copied ? <CheckIcon size={13} className="mr-2" /> : <Copy size={13} className="mr-2" />}
+                            {copied ? 'Copié !' : `Copier les noms (${selectedLabs.length})`}
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {confirming ? (
+                            <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                                <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
+                                <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDeleteMultiple} disabled={deleting}>
+                                    {deleting ? '...' : 'Confirmer'}
+                                </Button>
+                            </ContextMenuItem>
+                        ) : (
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
+                                <Trash2 size={13} className="mr-2" /> Supprimer ({selectedLabs.length})
+                            </ContextMenuItem>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyName}>
+                            {copied ? <CheckIcon size={13} className="mr-2" /> : <Copy size={13} className="mr-2" />}
+                            {copied ? 'Copié !' : 'Copier le nom'}
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {confirming ? (
+                            <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                                <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
+                                <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDelete} disabled={deleting}>
+                                    {deleting ? '...' : 'Confirmer'}
+                                </Button>
+                            </ContextMenuItem>
+                        ) : (
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
+                                <Trash2 size={13} className="mr-2" /> Supprimer
+                            </ContextMenuItem>
+                        )}
+                    </>
+                )}
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={onSelectMultiple}>
+                    <ListChecks size={13} className="mr-2" /> Sélection multiple
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     )
 }
 
@@ -932,6 +1033,10 @@ export default function Partners() {
     const [selectedPartners,  setSelectedPartners]  = useState<PartnerCardFull[]>([])
     const [confirmingDeleteP, setConfirmingDeleteP] = useState(false)
 
+    const [multipleSelectL,   setMultipleSelectL]   = useState(false)
+    const [selectedLabs,      setSelectedLabs]      = useState<LabCardFull[]>([])
+    const [confirmingDeleteL, setConfirmingDeleteL] = useState(false)
+
     useEffect(() => {
         setLoadingP(true)
         getPartnerCardsFull().then(setPartners).finally(() => setLoadingP(false))
@@ -981,6 +1086,8 @@ export default function Partners() {
         setConsortiumOnly(false)
         setMultipleSelect(false)
         setSelectedPartners([])
+        setMultipleSelectL(false)
+        setSelectedLabs([])
     }
 
     // Partners handlers
@@ -1027,6 +1134,26 @@ export default function Partners() {
     function handleLabDeleted(id: number) {
         setLabs(prev => prev.filter(l => l.id !== id))
         setSelectedL(null)
+    }
+
+    function toggleLab(lab: LabCardFull) {
+        setSelectedLabs(prev =>
+            prev.find(l => l.id === lab.id)
+                ? prev.filter(l => l.id !== lab.id)
+                : [...prev, lab]
+        )
+    }
+
+    async function handleDeleteSelectedLabs() {
+        await Promise.all(selectedLabs.map(l => deleteLab(l.id)))
+        setLabs(prev => prev.filter(l => !selectedLabs.find(sl => sl.id === l.id)))
+        setSelectedLabs([])
+        setMultipleSelectL(false)
+        setConfirmingDeleteL(false)
+    }
+
+    function copyLabNamesGroup() {
+        navigator.clipboard.writeText(selectedLabs.map(l => l.name).join('\n'))
     }
 
     const isPartners = viewMode === 'partners'
@@ -1113,13 +1240,23 @@ export default function Partners() {
                     }
                 </span>
 
-                {isPartners && (
+                {isPartners ? (
                     multipleSelect ? (
                         <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedPartners([]) }}>
                             <X size={14} /> Terminer
                         </Button>
                     ) : (
                         <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
+                            <ListChecks size={14} /> Sélection multiple
+                        </Button>
+                    )
+                ) : (
+                    multipleSelectL ? (
+                        <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelectL(false); setSelectedLabs([]) }}>
+                            <X size={14} /> Terminer
+                        </Button>
+                    ) : (
+                        <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelectL(true)}>
                             <ListChecks size={14} /> Sélection multiple
                         </Button>
                     )
@@ -1153,7 +1290,23 @@ export default function Partners() {
                                 selectedPartners={selectedPartners}
                             />
                         ))
-                        : filteredLabs.map(l => <LabCard key={l.id} lab={l} onClick={() => setSelectedL(l)} />)
+                        : filteredLabs.map(l => (
+                            <LabCard
+                                key={l.id}
+                                lab={l}
+                                onClick={() => setSelectedL(l)}
+                                selectOn={multipleSelectL}
+                                selected={!!selectedLabs.find(sl => sl.id === l.id)}
+                                onToggle={() => toggleLab(l)}
+                                onDelete={id => {
+                                    setLabs(prev => prev.filter(x => x.id !== id))
+                                    setSelectedLabs(prev => prev.filter(x => x.id !== id))
+                                    setSelectedL(null)
+                                }}
+                                selectedLabs={selectedLabs}
+                                onSelectMultiple={() => { setMultipleSelectL(true); toggleLab(l) }}
+                            />
+                        ))
                 }
                 {!loading && isPartners && filteredPartners.length === 0 && (
                     <p className="text-sm text-muted-foreground col-span-full text-center py-8">Aucun partenaire ne correspond à la recherche.</p>
@@ -1232,6 +1385,34 @@ export default function Partners() {
                             </Button>
                             <div className="w-px h-4 bg-background/20 mx-1" />
                             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(false); setSelectedPartners([]) }}>
+                                <X size={13} />
+                            </Button>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {!isPartners && multipleSelectL && selectedLabs.length > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full bg-foreground text-background shadow-xl">
+                    {confirmingDeleteL ? (
+                        <>
+                            <span className="text-sm px-2">Supprimer {selectedLabs.length} laboratoire{selectedLabs.length > 1 ? 's' : ''} ?</span>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDeleteL(false)}>Annuler</Button>
+                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelectedLabs}>Confirmer</Button>
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-sm font-medium px-2">{selectedLabs.length} sélectionné{selectedLabs.length > 1 ? 's' : ''}</span>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyLabNamesGroup}>
+                                <CopyIcon size={13} /> Copier les noms
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDeleteL(true)}>
+                                <Trash size={13} /> Supprimer
+                            </Button>
+                            <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelectL(false); setSelectedLabs([]) }}>
                                 <X size={13} />
                             </Button>
                         </>
