@@ -61,7 +61,7 @@ const T = {
 // --- Tables de référence ---
 export async function getCurrentUser(): Promise<User> {
     if (USE_MOCK) return mockUser
-    const info = await grist.docApi.getUserInfo()
+    const info = await grist.getUserInfo()
     return {
         first_name: info.name.split(' ')[0],
         last_name: info.name.split(' ').slice(1).join(' '),
