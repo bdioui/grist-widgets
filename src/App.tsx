@@ -23,6 +23,7 @@ export default function App() {
   const [showExport, setShowExport] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showProfilePicker, setShowProfilePicker] = useState(false)
+  const [profileSearch, setProfileSearch] = useState('')
 
   useEffect(() => {
     getMembersFull().then(members => {
@@ -67,7 +68,7 @@ export default function App() {
                 <Menu />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="start" className="w-56" onCloseAutoFocus={() => setShowProfilePicker(false)}>
 
               {/* Utilisateur connecté */}
               {currentMember ? (
@@ -90,27 +91,45 @@ export default function App() {
 
               {/* Sélecteur de profil */}
               {!showProfilePicker ? (
-                <DropdownMenuItem onClick={() => setShowProfilePicker(true)}>
+                <DropdownMenuItem onClick={() => { setShowProfilePicker(true); setProfileSearch('') }}>
                   <UserCircle /> {currentMember ? 'Changer de profil' : 'Sélectionner mon profil'}
                 </DropdownMenuItem>
               ) : (
-                <div className="px-2 py-1 max-h-48 overflow-y-auto">
-                  <p className="text-xs text-muted-foreground mb-1">Qui êtes-vous ?</p>
-                  {allMembers.map(m => (
-                    <button
-                      key={m.id}
-                      onClick={() => selectMember(m)}
-                      className="w-full text-left flex items-center gap-2 px-1 py-1.5 rounded hover:bg-accent text-sm"
-                    >
-                      <div
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium shrink-0"
-                        style={{ backgroundColor: m.partner?.color ?? '#E7E8E2' }}
-                      >
-                        {m.first_name[0]}{m.last_name[0]}
-                      </div>
-                      <span className="truncate">{m.first_name} {m.last_name}</span>
-                    </button>
-                  ))}
+                <div
+                  className="px-2 py-1"
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <p className="text-xs text-muted-foreground mb-1.5">Qui êtes-vous ?</p>
+                  <input
+                    autoFocus
+                    value={profileSearch}
+                    onChange={e => setProfileSearch(e.target.value)}
+                    placeholder="Rechercher..."
+                    className="w-full text-xs border rounded px-2 py-1 mb-1.5 outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <div className="max-h-44 overflow-y-auto">
+                    {allMembers
+                      .filter(m =>
+                        `${m.first_name} ${m.last_name}`.toLowerCase().includes(profileSearch.toLowerCase())
+                      )
+                      .map(m => (
+                        <button
+                          key={m.id}
+                          onClick={() => selectMember(m)}
+                          className="w-full text-left flex items-center gap-2 px-1 py-1.5 rounded hover:bg-accent text-sm"
+                        >
+                          <div
+                            className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium shrink-0"
+                            style={{ backgroundColor: m.partner?.color ?? '#E7E8E2' }}
+                          >
+                            {m.first_name[0]}{m.last_name[0]}
+                          </div>
+                          <span className="truncate">{m.first_name} {m.last_name}</span>
+                        </button>
+                      ))
+                    }
+                  </div>
                 </div>
               )}
 
