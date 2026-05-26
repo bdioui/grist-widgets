@@ -3,7 +3,7 @@ declare const grist: {
     onRecords: (callback: (records: unknown[]) => void) => void
     onRecord: (callback: (record: unknown) => void) => void
     getTable: (tableId: string) => unknown
-    getUserInfo: () => Promise<{ name: string; email: string; picture?: string }>
+    getAccessToken: (options?: { readOnly?: boolean }) => Promise<{ token: string; baseUrl: string; docId: string }>
     docApi: {
         fetchTable: (tableId: string) => Promise<Record<string, unknown[]>>
         applyUserActions: (actions: unknown[]) => Promise<unknown>

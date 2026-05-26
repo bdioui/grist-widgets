@@ -61,13 +61,17 @@ const T = {
 // --- Tables de référence ---
 export async function getCurrentUser(): Promise<User> {
     if (USE_MOCK) return mockUser
-    console.log('[grist API]', Object.keys(grist), Object.keys(grist.docApi))
-    const info = await grist.getUserInfo()
+    const { token, baseUrl } = await grist.getAccessToken({ readOnly: true })
+    const res = await fetch(`${baseUrl}/api/profile/user`, {
+        headers: { Authorization: `Bearer ${token}` },
+    })
+    const profile = await res.json()
+    console.log('[UserContext] profile:', profile)
     return {
-        first_name: info.name.split(' ')[0],
-        last_name: info.name.split(' ').slice(1).join(' '),
-        email: info.email,
-        picture: info.picture ?? undefined,
+        first_name: (profile.name ?? '').split(' ')[0],
+        last_name: (profile.name ?? '').split(' ').slice(1).join(' '),
+        email: profile.email ?? '',
+        picture: profile.picture ?? undefined,
     }
 }
 export async function getStatuses(): Promise<Status[]> { return USE_MOCK ? mockStatuses : normalizeStatuses(await fetchTable(T.status)) }
