@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
-import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Check, Trash, CopyIcon, ShareIcon, CheckIcon, ListChecks } from 'lucide-react'
+import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Trash, CopyIcon, ShareIcon, CheckIcon, ListChecks } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator } from '@/components/ui/context-menu'
