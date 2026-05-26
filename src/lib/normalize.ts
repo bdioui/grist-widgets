@@ -43,7 +43,7 @@ export function normalizeMembers(rows: Record<string, unknown>[]): Member[] {
     return rows.map(r => ({
         id: num(r.id),
         partner_id: num(r.partner_id),
-        lab_id: num(r.lab_id),
+        lab_id: r.lab_id !== undefined ? num(r.lab_id) : 0,
         first_name: str(r.first_name),
         last_name: str(r.last_name),
         position: str(r.position),

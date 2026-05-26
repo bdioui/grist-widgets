@@ -387,7 +387,11 @@ export async function addMember(fields: Omit<Member, 'id'>): Promise<Member> {
         mockMembers.push(member)
         return member
     }
-    const id = await addRecord(T.member, fields)
+    const { lab_id, ...gristFields } = fields
+    const id = await addRecord(T.member, gristFields)
+    if (lab_id) {
+        try { await updateRecord(T.member, id, { lab_id }) } catch { /* colonne lab_id absente */ }
+    }
     return { id, ...fields }
 }
 
