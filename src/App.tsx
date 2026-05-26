@@ -91,7 +91,10 @@ export default function App() {
 
               {/* Sélecteur de profil */}
               {!showProfilePicker ? (
-                <DropdownMenuItem onClick={() => { setShowProfilePicker(true); setProfileSearch('') }}>
+                <DropdownMenuItem
+                  onSelect={e => e.preventDefault()}
+                  onClick={() => { setShowProfilePicker(true); setProfileSearch('') }}
+                >
                   <UserCircle /> {currentMember ? 'Changer de profil' : 'Sélectionner mon profil'}
                 </DropdownMenuItem>
               ) : (
