@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { X, Plus, Pencil, Check, Trash2 } from 'lucide-react'
+import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown } from 'lucide-react'
+import { exportToCsv } from '@/lib/utils'
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import {
     getMemberActionCardsByCard, getProjectActionCardsByCard, getToDoListsWithItemsByCard,
     getStatuses, getCategories, getMembers, getProjects, getPartners, getFinancialAgreements,
@@ -1035,22 +1037,69 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
 
 // --- Composant principal carte ---
 
-export default function ActionCard(props: ActionCardData & { onDeleted?: (id: number) => void; onUpdated?: (patch: Partial<ActionCardData>) => void }) {
-    const { onDeleted, onUpdated: onUpdatedProp } = props
-    const [open, setOpen]     = useState(false)
-    const [data, setData]     = useState<ActionCardData>(props)
+export default function ActionCard(props: ActionCardData & {
+    onDeleted?: (id: number) => void
+    onUpdated?: (patch: Partial<ActionCardData>) => void
+    selectOn?: boolean
+    selected?: boolean
+    onToggle?: () => void
+    onSelectMultiple?: () => void
+    onSelectAll?: () => void
+    selectedCards?: ActionCardData[]
+}) {
+    const { onDeleted, onUpdated: onUpdatedProp, selectOn, selected, onToggle, onSelectMultiple, onSelectAll, selectedCards = [] } = props
+    const [open, setOpen]         = useState(false)
+    const [data, setData]         = useState<ActionCardData>(props)
+    const [copied, setCopied]     = useState(false)
+    const [confirming, setConfirming] = useState(false)
+    const [deleting, setDeleting] = useState(false)
 
-    // Synchroniser si les props changent (drag & drop change la catégorie)
     useEffect(() => { setData(props) }, [props])
 
     const { title, status, category, owner, start_date, end_date } = data
     const statusColor = STATUS_COLORS[data.status.label] ?? '#f3f4f6'
 
+    function copyTitle() {
+        navigator.clipboard.writeText(data.title)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    function copyTitles() {
+        navigator.clipboard.writeText(selectedCards.map(c => c.title).join('\n'))
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    async function handleDelete() {
+        setDeleting(true)
+        try {
+            await deleteActionCard(data.id)
+            onDeleted?.(data.id)
+        } finally {
+            setDeleting(false)
+            setConfirming(false)
+        }
+    }
+
+    async function handleDeleteMultiple() {
+        setDeleting(true)
+        try {
+            await Promise.all(selectedCards.map(c => deleteActionCard(c.id)))
+            selectedCards.forEach(c => onDeleted?.(c.id))
+            setConfirming(false)
+        } finally {
+            setDeleting(false)
+        }
+    }
+
     return (
         <>
+        <ContextMenu onOpenChange={open => { if (!open) setConfirming(false) }}>
+            <ContextMenuTrigger>
             <Card
-                className="cursor-pointer hover:shadow-md transition-shadow duration-200 focus:outline-none"
-                onClick={() => setOpen(true)}
+                className={`cursor-pointer transition-all duration-200 focus:outline-none ${selected ? 'ring-2 ring-foreground shadow-none' : 'hover:shadow-md'}`}
+                onClick={selectOn ? onToggle : () => setOpen(true)}
             >
                 <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
@@ -1075,17 +1124,81 @@ export default function ActionCard(props: ActionCardData & { onDeleted?: (id: nu
                     </CardContent>
                 )}
             </Card>
+            </ContextMenuTrigger>
 
-            <ActionCardDetailSheet
-                card={data}
-                open={open}
-                onClose={() => setOpen(false)}
-                onUpdated={patch => {
-                    setData(prev => ({ ...prev, ...patch }))
-                    onUpdatedProp?.(patch)
-                }}
-                onDeleted={onDeleted}
-            />
+            <ContextMenuContent className="w-52">
+                {selectedCards.length > 1 ? (
+                    <>  <ContextMenuItem onClick={onSelectAll}>
+                    <ListChecks size={13} className="mr-2" /> Tout sélectionner
+                </ContextMenuItem>
+                <Separator />
+                        <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyTitles}>
+                            {copied ? <CheckIcon size={13} className="mr-2" /> : <Copy size={13} className="mr-2" />}
+                            {copied ? 'Copié !' : `Copier les titres (${selectedCards.length})`}
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={() => exportToCsv(
+                            'cartes.csv',
+                            ['Titre', 'Statut', 'Catégorie', 'Responsable', 'Date début', 'Date fin'],
+                            selectedCards.map(c => [
+                                c.title, c.status.label,
+                                c.category.parent ? `${c.category.parent.title} › ${c.category.title}` : c.category.title,
+                                c.owner ? `${c.owner.first_name} ${c.owner.last_name}` : '',
+                                c.start_date ?? '', c.end_date ?? '',
+                            ])
+                        )}>
+                            <FileDown size={13} className="mr-2" /> Exporter en CSV
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {confirming ? (
+                            <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                                <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
+                                <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDeleteMultiple} disabled={deleting}>
+                                    {deleting ? '...' : 'Confirmer'}
+                                </Button>
+                            </ContextMenuItem>
+                        ) : (
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
+                                <Trash size={13} className="mr-2" /> Supprimer ({selectedCards.length})
+                            </ContextMenuItem>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <ContextMenuItem onClick={() => setOpen(true)}>
+                            <Pencil size={13} className="mr-2" /> Éditer
+                        </ContextMenuItem>
+                        <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyTitle}>
+                            {copied ? <CheckIcon size={13} className="mr-2" /> : <Copy size={13} className="mr-2" />}
+                            {copied ? 'Copié !' : 'Copier le titre'}
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {confirming ? (
+                            <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                                <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
+                                <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDelete} disabled={deleting}>
+                                    {deleting ? '...' : 'Confirmer'}
+                                </Button>
+                            </ContextMenuItem>
+                        ) : (
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
+                                <Trash size={13} className="mr-2" /> Supprimer
+                            </ContextMenuItem>
+                        )}
+                    </>
+                )}
+            </ContextMenuContent>
+        </ContextMenu>
+
+        <ActionCardDetailSheet
+            card={data}
+            open={open}
+            onClose={() => setOpen(false)}
+            onUpdated={patch => {
+                setData(prev => ({ ...prev, ...patch }))
+                onUpdatedProp?.(patch)
+            }}
+            onDeleted={onDeleted}
+        />
         </>
     )
 }

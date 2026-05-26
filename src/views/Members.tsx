@@ -9,10 +9,11 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { type MemberFull, type Partner, type Lab, type Group, type GroupMember } from '@/lib/types'
+import { exportToCsv } from '@/lib/utils'
 import {ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger,}  from '@/components/ui/context-menu'
 
 // --- Constantes ---
@@ -1142,11 +1143,21 @@ export default function Members() {
                         <>
                             <span className="text-sm font-medium px-2">{selectedMembers.length} sélectionné{selectedMembers.length > 1 ? 's' : ''}</span>
                             <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={selectAll}>
+                                <ListChecks size={13} /> Tout sélectionner
+                            </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyEmailsGroup}>
                                 <CopyIcon size={13} /> Copier emails
                             </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyMembersGroup}>
                                 <ShareIcon size={13} /> Partager
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => exportToCsv(
+                                'contacts.csv',
+                                ['Prénom', 'Nom', 'Poste', 'Email', 'Téléphone', 'Statut', 'Partenaire', 'Laboratoire'],
+                                selectedMembers.map(m => [m.first_name, m.last_name, m.position, m.email, m.tel, m.status, m.partner?.name ?? '', m.lab?.name ?? ''])
+                            )}>
+                                <FileDown size={13} /> Exporter en CSV
                             </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDelete(true)}>
                                 <Trash size={13} /> Supprimer

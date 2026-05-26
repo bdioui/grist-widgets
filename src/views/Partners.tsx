@@ -6,6 +6,7 @@ import {
     addPartnerToLab, removePartnerFromLab,
     attachMemberToLab, detachMemberFromLab,
 } from '@/lib/api'
+import { motion } from "framer-motion"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,7 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
-import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Trash, CopyIcon, Copy, ShareIcon, CheckIcon, ListChecks } from 'lucide-react'
+import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Trash, CopyIcon, Copy, ShareIcon, CheckIcon, ListChecks, FileDown } from 'lucide-react'
+import { exportToCsv } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator } from '@/components/ui/context-menu'
@@ -653,7 +655,7 @@ function LabDetailSheet({ lab, open, onClose, onUpdated, onDeleted }: LabDetailS
 // CARDS
 // =============================================================================
 
-function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete, selectedPartners }: {
+function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete, selectedPartners, onSelectAll }: {
     partner: PartnerCardFull
     onClick: () => void
     selectOn: boolean
@@ -661,6 +663,7 @@ function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete,
     onToggle: () => void
     onDelete: (id: number) => void
     selectedPartners: PartnerCardFull[]
+    onSelectAll: () => void
 }) {
     const totalBudget = partner.agreements.reduce((sum, a) => sum + a.budget, 0)
     const totalGrant  = partner.agreements.reduce((sum, a) => sum + a.grant,  0)
@@ -815,6 +818,18 @@ function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete,
                                 {partnerCopied ? <CheckIcon size={14} /> : <ShareIcon size={14} />}
                                 {partnerCopied ? 'Infos copiées !' : 'Partager'}
                             </ContextMenuItem>
+                            <ContextMenuItem onClick={() => exportToCsv(
+                                'partenaires.csv',
+                                ['Nom', 'Type', 'Consortium', 'Description', 'Nb membres', 'Nb projets', 'Nb conventions', 'Budget total (€)', 'Subvention (€)'],
+                                selectedPartners.map(p => [
+                                    p.name, p.type, p.consortium ? 'Oui' : 'Non', p.description,
+                                    p.members.length, p.projects.length, p.agreements.length,
+                                    p.agreements.reduce((s, a) => s + a.budget, 0),
+                                    p.agreements.reduce((s, a) => s + a.grant, 0),
+                                ])
+                            )}>
+                                <FileDown size={14} /> Exporter en CSV
+                            </ContextMenuItem>
                         </>
                     ) : (
                         <>
@@ -845,12 +860,18 @@ function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete,
                         </ContextMenuItem>
                     )}
                 </ContextMenuGroup>
+                <ContextMenuSeparator />
+                <ContextMenuGroup>
+                    <ContextMenuItem onClick={() => { onSelectAll() }}>
+                        <ListChecks size={14} /> Tout sélectionner
+                    </ContextMenuItem>
+                </ContextMenuGroup>
             </ContextMenuContent>
         </ContextMenu>
     )
 }
 
-function LabCard({ lab, onClick, selectOn, selected, onToggle, onDelete, selectedLabs, onSelectMultiple }: {
+function LabCard({ lab, onClick, selectOn, selected, onToggle, onDelete, selectedLabs, onSelectMultiple, onSelectAll }: {
     lab: LabCardFull
     onClick: () => void
     selectOn: boolean
@@ -859,6 +880,7 @@ function LabCard({ lab, onClick, selectOn, selected, onToggle, onDelete, selecte
     onDelete: (id: number) => void
     selectedLabs: LabCardFull[]
     onSelectMultiple: () => void
+    onSelectAll: () => void
 }) {
     const [copied,     setCopied]     = useState(false)
     const [confirming, setConfirming] = useState(false)
@@ -942,6 +964,13 @@ function LabCard({ lab, onClick, selectOn, selected, onToggle, onDelete, selecte
                             {copied ? <CheckIcon size={13} className="mr-2" /> : <Copy size={13} className="mr-2" />}
                             {copied ? 'Copié !' : `Copier les noms (${selectedLabs.length})`}
                         </ContextMenuItem>
+                        <ContextMenuItem onClick={() => exportToCsv(
+                            'laboratoires.csv',
+                            ['Nom', 'Type', 'Thématique', 'Description', 'Nb partenaires', 'Nb membres'],
+                            selectedLabs.map(l => [l.name, l.type, l.topic, l.description, l.partners.length, l.members.length])
+                        )}>
+                            <FileDown size={13} className="mr-2" /> Exporter en CSV
+                        </ContextMenuItem>
                         <ContextMenuSeparator />
                         {confirming ? (
                             <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
@@ -980,6 +1009,9 @@ function LabCard({ lab, onClick, selectOn, selected, onToggle, onDelete, selecte
                 <ContextMenuSeparator />
                 <ContextMenuItem onClick={onSelectMultiple}>
                     <ListChecks size={13} className="mr-2" /> Sélection multiple
+                </ContextMenuItem>
+                <ContextMenuItem onClick={onSelectAll}>
+                    <ListChecks size={13} className="mr-2" /> Tout sélectionner
                 </ContextMenuItem>
             </ContextMenuContent>
         </ContextMenu>
@@ -1177,7 +1209,11 @@ export default function Partners() {
                                 {mode === 'partners' ? 'Partenaires' : 'Laboratoires'}
                             </span>
                             {viewMode === mode && (
-                                <span className="absolute inset-0 bg-black rounded-full z-10" />
+                                <motion.div 
+                                layoutId="activeUnderTab"
+                                className="absolute inset-0 bg-black rounded-full z-10" 
+                                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                />
                             )}
                         </button>
                     ))}
@@ -1288,6 +1324,7 @@ export default function Partners() {
                                 onToggle={() => togglePartner(p)}
                                 onDelete={handlePartnerDeleted}
                                 selectedPartners={selectedPartners}
+                                onSelectAll={() => { setMultipleSelect(true); setSelectedPartners(filteredPartners) }}
                             />
                         ))
                         : filteredLabs.map(l => (
@@ -1305,6 +1342,7 @@ export default function Partners() {
                                 }}
                                 selectedLabs={selectedLabs}
                                 onSelectMultiple={() => { setMultipleSelectL(true); toggleLab(l) }}
+                                onSelectAll={() => { setMultipleSelectL(true); setSelectedLabs(filteredLabs) }}
                             />
                         ))
                 }
@@ -1374,11 +1412,21 @@ export default function Partners() {
                         <>
                             <span className="text-sm font-medium px-2">{selectedPartners.length} sélectionné{selectedPartners.length > 1 ? 's' : ''}</span>
                             <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(true); setSelectedPartners(filteredPartners) }}>
+                                <ListChecks size={13} /> Tout sélectionner
+                            </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyPartnerNamesGroup}>
                                 <CopyIcon size={13} /> Copier les noms
                             </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyPartnersInfoGroup}>
                                 <ShareIcon size={13} /> Partager
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => exportToCsv(
+                                'partenaires.csv',
+                                ['Nom', 'Type', 'Description'],
+                                selectedPartners.map(p => [p.name, p.type, p.description])
+                            )}>
+                                <FileDown size={13} /> Exporter en CSV
                             </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDeleteP(true)}>
                                 <Trash size={13} /> Supprimer
@@ -1405,8 +1453,18 @@ export default function Partners() {
                         <>
                             <span className="text-sm font-medium px-2">{selectedLabs.length} sélectionné{selectedLabs.length > 1 ? 's' : ''}</span>
                             <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelectL(true); setSelectedLabs(filteredLabs) }}>
+                                <ListChecks size={13} /> Tout sélectionner
+                            </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyLabNamesGroup}>
                                 <CopyIcon size={13} /> Copier les noms
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => exportToCsv(
+                                'laboratoires.csv',
+                                ['Nom', 'Type', 'Thématique', 'Description'],
+                                selectedLabs.map(l => [l.name, l.type, l.topic, l.description])
+                            )}>
+                                <FileDown size={13} /> Exporter en CSV
                             </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDeleteL(true)}>
                                 <Trash size={13} /> Supprimer

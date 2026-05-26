@@ -13,7 +13,8 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon } from 'lucide-react'
+import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import {
     getProjectCalls, getProjects, getAxes, getStatuses, getPartners, getFinancialAgreements,
@@ -75,9 +76,10 @@ type ProjectCardProps = {
     onEdit: () => void
     selectedProjects: ProjectFull[]
     onSelectMultiple: () => void
+    onSelectAll: () => void
 }
 
-function ProjectCard({ project, agreements, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple }: ProjectCardProps) {
+function ProjectCard({ project, agreements, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple, onSelectAll }: ProjectCardProps) {
     const rate    = financingRate(project.budget, project.grant)
     const partners = [...new Map(agreements.map(a => [a.partner_id, a.partner])).values()]
     const status  = statuses.find(s => s.id === project.status_id)
@@ -190,29 +192,43 @@ function ProjectCard({ project, agreements, statuses, onClick, selectOn, selecte
             <ContextMenuContent className="w-52">
                 {selectedProjects.length > 1 ? (
                     <>
-                        <ContextMenuItem onClick={copyTitles}>
-                            <Copy size={13} className="mr-2" />
+                        <ContextMenuItem onClick={onSelectAll}>
+                            <ListChecks size={13} className="mr-2" /> Tout sélectionner
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyTitles}>
+                            {copied ? <CheckIcon size={13} className="mr-2" /> : <Copy size={13} className="mr-2" />}
                             {copied ? 'Copié !' : `Copier les titres (${selectedProjects.length})`}
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={() => exportToCsv(
+                            'projets.csv',
+                            ['Titre', 'Appel à projets', 'Axe', 'Budget (€)', 'Subvention (€)', 'Taux financé (%)'],
+                            selectedProjects.map(p => [
+                                p.title, p.projectCall.title, p.projectCall.axis.name,
+                                p.budget, p.grant,
+                                p.budget > 0 ? Math.round((p.grant / p.budget) * 100) : '',
+                            ])
+                        )}>
+                            <FileDown size={13} className="mr-2" /> Exporter en CSV
                         </ContextMenuItem>
                         <ContextMenuSeparator />
                         {confirming ? (
-                            <div className="px-2 py-1.5 flex flex-col gap-1">
-                                <span className="text-xs text-muted-foreground">Supprimer {selectedProjects.length} projets ?</span>
-                                <div className="flex gap-1">
-                                    <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
-                                    <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDeleteMultiple} disabled={deleting}>Confirmer</Button>
-                                </div>
-                            </div>
+                            <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                                <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
+                                <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDeleteMultiple} disabled={deleting}>
+                                    {deleting ? '...' : 'Confirmer'}
+                                </Button>
+                            </ContextMenuItem>
                         ) : (
-                            <ContextMenuItem className="text-destructive focus:text-destructive" onClick={() => setConfirming(true)}>
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
                                 <Trash2 size={13} className="mr-2" /> Supprimer ({selectedProjects.length})
                             </ContextMenuItem>
                         )}
                     </>
                 ) : (
                     <>
-                        <ContextMenuItem onClick={copyTitle}>
-                            <Copy size={13} className="mr-2" />
+                        <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyTitle}>
+                            {copied ? <CheckIcon size={13} className="mr-2" /> : <Copy size={13} className="mr-2" />}
                             {copied ? 'Copié !' : 'Copier le titre'}
                         </ContextMenuItem>
                         <ContextMenuItem onClick={onEdit}>
@@ -220,24 +236,19 @@ function ProjectCard({ project, agreements, statuses, onClick, selectOn, selecte
                         </ContextMenuItem>
                         <ContextMenuSeparator />
                         {confirming ? (
-                            <div className="px-2 py-1.5 flex flex-col gap-1">
-                                <span className="text-xs text-muted-foreground">Supprimer ce projet ?</span>
-                                <div className="flex gap-1">
-                                    <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
-                                    <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDelete} disabled={deleting}>Confirmer</Button>
-                                </div>
-                            </div>
+                            <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">
+                                <Button size="sm" variant="ghost" className="h-6 text-xs flex-1 rounded-md" onClick={() => setConfirming(false)}>Annuler</Button>
+                                <Button size="sm" variant="destructive" className="h-6 text-xs flex-1 rounded-md" onClick={handleDelete} disabled={deleting}>
+                                    {deleting ? '...' : 'Confirmer'}
+                                </Button>
+                            </ContextMenuItem>
                         ) : (
-                            <ContextMenuItem className="text-destructive focus:text-destructive" onClick={() => setConfirming(true)}>
+                            <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={e => e.preventDefault()} onClick={() => setConfirming(true)}>
                                 <Trash2 size={13} className="mr-2" /> Supprimer
                             </ContextMenuItem>
                         )}
                     </>
                 )}
-                <ContextMenuSeparator />
-                <ContextMenuItem onClick={onSelectMultiple}>
-                    <ListChecks size={13} className="mr-2" /> Sélection multiple
-                </ContextMenuItem>
             </ContextMenuContent>
         </ContextMenu>
     )
@@ -1367,6 +1378,7 @@ export default function Projects() {
                                                                 onEdit={() => { setSelectedProject(p); setProjectSheetOpen(true) }}
                                                                 selectedProjects={selectedProjects}
                                                                 onSelectMultiple={() => { setMultipleSelect(true); toggleProject(p) }}
+                                                                onSelectAll={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}
                                                             />
                                                         ))}
                                                         {pcProjects.length === 0 && (
@@ -1404,8 +1416,18 @@ export default function Projects() {
                         <>
                             <span className="text-sm font-medium px-2">{selectedProjects.length} sélectionné{selectedProjects.length > 1 ? 's' : ''}</span>
                             <div className="w-px h-4 bg-background/20 mx-1" />
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}>
+                                <ListChecks size={13} /> Tout sélectionner
+                            </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyProjectTitlesGroup}>
                                 <Copy size={13} /> Copier les titres
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => exportToCsv(
+                                'projets.csv',
+                                ['Titre', 'Appel à projets', 'Axe', 'Budget (€)', 'Subvention (€)', 'Taux financé (%)'],
+                                selectedProjects.map(p => [p.title, p.projectCall.title, p.projectCall.axis.name, p.budget, p.grant, p.budget > 0 ? Math.round((p.grant / p.budget) * 100) : ''])
+                            )}>
+                                <FileDown size={13} /> Exporter en CSV
                             </Button>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(true)}>
                                 <Trash2 size={13} /> Supprimer

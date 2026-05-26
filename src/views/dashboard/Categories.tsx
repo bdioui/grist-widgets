@@ -14,11 +14,12 @@ import {
     DropdownMenuCheckboxItem,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { SlidersHorizontal, Plus, Pencil, Search, Users } from 'lucide-react'
-import { getActionCardsFull, updateActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards } from '@/lib/api'
+import { SlidersHorizontal, Plus, Pencil, Search, Users, ListChecks, X, Copy, Trash, FileDown } from 'lucide-react'
+import { getActionCardsFull, updateActionCard, deleteActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards } from '@/lib/api'
 import type { ActionCardFull, Category, Axis, Member, Partner, AxisActionCard, MemberActionCard } from '@/lib/types'
 import ActionCardSheet from './ActionCardSheet'
 import { useCurrentUser } from '@/lib/userContext'
+import { exportToCsv } from '@/lib/utils'
 import CategorySheet from './CategorySheet'
 
 // --- Mapping API → ActionCardData ---
@@ -232,6 +233,11 @@ export default function Categories() {
     const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([])
     const [searchQuery,       setSearchQuery]       = useState('')
 
+    // Multi-select
+    const [multipleSelect,    setMultipleSelect]    = useState(false)
+    const [selectedCards,     setSelectedCards]     = useState<ActionCardData[]>([])
+    const [confirmingDelete,  setConfirmingDelete]  = useState(false)
+
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
     )
@@ -341,6 +347,26 @@ export default function Categories() {
 
     function toggleAxe(id: number) {
         setSelectedAxeIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
+    }
+
+    function toggleCard(card: ActionCardData) {
+        setSelectedCards(prev =>
+            prev.find(c => c.id === card.id)
+                ? prev.filter(c => c.id !== card.id)
+                : [...prev, card]
+        )
+    }
+
+    function copySelectedTitles() {
+        navigator.clipboard.writeText(selectedCards.map(c => c.title).join('\n'))
+    }
+
+    async function handleDeleteSelected() {
+        await Promise.all(selectedCards.map(c => deleteActionCard(c.id)))
+        setCards(prev => prev.filter(c => !selectedCards.find(sc => sc.id === c.id)))
+        setSelectedCards([])
+        setMultipleSelect(false)
+        setConfirmingDelete(false)
     }
 
     // Cartes filtrées selon les 3 critères
@@ -572,6 +598,15 @@ export default function Categories() {
                 </div>
 
                 <div className="ml-auto flex items-center gap-2">
+                    {multipleSelect ? (
+                        <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedCards([]) }}>
+                            <X size={14} /> Terminer
+                        </Button>
+                    ) : (
+                        <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
+                            <ListChecks size={14} /> Sélection multiple
+                        </Button>
+                    )}
                     <Button size="sm" variant="outline" className="gap-2 rounded-md" onClick={() => { setEditingCategory(undefined); setCatSheetOpen(true) }}>
                         <Plus size={14} />
                         Catégorie
@@ -633,8 +668,17 @@ export default function Categories() {
                                                         <DraggableCard
                                                             key={card.id}
                                                             card={card}
-                                                            onDeleted={id => setCards(prev => prev.filter(c => c.id !== id))}
+                                                            onDeleted={id => {
+                                                                setCards(prev => prev.filter(c => c.id !== id))
+                                                                setSelectedCards(prev => prev.filter(c => c.id !== id))
+                                                            }}
                                                             onUpdated={patch => setCards(prev => prev.map(c => c.id === card.id ? { ...c, ...patch } : c))}
+                                                            selectOn={multipleSelect}
+                                                            selected={!!selectedCards.find(c => c.id === card.id)}
+                                                            onToggle={() => toggleCard(card)}
+                                                            onSelectMultiple={() => { setMultipleSelect(true); toggleCard(card) }}
+                                                            onSelectAll={() => { setMultipleSelect(true); setSelectedCards(filteredCards) }}
+                                                            selectedCards={selectedCards}
                                                         />
                                                     ))}
                                                 </DroppableColumn>
@@ -677,6 +721,44 @@ export default function Categories() {
             onClose={() => { setCatSheetOpen(false); setEditingCategory(undefined) }}
             onSaved={onCategorySaved}
         />
+
+        {multipleSelect && selectedCards.length > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full bg-foreground text-background shadow-xl">
+                {confirmingDelete ? (
+                    <>
+                        <span className="text-sm px-2">Supprimer {selectedCards.length} carte{selectedCards.length > 1 ? 's' : ''} ?</span>
+                        <div className="w-px h-4 bg-background/20 mx-1" />
+                        <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDelete(false)}>Annuler</Button>
+                        <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelected}>Confirmer</Button>
+                    </>
+                ) : (
+                    <>
+                        <span className="text-sm font-medium px-2">{selectedCards.length} sélectionné{selectedCards.length > 1 ? 'es' : 'e'}</span>
+                        <div className="w-px h-4 bg-background/20 mx-1" />
+                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(true); setSelectedCards(filteredCards) }}>
+                            <ListChecks size={13} /> Tout sélectionner
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copySelectedTitles}>
+                            <Copy size={13} /> Copier les titres
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => exportToCsv(
+                            'cartes.csv',
+                            ['Titre', 'Statut', 'Catégorie', 'Responsable', 'Date début', 'Date fin'],
+                            selectedCards.map(c => [c.title, c.status.name, c.category.name, c.owner ? `${c.owner.first_name} ${c.owner.last_name}` : '', c.start_date ?? '', c.end_time ?? ''])
+                        )}>
+                            <FileDown size={13} /> Exporter en CSV
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDelete(true)}>
+                            <Trash size={13} /> Supprimer
+                        </Button>
+                        <div className="w-px h-4 bg-background/20 mx-1" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(false); setSelectedCards([]) }}>
+                            <X size={13} />
+                        </Button>
+                    </>
+                )}
+            </div>
+        )}
         </>
     )
 }
