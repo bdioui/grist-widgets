@@ -79,7 +79,7 @@ type ProjectCardProps = {
     onSelectAll: () => void
 }
 
-function ProjectCard({ project, agreements, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple, onSelectAll }: ProjectCardProps) {
+function ProjectCard({ project, agreements, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple: _onSelectMultiple, onSelectAll }: ProjectCardProps) {
     const rate    = financingRate(project.budget, project.grant)
     const partners = [...new Map(agreements.map(a => [a.partner_id, a.partner])).values()]
     const status  = statuses.find(s => s.id === project.status_id)

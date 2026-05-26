@@ -1047,7 +1047,7 @@ export default function ActionCard(props: ActionCardData & {
     onSelectAll?: () => void
     selectedCards?: ActionCardData[]
 }) {
-    const { onDeleted, onUpdated: onUpdatedProp, selectOn, selected, onToggle, onSelectMultiple, onSelectAll, selectedCards = [] } = props
+    const { onDeleted, onUpdated: onUpdatedProp, selectOn, selected, onToggle, onSelectMultiple: _onSelectMultiple, onSelectAll, selectedCards = [] } = props
     const [open, setOpen]         = useState(false)
     const [data, setData]         = useState<ActionCardData>(props)
     const [copied, setCopied]     = useState(false)

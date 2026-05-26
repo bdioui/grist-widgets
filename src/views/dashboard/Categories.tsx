@@ -744,7 +744,7 @@ export default function Categories() {
                         <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => exportToCsv(
                             'cartes.csv',
                             ['Titre', 'Statut', 'Catégorie', 'Responsable', 'Date début', 'Date fin'],
-                            selectedCards.map(c => [c.title, c.status.name, c.category.name, c.owner ? `${c.owner.first_name} ${c.owner.last_name}` : '', c.start_date ?? '', c.end_time ?? ''])
+                            selectedCards.map(c => [c.title, c.status.label, c.category.title, c.owner ? `${c.owner.first_name} ${c.owner.last_name}` : '', c.start_date ?? '', c.end_date ?? ''])
                         )}>
                             <FileDown size={13} /> Exporter en CSV
                         </Button>
