@@ -5,91 +5,137 @@ import Members from './views/Members'
 import Projects from './views/Projects'
 import { motion } from "framer-motion"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
-import {Button} from "@/components/ui/button"
-import { Menu, Fullscreen, Download, RefreshCw } from 'lucide-react'
+import { Button } from "@/components/ui/button"
+import { Menu, Fullscreen, Download, RefreshCw, UserCircle, LogOut } from 'lucide-react'
 import type { MemberFull } from '@/lib/types'
-import {getCurrentUser, getMembersFull} from '@/lib/api'
+import { getMembersFull } from '@/lib/api'
 import { UserContext } from '@/lib/userContext'
 import ExportModal from '@/components/ExportModal'
+
+const STORAGE_KEY = 'grist_current_member_id'
 
 export default function App() {
 
   const [currentView, setCurrentView] = useState('dashboard')
   const [fullScreen, setFullScreen] = useState(false)
   const [currentMember, setCurrentMember] = useState<MemberFull | null>(null)
+  const [allMembers, setAllMembers] = useState<MemberFull[]>([])
   const [showExport, setShowExport] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [showProfilePicker, setShowProfilePicker] = useState(false)
 
   useEffect(() => {
-        Promise.all([getCurrentUser(), getMembersFull()])
-            .then(([user, members]) => {
-                console.log('[UserContext] user:', user)
-                console.log('[UserContext] members emails:', members.map(m => m.email))
-                const match = members.find(m => m.email === user.email)
-                console.log('[UserContext] match:', match)
-                setCurrentMember(match ?? null)
-            })
-            .catch(err => console.error('[UserContext] error:', err))
-    }, [])
+    getMembersFull().then(members => {
+      setAllMembers(members)
+      const savedId = localStorage.getItem(STORAGE_KEY)
+      if (savedId) {
+        const match = members.find(m => m.id === Number(savedId))
+        setCurrentMember(match ?? null)
+      }
+    })
+  }, [])
+
+  function selectMember(member: MemberFull) {
+    setCurrentMember(member)
+    localStorage.setItem(STORAGE_KEY, String(member.id))
+    setShowProfilePicker(false)
+  }
+
+  function clearMember() {
+    setCurrentMember(null)
+    localStorage.removeItem(STORAGE_KEY)
+  }
 
   function toggleFullScreen() {
-      if (!fullScreen) {
-          document.documentElement.requestFullscreen()
-          setFullScreen(true)
-      } else {
-          document.exitFullscreen()
-          setFullScreen(false)
-      }
+    if (!fullScreen) {
+      document.documentElement.requestFullscreen()
+      setFullScreen(true)
+    } else {
+      document.exitFullscreen()
+      setFullScreen(false)
+    }
   }
 
   return (
     <UserContext.Provider value={currentMember}>
     <div className="min-h-screen bg-gray-50">
-      {/* Barre de navigation supérieure */}
       <nav className="flex justify-between align-center p-4 gap-4">
-         <div>
+        <div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button className="rounded-md" variant="outline" size="sm">
-                    <Menu />
-                </Button>
+              <Button className="rounded-md" variant="outline" size="sm">
+                <Menu />
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
 
-                {/* Utilisateur connecté */}
-                {currentMember ? (
-                    <>
-                        <div className="flex items-center gap-2 px-2 py-2">
-                            <div
-                                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0"
-                                style={{ backgroundColor: currentMember.partner?.color ?? '#E7E8E2' }}
-                            >
-                                {currentMember.first_name[0]}{currentMember.last_name[0]}
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                                <span className="text-xs font-medium truncate">{currentMember.first_name} {currentMember.last_name}</span>
-                                <span className="text-xs text-muted-foreground truncate">{currentMember.position}</span>
-                            </div>
-                        </div>
-                        <DropdownMenuSeparator />
-                    </>
-                ) : null}
+              {/* Utilisateur connecté */}
+              {currentMember ? (
+                <>
+                  <div className="flex items-center gap-2 px-2 py-2">
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0"
+                      style={{ backgroundColor: currentMember.partner?.color ?? '#E7E8E2' }}
+                    >
+                      {currentMember.first_name[0]}{currentMember.last_name[0]}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium truncate">{currentMember.first_name} {currentMember.last_name}</span>
+                      <span className="text-xs text-muted-foreground truncate">{currentMember.position}</span>
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
 
-                <DropdownMenuItem onClick={toggleFullScreen}>
-                    <Fullscreen /> {fullScreen ? 'Réduire' : 'Plein écran'}
+              {/* Sélecteur de profil */}
+              {!showProfilePicker ? (
+                <DropdownMenuItem onClick={() => setShowProfilePicker(true)}>
+                  <UserCircle /> {currentMember ? 'Changer de profil' : 'Sélectionner mon profil'}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setRefreshKey(k => k + 1)}>
-                    <RefreshCw /> Actualiser
+              ) : (
+                <div className="px-2 py-1 max-h-48 overflow-y-auto">
+                  <p className="text-xs text-muted-foreground mb-1">Qui êtes-vous ?</p>
+                  {allMembers.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => selectMember(m)}
+                      className="w-full text-left flex items-center gap-2 px-1 py-1.5 rounded hover:bg-accent text-sm"
+                    >
+                      <div
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium shrink-0"
+                        style={{ backgroundColor: m.partner?.color ?? '#E7E8E2' }}
+                      >
+                        {m.first_name[0]}{m.last_name[0]}
+                      </div>
+                      <span className="truncate">{m.first_name} {m.last_name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {currentMember && !showProfilePicker && (
+                <DropdownMenuItem onClick={clearMember}>
+                  <LogOut /> Se déconnecter
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setShowExport(true)}>
-                    <Download /> Exporter les données
-                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={toggleFullScreen}>
+                <Fullscreen /> {fullScreen ? 'Réduire' : 'Plein écran'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setRefreshKey(k => k + 1)}>
+                <RefreshCw /> Actualiser
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setShowExport(true)}>
+                <Download /> Exporter les données
+              </DropdownMenuItem>
 
             </DropdownMenuContent>
-        </DropdownMenu>
-          
+          </DropdownMenu>
         </div>
+
         <div className="bg-gray-200 rounded-full border p-1 flex relative">
           {['dashboard', 'projets', 'partenaires', 'contacts'].map((view) => (
             <button
@@ -100,8 +146,6 @@ export default function App() {
               }`}
             >
               <span className="relative z-20 capitalize">{view}</span>
-              
-              {/* La pilule animée qui glisse en dessous */}
               {currentView === view && (
                 <motion.div
                   layoutId="activeTab"
@@ -125,4 +169,4 @@ export default function App() {
     </div>
     </UserContext.Provider>
   )
-}                         
+}
