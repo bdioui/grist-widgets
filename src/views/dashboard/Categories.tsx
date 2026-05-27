@@ -15,7 +15,7 @@ import {
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { SlidersHorizontal, Plus, Pencil, Search, Users, ListChecks, X, Copy, Trash, FileDown } from 'lucide-react'
-import { getActionCardsFull, updateActionCard, deleteActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards, getCommentsFull, getComments } from '@/lib/api'
+import { getActionCardsFull, updateActionCard, deleteActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards } from '@/lib/api'
 import type { ActionCardFull, Category, Axis, Member, Partner, AxisActionCard, MemberActionCard } from '@/lib/types'
 import ActionCardSheet from './ActionCardSheet'
 import { useCurrentUser } from '@/lib/userContext'

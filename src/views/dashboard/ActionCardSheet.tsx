@@ -115,7 +115,7 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
     const [partners,   setPartners]   = useState<Partner[]>([])
     const [projects,   setProjects]   = useState<Project[]>([])
     const [axes,       setAxes]       = useState<Axis[]>([])
-    const [comments, setComments]     = useState<CommentFull[]>([])
+    const [_comments, setComments]     = useState<CommentFull[]>([])
 
     const [roleToAdd,  setRoleToAdd]  = useState<string>(ROLES[1])
     const [todoInput,  setTodoInput]  = useState('')
