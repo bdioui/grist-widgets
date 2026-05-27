@@ -11,8 +11,9 @@ import { X, Plus } from 'lucide-react'
 import {
     getStatuses, getCategories, getMembers, getPartners, getProjects, getAxes,
     getOrCreateOtherCategory, createActionCardFull, updateActionCard, type ActionCardCreateForm,
+    getCommentsFull,
 } from '@/lib/api'
-import type { Status, Category, Member, Partner, Project, Axis } from '@/lib/types'
+import type { Status, Category, Member, Partner, Project, Axis, CommentFull } from '@/lib/types'
 import type { ActionCardData } from './ActionCard'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useCurrentUser } from '@/lib/userContext'
@@ -114,6 +115,7 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
     const [partners,   setPartners]   = useState<Partner[]>([])
     const [projects,   setProjects]   = useState<Project[]>([])
     const [axes,       setAxes]       = useState<Axis[]>([])
+    const [comments, setComments]     = useState<CommentFull[]>([])
 
     const [roleToAdd,  setRoleToAdd]  = useState<string>(ROLES[1])
     const [todoInput,  setTodoInput]  = useState('')
@@ -121,14 +123,18 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
 
     useEffect(() => {
         if (!open) return
-        Promise.all([getStatuses(), getCategories(), getMembers(), getPartners(), getProjects(), getAxes()])
-            .then(([s, c, m, pt, p, a]) => {
+        Promise.all([
+                getStatuses(), getCategories(), getMembers(), getPartners(), getProjects(), getAxes(),
+                editCard ? getCommentsFull(editCard.id) : Promise.resolve([])
+            ])
+            .then(([s, c, m, pt, p, a, commentsFull]) => {
                 setStatuses(s.filter(s => s.context === 'action_card'))
                 setCategories(c)
                 setMembers(m)
                 setPartners(pt)
                 setProjects(p)
                 setAxes(a)
+                setComments(commentsFull)
                 if (editCard) {
                     setForm({
                         ...EMPTY_FORM,

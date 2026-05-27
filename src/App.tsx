@@ -6,7 +6,7 @@ import Projects from './views/Projects'
 import { motion } from "framer-motion"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Button } from "@/components/ui/button"
-import { Menu, Fullscreen, Download, RefreshCw, UserCircle, LogOut } from 'lucide-react'
+import { Menu, Download, RefreshCw, UserCircle, LogOut } from 'lucide-react'
 import type { MemberFull } from '@/lib/types'
 import { getMembersFull } from '@/lib/api'
 import { UserContext } from '@/lib/userContext'
@@ -17,7 +17,6 @@ const STORAGE_KEY = 'grist_current_member_id'
 export default function App() {
 
   const [currentView, setCurrentView] = useState('dashboard')
-  const [fullScreen, setFullScreen] = useState(false)
   const [currentMember, setCurrentMember] = useState<MemberFull | null>(null)
   const [allMembers, setAllMembers] = useState<MemberFull[]>([])
   const [showExport, setShowExport] = useState(false)
@@ -47,15 +46,6 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEY)
   }
 
-  function toggleFullScreen() {
-    if (!fullScreen) {
-      document.documentElement.requestFullscreen()
-      setFullScreen(true)
-    } else {
-      document.exitFullscreen()
-      setFullScreen(false)
-    }
-  }
 
   return (
     <UserContext.Provider value={currentMember}>
@@ -143,9 +133,6 @@ export default function App() {
               )}
 
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={toggleFullScreen}>
-                <Fullscreen /> {fullScreen ? 'Réduire' : 'Plein écran'}
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setRefreshKey(k => k + 1)}>
                 <RefreshCw /> Actualiser
               </DropdownMenuItem>

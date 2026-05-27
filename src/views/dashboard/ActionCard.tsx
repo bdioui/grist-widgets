@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown } from 'lucide-react'
+import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown, File, Folder, Users, MessageCircle, Eye, EyeClosed} from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import {
@@ -20,9 +20,18 @@ import {
     addMemberToCard, removeMemberFromCard, addProjectToCard, removeProjectFromCard,
     getAgreementActionCardsByCard, addAgreementToCard, removeAgreementFromCard,
     deleteActionCard,
+    getCommentsFull, createComment, updateComment, deleteComment,
 } from '@/lib/api'
-import type { Status, Category, Member, Partner, Project, ToDoList, ToDoItem, MemberActionCard, ProjectActionCard, AgreementActionCard, FinancialAgreement } from '@/lib/types'
+import type { Status, Category, Member, Partner, Project, ToDoList, ToDoItem, MemberActionCard, ProjectActionCard, AgreementActionCard, FinancialAgreement, CommentFull } from '@/lib/types'
+import { useCurrentUser } from '@/lib/userContext'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 // --- Types exportés (utilisés par Categories, DraggableCard, etc.) ---
 
@@ -298,6 +307,59 @@ function AgreementSearchInput({ agreements, partners, projects, onSelect }: Agre
     )
 }
 
+// --- Comment Card ---
+
+function CommentCard({ comment, onComment, onDelete, onEdit, isOwner }: {
+    comment: CommentFull
+    onComment: () => void
+    onDelete: () => void
+    onEdit: () => void
+    isOwner: boolean
+}) {
+    return (
+        <Card className="w-full mt-2 group">
+            <CardHeader className="pb-2">
+                <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                        <Avatar className="h-7 w-7">
+                            <AvatarImage src={comment.owner.profile_image} />
+                            <AvatarFallback className="text-xs">
+                                {comment.owner.first_name[0]}{comment.owner.last_name[0]}
+                            </AvatarFallback>
+                        </Avatar>
+                        {comment.owner.first_name} {comment.owner.last_name}
+                    </div>
+                    
+
+                    <div className='opacity-0 group-hover:opacity-100 transition-opacity'>
+                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-text-foreground" onClick={onComment}>
+                            <MessageCircle size={14} />
+                        </Button>
+                        {isOwner && (
+                            <>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={onEdit}>
+                                <Pencil size={14} />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={onDelete}>
+                                <Trash2 size={14} />
+                            </Button>
+                            </>
+                        )}
+                        
+                       
+                    </div>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                    {new Date(comment.timestamp).toLocaleString('fr-FR')}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="pb-0">
+                <p className="text-sm">{comment.content}</p>
+            </CardContent>
+        </Card>
+    )
+}
+
 // --- Sheet de détail / édition ---
 
 type DetailSheetProps = {
@@ -348,6 +410,84 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
     const [newListTitle, setNewListTitle] = useState('')
     const [showNewList, setShowNewList]   = useState(false)
 
+
+    // Togglers des section
+    const [toDoExtended, setToDoExtended] = useState(true)
+    const [membersExtended, setMembersExtended] = useState(true)
+    const [projectsExtended, setProjectsExtended] = useState(true)
+    const [agreementsExtended, setAgreementsExtended] = useState(true)
+    const [commentsExtended, setCommentsExtended] = useState(true)
+
+
+    // Commentaires
+    const currentUser = useCurrentUser()
+    const [comments,        setComments]        = useState<CommentFull[]>([])
+    const [newComment,      setNewComment]       = useState('')
+    const [replyingTo,      setReplyingTo]       = useState<number | null>(null)
+    const [replyContent,    setReplyContent]     = useState('')
+    const [editingComment,  setEditingComment]   = useState<number | null>(null)
+    const [editContent,     setEditContent]      = useState('')
+    const [submittingComment, setSubmittingComment] = useState(false)
+
+    async function handleAddComment() {
+        if (!newComment.trim() || !currentUser) return
+        setSubmittingComment(true)
+        const created = await createComment({
+            owner_id: currentUser.id,
+            action_card_id: card.id,
+            content: newComment.trim(),
+            timestamp: new Date().toISOString(),
+        })
+        const newFull: CommentFull = { ...created, owner: currentUser, replies: [] }
+        setComments(prev => [newFull, ...prev])
+        setNewComment('')
+        setSubmittingComment(false)
+    }
+
+    async function handleReply(parentId: number) {
+        if (!replyContent.trim() || !currentUser) return
+        setSubmittingComment(true)
+        const created = await createComment({
+            owner_id: currentUser.id,
+            action_card_id: card.id,
+            parent_comment_id: parentId,
+            content: replyContent.trim(),
+            timestamp: new Date().toISOString(),
+        })
+        const newReply: CommentFull = { ...created, owner: currentUser, replies: [] }
+        setComments(prev => prev.map(c =>
+            c.id === parentId ? { ...c, replies: [...(c.replies ?? []), newReply] } : c
+        ))
+        setReplyingTo(null)
+        setReplyContent('')
+        setSubmittingComment(false)
+    }
+
+    async function handleEditComment(id: number) {
+        if (!editContent.trim()) return
+        await updateComment(id, { content: editContent.trim() })
+        setComments(prev => prev.map(c => {
+            if (c.id === id) return { ...c, content: editContent.trim() }
+            return { ...c, replies: c.replies?.map(r => r.id === id ? { ...r, content: editContent.trim() } : r) }
+        }))
+        setEditingComment(null)
+        setEditContent('')
+    }
+
+    async function handleDeleteComment(id: number) {
+        await deleteComment(id)
+        setComments(prev =>
+            prev.filter(c => c.id !== id)
+                .map(c => ({ ...c, replies: c.replies?.filter(r => r.id !== id) }))
+        )
+    }
+
+    // Visibilité des sections de Sheet 
+    const [showTodo, setShowTodo] = useState(false)
+    const [showMembers, setShowMembers] = useState(false)
+    const [showAgreements, setShowAgreements] = useState(false)
+    const [showProjects, setShowProjects] = useState(false)
+    
     useEffect(() => {
         if (!open) return
         setDraft(card)
@@ -365,7 +505,8 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
             getPartners(),
             getProjects(),
             getFinancialAgreements(),
-        ]).then(([ml, pl, al, tl, s, c, m, pt, p, agr]) => {
+            getCommentsFull(card.id),
+        ]).then(([ml, pl, al, tl, s, c, m, pt, p, agr, comments]) => {
             setMemberLinks(ml as MemberLink[])
             setProjectLinks(pl as ProjectLink[])
             setAgreementLinks(al as AgreementLink[])
@@ -376,6 +517,12 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
             setAllPartners(pt)
             setAllProjects(p)
             setAllAgreements(agr)
+            setComments(comments)
+            // Visibilité initiale selon le contenu chargé
+            setShowTodo(tl.length > 0)
+            setShowMembers(ml.length > 0)
+            setShowAgreements(al.length > 0)
+            setShowProjects(pl.length > 0)
         }).finally(() => setLoading(false))
     }, [open, card.id])
 
@@ -578,6 +725,7 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
 
                         {/* Champs éditables */}
                         {editing ? (
+                            
                             <section className="flex flex-col gap-3">
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Général</p>
 
@@ -651,8 +799,10 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
                                     </Select>
                                 </div>
                             </section>
+                       
                         ) : (
-                            /* Vue lecture */
+                             /* Vue lecture */
+                           
                             <section className="flex flex-col gap-2 text-sm">
                                 {card.description && (
                                     <p className="text-muted-foreground leading-relaxed">{card.description}</p>
@@ -665,367 +815,588 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
                                     </p>
                                 )}
                                 {card.owner && (
+                                    
                                     <p className="text-xs text-muted-foreground">
                                         Responsable : <span className="font-medium text-foreground">{card.owner.first_name} {card.owner.last_name}</span>
                                         {card.owner.position ? ` — ${card.owner.position}` : ''}
                                     </p>
                                 )}
                             </section>
+                            
                         )}
 
                         <Separator />
+                        {(!showTodo || !showMembers || !showProjects || !showAgreements) && (
+                            <>
+                            <div>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline"><Plus /> Section</Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        {!showTodo && (
+                                            <>
+                                                <DropdownMenuItem onClick={() => setShowTodo(true)}>
+                                                <ListChecks />
+                                                To do
+                                                </DropdownMenuItem>
+                                            </>
+                                        )}
+
+                                        {!showMembers && (
+                                            <>
+                                            <DropdownMenuItem onClick={() => setShowMembers(true)}>
+                                            <Users />
+                                            Participants
+                                            </DropdownMenuItem>
+                                            </>
+                                        )}
+
+                                        {!showProjects && (
+                                            <>
+                                            <DropdownMenuItem onClick={() => setShowProjects(true)}>
+                                                <Folder />
+                                                Projets
+                                            </DropdownMenuItem>
+                                            </>
+                                        )}
+                                        
+                                        {!showAgreements && (
+                                            <DropdownMenuItem onClick={() => setShowAgreements(true)}>
+                                            <File />
+                                            Conventions
+                                            </DropdownMenuItem>
+                                        )}
+                                        
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                            </>
+                        )}
+                        
 
                         {/* To-do lists */}
-                        <section className="flex flex-col gap-4">
-                            <div className="flex items-center justify-between">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">To-do </p>
-                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowNewList(v => !v)}>
-                                    <Plus size={11} />Nouvelle liste
-                                </Button>
-                            </div>
-
-                            {showNewList && (
-                                <div className="flex gap-2">
-                                    <Input
-                                        value={newListTitle}
-                                        onChange={e => setNewListTitle(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && addList()}
-                                        placeholder="Titre de la liste..."
-                                        className="h-8 text-xs"
-                                    />
-                                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={addList} disabled={!newListTitle.trim()}>
-                                        <Plus size={12} />
+                        { showTodo && (
+                            <>
+                            <section className="flex flex-col gap-4">
+                                <div className="flex items-center justify-between">
+                                    <div className='flex row items-center'>
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">To-do </p>
+                                        {toDoExtended ? (
+                                             <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={()=> setToDoExtended(false)}><Eye/></Button>
+                                        ) : 
+                                             <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setToDoExtended(true)}><EyeClosed/></Button>
+                                        }
+                                       
+                                    </div>
+                                    
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowNewList(v => !v)}>
+                                        <Plus size={11} />Nouvelle liste
                                     </Button>
                                 </div>
-                            )}
 
-                            {todoLists.length > 0 ? (
-                                <div className="flex flex-col gap-5">
-                                    {todoLists.map(list => (
-                                        <TodoSection
-                                            key={list.id}
-                                            list={list}
-                                            onToggle={toggleTodo}
-                                            onDeleteItem={deleteTodoItem}
-                                            onAddItem={addTodoItem}
+                                {showNewList && (
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={newListTitle}
+                                            onChange={e => setNewListTitle(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && addList()}
+                                            placeholder="Titre de la liste..."
+                                            className="h-8 text-xs"
                                         />
-                                    ))}
-                                </div>
-                            ) : (
-                                !showNewList && (
-                                    <p className="text-xs text-muted-foreground italic">Aucune liste de tâches</p>
-                                )
-                            )}
-                        </section>
+                                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={addList} disabled={!newListTitle.trim()}>
+                                            <Plus size={12} />
+                                        </Button>
+                                    </div>
+                                )}
 
-                        <Separator />
+                                {todoLists.length > 0 ? (
+                                    toDoExtended && (
+                                        
+                                        <div className="flex flex-col gap-5">
+                                            {todoLists.map(list => (
+                                                <TodoSection
+                                                    key={list.id}
+                                                    list={list}
+                                                    onToggle={toggleTodo}
+                                                    onDeleteItem={deleteTodoItem}
+                                                    onAddItem={addTodoItem}
+                                                />
+                                            ))}
+                                        </div>
+                                    )
+                                    
+                                ) : (
+                                    !showNewList && (
+                                        <p className="text-xs text-muted-foreground italic">Aucune liste de tâches</p>
+                                    )
+                                )}
+                            </section>
+                            <Separator />
+                            </>
+                        )}
+                        
 
                         {/* Participants */}
-                        <section className="flex flex-col gap-3">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
-
-                            {memberLinks.length > 0 && (
-                                <div className="flex flex-col gap-1">
-                                    {memberLinks.map(l => {
-                                        const partner = allPartners.find(p => p.id === l.member.partner_id)
-                                        return (
-                                            <Popover key={l.id}>
-                                            <PopoverTrigger asChild>
-                                                <div className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group">
-                                                    <div className="flex items-center gap-2 min-w-0">
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="text-sm">{l.member.first_name} {l.member.last_name}</span>
-                                                            <span className="text-xs text-muted-foreground">{l.role}</span>
-                                                        </div>
-                                                        {partner && (
-                                                            <span
-                                                                className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
-                                                                style={partner.color ? { backgroundColor: partner.color } : {}}
-                                                            >
-                                                                {partner.name}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div
-                                                        onClick={e => { e.stopPropagation(); handleRemoveMember(l.id) }}
-                                                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive ml-2 cursor-pointer"
-                                                    >
-                                                        <X size={13} />
-                                                    </div>
-                                                </div>
-                                            </PopoverTrigger>
-                                            <PopoverContent align="start" className="w-72 p-4 flex flex-col gap-3">
-                                                {/* En-tête */}
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0">
-                                                        {l.member.first_name[0]}{l.member.last_name[0]}
-                                                    </div>
-                                                    <div className="flex flex-col min-w-0">
-                                                        <span className="text-sm font-medium">{l.member.first_name} {l.member.last_name}</span>
-                                                        <span className="text-xs text-muted-foreground truncate">{l.member.position}</span>
-                                                    </div>
-                                                </div>
-
-                                                <Separator />
-
-                                                {/* Détails */}
-                                                <div className="flex flex-col gap-2 text-xs">
-                                                    {l.member.status && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-20 shrink-0 text-muted-foreground">Statut</span>
-                                                            <span>{l.member.status}</span>
-                                                        </div>
-                                                    )}
-                                                    {l.member.email && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-20 shrink-0 text-muted-foreground">Email</span>
-                                                            <a href={`mailto:${l.member.email}`} className="truncate text-blue-600 hover:underline">{l.member.email}</a>
-                                                        </div>
-                                                    )}
-                                                    {l.member.tel && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-20 shrink-0 text-muted-foreground">Téléphone</span>
-                                                            <a href={`tel:${l.member.tel}`} className="hover:underline">{l.member.tel}</a>
-                                                        </div>
-                                                    )}
-                                                    {partner && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-20 shrink-0 text-muted-foreground">Partenaire</span>
-                                                            <span
-                                                                className="px-1.5 py-0.5 rounded-full border border-border"
-                                                                style={partner.color ? { backgroundColor: partner.color } : {}}
-                                                            >
-                                                                {partner.name}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="w-20 shrink-0 text-muted-foreground">Rôle</span>
-                                                        <span>{l.role}</span>
-                                                    </div>
-                                                </div>
-                                            </PopoverContent>
-                                            </Popover>
-                                            
-                                        )
-                                    })}
+                        { showMembers && (
+                            <>
+                            <section className="flex flex-col gap-3">
+                                <div className="flex items-center justify-between">
+                                    <div className='flex row items-center'>
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
+                                        {membersExtended ? (
+                                            <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setMembersExtended(false)}><Eye /></Button>
+                                        ) : (
+                                            <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setMembersExtended(true)}><EyeClosed /></Button>
+                                        )}
+                                    </div>
                                 </div>
-                            )}
 
-                            {availableMembers.length > 0 && (
-                                <div className="flex gap-2">
-                                    <MemberSearchInput
-                                        members={availableMembers}
-                                        partners={allPartners}
-                                        onSelect={m => handleAddMemberById(m.id)}
-                                    />
-                                    <Select value={roleToAdd} onValueChange={setRoleToAdd}>
-                                        <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
-                        </section>
-
-                        <Separator />
-
-                        {/* Projets liés */}
-                        <section className="flex flex-col gap-3">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Projets liés</p>
-
-                            {projectLinks.length > 0 && (
-                                <div className="flex flex-col gap-1">
-                                    {projectLinks.map(l => (
-                                        <Popover key={l.id}>
-                                            <PopoverTrigger asChild>
-                                                <div className="flex items-center justify-between px-2 py-1 rounded hover:bg-muted group cursor-pointer">
-                                                    <span className="text-sm">{l.project.title}</span>
-                                                    <div
-                                                        onClick={e => { e.stopPropagation(); handleRemoveProject(l.id) }}
-                                                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer"
-                                                    >
-                                                        <X size={13} />
-                                                    </div>
-                                                </div>
-                                            </PopoverTrigger>
-                                            <PopoverContent align="start" className="w-72 p-4 flex flex-col gap-3">
-                                                {/* En-tête */}
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="text-sm font-medium">{l.project.title}</span>
-                                                </div>
-
-                                                <Separator />
-
-                                                {/* Détails financiers */}
-                                                <div className="flex flex-col gap-2 text-xs">
-                                                    {l.project.budget > 0 && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-24 shrink-0 text-muted-foreground">Budget total</span>
-                                                            <span>{l.project.budget.toLocaleString('fr-FR')} €</span>
-                                                        </div>
-                                                    )}
-                                                    {l.project.grant > 0 && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-24 shrink-0 text-muted-foreground">Subvention</span>
-                                                            <span>{l.project.grant.toLocaleString('fr-FR')} €</span>
-                                                        </div>
-                                                    )}
-                                                    {l.project.budget > 0 && l.project.grant > 0 && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-24 shrink-0 text-muted-foreground">Taux financ.</span>
-                                                            <span>{Math.round((l.project.grant / l.project.budget) * 100)} %</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                    ))}
-                                </div>
-                            )}
-
-                            {availableProjects.length > 0 && (
-                                <div className="flex gap-2">
-                                    <Select value={projectToAdd} onValueChange={setProjectToAdd}>
-                                        <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue placeholder="Lier un projet" /></SelectTrigger>
-                                        <SelectContent>
-                                            {availableProjects.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleAddProject} disabled={!projectToAdd}>
-                                        <Plus size={13} />
-                                    </Button>
-                                </div>
-                            )}
-                        </section>
-
-                        <Separator />
-
-                        {/* Conventions liées */}
-                        <section className="flex flex-col gap-3">
-                            <div className="flex items-center justify-between">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Conventions liées</p>
-                                {linkedProjectIds.length > 0 && (
-                                    <span className="text-xs text-muted-foreground italic">
-                                        Filtrées par {linkedProjectIds.length === 1 ? 'le projet lié' : 'les projets liés'}
-                                    </span>
-                                )}
-                            </div>
-
-                            {agreementLinks.length > 0 && (
-                                <div className="flex flex-col gap-1">
-                                    {agreementLinks.map(l => {
-                                        const agrPartner = partnerMap.get(l.agreement.partner_id)
-                                        const agrProject = projectMap.get(l.agreement.project_id)
-                                        return (
-                                            <Popover key={l.id}>
+                                {membersExtended && memberLinks.length > 0 && (
+                                    <div className="flex flex-col gap-1">
+                                        {memberLinks.map(l => {
+                                            const partner = allPartners.find(p => p.id === l.member.partner_id)
+                                            return (
+                                                <Popover key={l.id}>
                                                 <PopoverTrigger asChild>
-                                                    <div className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group cursor-pointer">
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="text-sm truncate">{l.agreement.title}</span>
-                                                            <div className="flex items-center gap-1.5 mt-0.5">
-                                                                {agrProject && (
-                                                                    <span className="text-xs text-muted-foreground truncate">{agrProject.title}</span>
-                                                                )}
-                                                                {agrProject && agrPartner && (
-                                                                    <span className="text-xs text-muted-foreground">·</span>
-                                                                )}
-                                                                {agrPartner && (
-                                                                    <span
-                                                                        className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
-                                                                        style={agrPartner.color ? { backgroundColor: agrPartner.color } : {}}
-                                                                    >
-                                                                        {agrPartner.name}
-                                                                    </span>
-                                                                )}
+                                                    <div className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group">
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <div className="flex flex-col min-w-0">
+                                                                <span className="text-sm">{l.member.first_name} {l.member.last_name}</span>
+                                                                <span className="text-xs text-muted-foreground">{l.role}</span>
                                                             </div>
+                                                            {partner && (
+                                                                <span
+                                                                    className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
+                                                                    style={partner.color ? { backgroundColor: partner.color } : {}}
+                                                                >
+                                                                    {partner.name}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <div
-                                                            onClick={e => { e.stopPropagation(); handleRemoveAgreement(l.id) }}
-                                                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer ml-2 shrink-0"
+                                                            onClick={e => { e.stopPropagation(); handleRemoveMember(l.id) }}
+                                                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive ml-2 cursor-pointer"
                                                         >
                                                             <X size={13} />
                                                         </div>
                                                     </div>
                                                 </PopoverTrigger>
-                                                <PopoverContent align="start" className="w-80 p-4 flex flex-col gap-3">
+                                                <PopoverContent align="start" className="w-72 p-4 flex flex-col gap-3">
                                                     {/* En-tête */}
-                                                    <div className="flex flex-col gap-0.5">
-                                                        <span className="text-sm font-medium">{l.agreement.title}</span>
-                                                        {l.agreement.description && (
-                                                            <span className="text-xs text-muted-foreground">{l.agreement.description}</span>
-                                                        )}
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0">
+                                                            {l.member.first_name[0]}{l.member.last_name[0]}
+                                                        </div>
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="text-sm font-medium">{l.member.first_name} {l.member.last_name}</span>
+                                                            <span className="text-xs text-muted-foreground truncate">{l.member.position}</span>
+                                                        </div>
                                                     </div>
 
                                                     <Separator />
 
+                                                    {/* Détails */}
                                                     <div className="flex flex-col gap-2 text-xs">
-                                                        {agrProject && (
+                                                        {l.member.status && (
                                                             <div className="flex items-center gap-2">
-                                                                <span className="w-28 shrink-0 text-muted-foreground">Projet</span>
-                                                                <span>{agrProject.title}</span>
+                                                                <span className="w-20 shrink-0 text-muted-foreground">Statut</span>
+                                                                <span>{l.member.status}</span>
                                                             </div>
                                                         )}
-                                                        {agrPartner && (
+                                                        {l.member.email && (
                                                             <div className="flex items-center gap-2">
-                                                                <span className="w-28 shrink-0 text-muted-foreground">Partenaire</span>
+                                                                <span className="w-20 shrink-0 text-muted-foreground">Email</span>
+                                                                <a href={`mailto:${l.member.email}`} className="truncate text-blue-600 hover:underline">{l.member.email}</a>
+                                                            </div>
+                                                        )}
+                                                        {l.member.tel && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-20 shrink-0 text-muted-foreground">Téléphone</span>
+                                                                <a href={`tel:${l.member.tel}`} className="hover:underline">{l.member.tel}</a>
+                                                            </div>
+                                                        )}
+                                                        {partner && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-20 shrink-0 text-muted-foreground">Partenaire</span>
                                                                 <span
                                                                     className="px-1.5 py-0.5 rounded-full border border-border"
-                                                                    style={agrPartner.color ? { backgroundColor: agrPartner.color } : {}}
+                                                                    style={partner.color ? { backgroundColor: partner.color } : {}}
                                                                 >
-                                                                    {agrPartner.name}
+                                                                    {partner.name}
                                                                 </span>
                                                             </div>
                                                         )}
-                                                        {l.agreement.signed_date && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-20 shrink-0 text-muted-foreground">Rôle</span>
+                                                            <span>{l.role}</span>
+                                                        </div>
+                                                    </div>
+                                                </PopoverContent>
+                                                </Popover>
+                                                
+                                            )
+                                        })}
+                                    </div>
+                                )}
+
+                                {membersExtended && availableMembers.length > 0 && (
+                                    <div className="flex gap-2">
+                                        <MemberSearchInput
+                                            members={availableMembers}
+                                            partners={allPartners}
+                                            onSelect={m => handleAddMemberById(m.id)}
+                                        />
+                                        <Select value={roleToAdd} onValueChange={setRoleToAdd}>
+                                            <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                            </section>
+                            <Separator />
+                            </>
+                        )}
+                        
+
+                        
+
+                        {/* Projets liés */}
+                        { showProjects && (
+                            <>
+                            <section className="flex flex-col gap-3">
+                                <div className='flex row items-center'>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Projets liés</p>
+                                    {projectsExtended ? (
+                                        <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setProjectsExtended(false)}><Eye /></Button>
+                                    ) : (
+                                        <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setProjectsExtended(true)}><EyeClosed /></Button>
+                                    )}
+                                </div>
+
+                                {projectsExtended && projectLinks.length > 0 && (
+                                    <div className="flex flex-col gap-1">
+                                        {projectLinks.map(l => (
+                                            <Popover key={l.id}>
+                                                <PopoverTrigger asChild>
+                                                    <div className="flex items-center justify-between px-2 py-1 rounded hover:bg-muted group cursor-pointer">
+                                                        <span className="text-sm">{l.project.title}</span>
+                                                        <div
+                                                            onClick={e => { e.stopPropagation(); handleRemoveProject(l.id) }}
+                                                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer"
+                                                        >
+                                                            <X size={13} />
+                                                        </div>
+                                                    </div>
+                                                </PopoverTrigger>
+                                                <PopoverContent align="start" className="w-72 p-4 flex flex-col gap-3">
+                                                    {/* En-tête */}
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-sm font-medium">{l.project.title}</span>
+                                                    </div>
+
+                                                    <Separator />
+
+                                                    {/* Détails financiers */}
+                                                    <div className="flex flex-col gap-2 text-xs">
+                                                        {l.project.budget > 0 && (
                                                             <div className="flex items-center gap-2">
-                                                                <span className="w-28 shrink-0 text-muted-foreground">Date de signature</span>
-                                                                <span>{formatDate(l.agreement.signed_date)}</span>
+                                                                <span className="w-24 shrink-0 text-muted-foreground">Budget total</span>
+                                                                <span>{l.project.budget.toLocaleString('fr-FR')} €</span>
                                                             </div>
                                                         )}
-                                                        {l.agreement.budget > 0 && (
+                                                        {l.project.grant > 0 && (
                                                             <div className="flex items-center gap-2">
-                                                                <span className="w-28 shrink-0 text-muted-foreground">Budget</span>
-                                                                <span>{l.agreement.budget.toLocaleString('fr-FR')} €</span>
+                                                                <span className="w-24 shrink-0 text-muted-foreground">Subvention</span>
+                                                                <span>{l.project.grant.toLocaleString('fr-FR')} €</span>
                                                             </div>
                                                         )}
-                                                        {l.agreement.grant > 0 && (
+                                                        {l.project.budget > 0 && l.project.grant > 0 && (
                                                             <div className="flex items-center gap-2">
-                                                                <span className="w-28 shrink-0 text-muted-foreground">Subvention</span>
-                                                                <span>{l.agreement.grant.toLocaleString('fr-FR')} €</span>
-                                                            </div>
-                                                        )}
-                                                        {l.agreement.budget > 0 && l.agreement.grant > 0 && (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-28 shrink-0 text-muted-foreground">Taux financ.</span>
-                                                                <span>{Math.round((l.agreement.grant / l.agreement.budget) * 100)} %</span>
+                                                                <span className="w-24 shrink-0 text-muted-foreground">Taux financ.</span>
+                                                                <span>{Math.round((l.project.grant / l.project.budget) * 100)} %</span>
                                                             </div>
                                                         )}
                                                     </div>
                                                 </PopoverContent>
                                             </Popover>
-                                        )
-                                    })}
-                                </div>
-                            )}
+                                        ))}
+                                    </div>
+                                )}
 
-                            {availableAgreements.length > 0 && (
-                                <AgreementSearchInput
-                                    agreements={availableAgreements}
-                                    partners={allPartners}
-                                    projects={allProjects}
-                                    onSelect={handleAddAgreement}
+                                {projectsExtended && availableProjects.length > 0 && (
+                                    <div className="flex gap-2">
+                                        <Select value={projectToAdd} onValueChange={setProjectToAdd}>
+                                            <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue placeholder="Lier un projet" /></SelectTrigger>
+                                            <SelectContent>
+                                                {availableProjects.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleAddProject} disabled={!projectToAdd}>
+                                            <Plus size={13} />
+                                        </Button>
+                                    </div>
+                                )}
+                            </section>
+                            <Separator />
+                            </>
+                        )}
+                       
+
+                        
+
+                        {/* Conventions liées */}
+                        { showAgreements && (
+                                <>
+                                <section className="flex flex-col gap-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className='flex row items-center'>
+                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Conventions liées</p>
+                                            {agreementsExtended ? (
+                                                <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setAgreementsExtended(false)}><Eye /></Button>
+                                            ) : (
+                                                <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setAgreementsExtended(true)}><EyeClosed /></Button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {agreementsExtended && agreementLinks.length > 0 && (
+                                        <div className="flex flex-col gap-1">
+                                            {agreementLinks.map(l => {
+                                                const agrPartner = partnerMap.get(l.agreement.partner_id)
+                                                const agrProject = projectMap.get(l.agreement.project_id)
+                                                return (
+                                                    <Popover key={l.id}>
+                                                        <PopoverTrigger asChild>
+                                                            <div className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group cursor-pointer">
+                                                                <div className="flex flex-col min-w-0">
+                                                                    <span className="text-sm truncate">{l.agreement.title}</span>
+                                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                                        {agrProject && (
+                                                                            <span className="text-xs text-muted-foreground truncate">{agrProject.title}</span>
+                                                                        )}
+                                                                        {agrProject && agrPartner && (
+                                                                            <span className="text-xs text-muted-foreground">·</span>
+                                                                        )}
+                                                                        {agrPartner && (
+                                                                            <span
+                                                                                className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
+                                                                                style={agrPartner.color ? { backgroundColor: agrPartner.color } : {}}
+                                                                            >
+                                                                                {agrPartner.name}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                <div
+                                                                    onClick={e => { e.stopPropagation(); handleRemoveAgreement(l.id) }}
+                                                                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer ml-2 shrink-0"
+                                                                >
+                                                                    <X size={13} />
+                                                                </div>
+                                                            </div>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent align="start" className="w-80 p-4 flex flex-col gap-3">
+                                                            {/* En-tête */}
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="text-sm font-medium">{l.agreement.title}</span>
+                                                                {l.agreement.description && (
+                                                                    <span className="text-xs text-muted-foreground">{l.agreement.description}</span>
+                                                                )}
+                                                            </div>
+
+                                                            <Separator />
+
+                                                            <div className="flex flex-col gap-2 text-xs">
+                                                                {agrProject && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="w-28 shrink-0 text-muted-foreground">Projet</span>
+                                                                        <span>{agrProject.title}</span>
+                                                                    </div>
+                                                                )}
+                                                                {agrPartner && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="w-28 shrink-0 text-muted-foreground">Partenaire</span>
+                                                                        <span
+                                                                            className="px-1.5 py-0.5 rounded-full border border-border"
+                                                                            style={agrPartner.color ? { backgroundColor: agrPartner.color } : {}}
+                                                                        >
+                                                                            {agrPartner.name}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {l.agreement.signed_date && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="w-28 shrink-0 text-muted-foreground">Date de signature</span>
+                                                                        <span>{formatDate(l.agreement.signed_date)}</span>
+                                                                    </div>
+                                                                )}
+                                                                {l.agreement.budget > 0 && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="w-28 shrink-0 text-muted-foreground">Budget</span>
+                                                                        <span>{l.agreement.budget.toLocaleString('fr-FR')} €</span>
+                                                                    </div>
+                                                                )}
+                                                                {l.agreement.grant > 0 && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="w-28 shrink-0 text-muted-foreground">Subvention</span>
+                                                                        <span>{l.agreement.grant.toLocaleString('fr-FR')} €</span>
+                                                                    </div>
+                                                                )}
+                                                                {l.agreement.budget > 0 && l.agreement.grant > 0 && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="w-28 shrink-0 text-muted-foreground">Taux financ.</span>
+                                                                        <span>{Math.round((l.agreement.grant / l.agreement.budget) * 100)} %</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {agreementsExtended && availableAgreements.length > 0 && (
+                                        <AgreementSearchInput
+                                            agreements={availableAgreements}
+                                            partners={allPartners}
+                                            projects={allProjects}
+                                            onSelect={handleAddAgreement}
+                                        />
+                                    )}
+
+                                    {agreementsExtended && availableAgreements.length === 0 && agreementLinks.length === 0 && (
+                                        <p className="text-xs text-muted-foreground italic">
+                                            {linkedProjectIds.length > 0
+                                                ? 'Toutes les conventions des projets liés ont été rattachées'
+                                                : 'Aucune convention disponible'}
+                                        </p>
+                                    )}
+                                </section>
+                                <Separator/>
+                                </>
+                        )}
+
+
+                        
+
+                        <section className="flex flex-col gap-3">
+                            <div className='flex row items-center'>
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Commentaires</p>
+                                {commentsExtended ? (
+                                    <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setCommentsExtended(false)}><Eye /></Button>
+                                ) : (
+                                    <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setCommentsExtended(true)}><EyeClosed /></Button>
+                                )}
+                            </div>
+                            {/* Nouveau commentaire */}
+                            {commentsExtended && <div className="flex gap-2 mt-1">
+                                <Textarea
+                                    value={newComment}
+                                    onChange={e => setNewComment(e.target.value)}
+                                    placeholder="Ajouter un commentaire..."
+                                    className="text-sm min-h-[60px]"
                                 />
-                            )}
+                                <Button
+                                    size="sm"
+                                    disabled={!newComment.trim() || submittingComment}
+                                    onClick={handleAddComment}
+                                    className='rounded-md'
+                                >
+                                    <Check size={13} />
+                                </Button>
+                            </div>}
 
-                            {availableAgreements.length === 0 && agreementLinks.length === 0 && (
-                                <p className="text-xs text-muted-foreground italic">
-                                    {linkedProjectIds.length > 0
-                                        ? 'Toutes les conventions des projets liés ont été rattachées'
-                                        : 'Aucune convention disponible'}
-                                </p>
-                            )}
+                            {commentsExtended && <div className="flex flex-col gap-2">
+                                {comments.map(comment => {
+                                    console.log('currentUser email:', currentUser?.email)
+                                    console.log('comment owner email:', comment.owner.email)
+                                    return (
+                                    <div key={comment.id}>
+                                        {editingComment === comment.id ? (
+                                            <div className="flex gap-2">
+                                                <Textarea
+                                                    value={editContent}
+                                                    onChange={e => setEditContent(e.target.value)}
+                                                    className="text-sm min-h-[60px]"
+                                                />
+                                                <div className="flex flex-col gap-1">
+                                                    <Button size="sm" className='rounded-md' onClick={() => handleEditComment(comment.id)}>
+                                                        <Check size={13} />
+                                                    </Button>
+                                                    <Button size="sm" className='rounded-md' variant="ghost" onClick={() => setEditingComment(null)}>
+                                                        <X size={13} />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <CommentCard
+                                                comment={comment}
+                                                onDelete={() => handleDeleteComment(comment.id)}
+                                                onEdit={() => { setEditingComment(comment.id); setEditContent(comment.content) }}
+                                                onComment={() => { setReplyingTo(comment.id); setReplyContent('') }}
+                                                isOwner={currentUser?.email === comment.owner.email}
+                                            />
+                                        )}
+
+                                        {replyingTo === comment.id && (
+                                            <div className="ml-[60px] flex gap-2 mt-1">
+                                                <Textarea
+                                                    value={replyContent}
+                                                    onChange={e => setReplyContent(e.target.value)}
+                                                    placeholder="Votre réponse..."
+                                                    className="text-sm min-h-[60px]"
+                                                />
+                                                <div className="flex flex-col gap-1">
+                                                    <Button size="sm" className='rounded-md'  disabled={submittingComment} onClick={() => handleReply(comment.id)}>
+                                                        <Check size={13} />
+                                                    </Button>
+                                                    <Button size="sm" className='rounded-md'  variant="ghost" onClick={() => setReplyingTo(null)}>
+                                                        <X size={13} />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="ml-[60px]">
+                                            {comment.replies?.map(reply => (
+                                                <div key={reply.id}>
+                                                    {editingComment === reply.id ? (
+                                                        <div className="flex gap-2">
+                                                            <Textarea
+                                                                value={editContent}
+                                                                onChange={e => setEditContent(e.target.value)}
+                                                                className="text-sm min-h-[60px]"
+                                                            />
+                                                            <div className="flex flex-col gap-1">
+                                                                <Button size="sm" onClick={() => handleEditComment(reply.id)}>
+                                                                    <Check size={13} />
+                                                                </Button>
+                                                                <Button size="sm" variant="ghost" onClick={() => setEditingComment(null)}>
+                                                                    <X size={13} />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <CommentCard
+                                                            comment={reply}
+                                                            onDelete={() => handleDeleteComment(reply.id)}
+                                                            onEdit={() => { setEditingComment(reply.id); setEditContent(reply.content) }}
+                                                            onComment={() => { setReplyingTo(comment.id); setReplyContent('') }}
+                                                            isOwner={currentUser?.email === reply.owner.email}
+                                                        />
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    )
+                                }
+                                )}
+                            </div>}
                         </section>
 
                     </div>

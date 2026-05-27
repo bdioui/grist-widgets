@@ -159,6 +159,20 @@ export type ActionCard = {
     end_date: string
 }
 
+export type Comment = {
+    id: number
+    owner_id: number
+    parent_comment_id?: number
+    action_card_id: number
+    content: string
+    timestamp: string
+}
+
+export type CommentFull = Comment & {
+    owner: Member
+    replies?: CommentFull[]
+}
+
 // --- Budget ---
 
 export type BudgetCategory = {
@@ -242,3 +256,4 @@ export type LabCardFull = Lab & {
     partners: Partner[]
     members: Member[]
 }
+

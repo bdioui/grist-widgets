@@ -15,7 +15,7 @@ import {
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { SlidersHorizontal, Plus, Pencil, Search, Users, ListChecks, X, Copy, Trash, FileDown } from 'lucide-react'
-import { getActionCardsFull, updateActionCard, deleteActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards } from '@/lib/api'
+import { getActionCardsFull, updateActionCard, deleteActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards, getCommentsFull, getComments } from '@/lib/api'
 import type { ActionCardFull, Category, Axis, Member, Partner, AxisActionCard, MemberActionCard } from '@/lib/types'
 import ActionCardSheet from './ActionCardSheet'
 import { useCurrentUser } from '@/lib/userContext'
@@ -164,6 +164,7 @@ function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: Mem
                     />
                 </div>
                 <DropdownMenuSeparator />
+                <div className="max-h-72 overflow-y-auto">
                 {groups.map((group, i) => {
                     const state = groupState(group.members)
                     return (
@@ -193,6 +194,7 @@ function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: Mem
                         </div>
                     )
                 })}
+                </div>
                 {selectedIds.length > 0 && (
                     <>
                         <DropdownMenuSeparator />
@@ -483,6 +485,7 @@ export default function Categories() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-56">
+                        <div className="max-h-72 overflow-y-auto">
                         {columnGroups.map((group, i) => {
                             const state = groupCheckedState(group)
                             const hasChildren = group.children.length > 1
@@ -515,6 +518,7 @@ export default function Categories() {
                                 </div>
                             )
                         })}
+                        </div>
                     </DropdownMenuContent>
                 </DropdownMenu>
 
@@ -536,6 +540,7 @@ export default function Categories() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-52">
+                        <div className="max-h-72 overflow-y-auto">
                         {allAxes.map(axe => (
                             <DropdownMenuCheckboxItem
                                 key={axe.id}
@@ -545,6 +550,7 @@ export default function Categories() {
                                 {axe.name}
                             </DropdownMenuCheckboxItem>
                         ))}
+                        </div>
                         {selectedAxeIds.length > 0 && (
                             <>
                                 <DropdownMenuSeparator />

@@ -9,7 +9,8 @@ import type {
     IndicatorDefinition, BudgetCategory, BudgetDetail,
     MemberActionCard, ProjectActionCard, AgreementActionCard, PartnerCardFull,
     Group,
-    GroupMember
+    GroupMember,
+    Comment, CommentFull
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -135,6 +136,41 @@ export function normalizeActionCardsFull(
             owner: memberMap.get(card.owner_id) ?? FALLBACK_MEMBER,
         }
     })
+}
+
+
+export function normalizeComments(rows: Record<string, unknown>[]): Comment[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        owner_id: num(r.owner_id),
+        parent_comment_id: r.parent_comment_id ? num(r.parent_comment_id) : undefined,
+        action_card_id: num(r.action_card_id),
+        content: str(r.content),
+        timestamp: str(r.timestamp)
+    }))
+}
+
+export function normalizeCommentsFull(
+    rows: Record<string, unknown>[],
+    members: Member[]
+): CommentFull[] {
+    const memberMap = new Map(members.map(m => [m.id, m]))
+    const comments = normalizeComments(rows)
+
+    const map = new Map<number, CommentFull>()
+    for (const c of comments) {
+        map.set(c.id, { ...c, owner: memberMap.get(c.owner_id)!, replies: [] })
+    }
+
+    const roots: CommentFull[] = []
+    for (const c of map.values()) {
+        if (c.parent_comment_id) {
+            map.get(c.parent_comment_id)?.replies?.push(c)
+        } else {
+            roots.push(c)
+        }
+    }
+    return roots.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 }
 
 // --- Autres tables ---

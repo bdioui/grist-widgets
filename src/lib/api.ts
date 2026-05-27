@@ -5,7 +5,7 @@ import {
     mockFinancialAgreements, mockPhds, mockMobilityGrants,
     mockIndicatorDefinitions, mockBudgetCategories, mockBudgetDetails,
     mockToDoLists, mockToDoItems, mockMemberActionCards, mockAxisActionCards, mockProjectActionCards,
-    mockAgreementActionCards, mockGroup, mockGroupMember
+    mockAgreementActionCards, mockGroup, mockGroupMember, mockComments
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -16,7 +16,7 @@ import {
     normalizeToDoLists, normalizeToDoItems,
     normalizeMemberActionCards, normalizeProjectActionCards, normalizeAgreementActionCards,
     normalizePartnerCardsFull, normalizeLabs, normalizePartnerLabs, normalizeLabCardsFull,
-    normalizeGroup, normalizeGroupMember
+    normalizeGroup, normalizeGroupMember, normalizeComments, normalizeCommentsFull
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -24,7 +24,7 @@ import type {
     FinancialAgreement, Phd, MobilityGrant,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
     ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard, MemberFull,
-    Group, GroupMember
+    Group, GroupMember, Comment, CommentFull
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -55,7 +55,8 @@ const T = {
     lab: 'Lab',
     partner_lab: 'Partner_lab',
     group: 'Group',
-    group_member: 'Group_member'
+    group_member: 'Group_member',
+    comment: 'Comment'
 }
 
 // --- Tables de référence ---
@@ -72,6 +73,46 @@ export async function getPartnerLabs(): Promise<PartnerLab[]> { return USE_MOCK 
 // --- Cœur du système ---
 
 export async function getActionCards(): Promise<ActionCard[]> { return USE_MOCK ? mockActionCards : normalizeActionCards(await fetchTable(T.action_card)) }
+export async function getComments(): Promise<Comment[]> { return USE_MOCK ? mockComments : normalizeComments(await fetchTable(T.comment)) }
+
+export async function getCommentsFull(cardId: number): Promise<CommentFull[]> {
+    if (USE_MOCK) {
+        const filtered = mockComments.filter(c => c.action_card_id === cardId)
+        return normalizeCommentsFull(filtered as Record<string, unknown>[], mockMembers)
+    }
+    const [rows, members] = await Promise.all([fetchTable(T.comment), getMembers()])
+    const filtered = rows.filter(r => r.action_card_id === cardId)
+    return normalizeCommentsFull(filtered, members)
+}
+
+export async function createComment(data: Omit<Comment, 'id'>): Promise<Comment> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockComments.map(c => c.id)) + 1
+        const comment = { id, ...data }
+        mockComments.push(comment)
+        return comment
+    }
+    const id = await addRecord(T.comment, data)
+    return { id, ...data }
+}
+
+export async function updateComment(id: number, patch: Partial<Comment>): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockComments.findIndex(c => c.id === id)
+        if (i !== -1) mockComments[i] = { ...mockComments[i], ...patch }
+        return
+    }
+    await updateRecord(T.comment, id, patch)
+}
+
+export async function deleteComment(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const idx = mockComments.findIndex(c => c.id === id)
+        if (idx !== -1) mockComments.splice(idx, 1)
+        return
+    }
+    await deleteRecord(T.comment, id)
+}
 export async function getProjectCalls(): Promise<ProjectCall[]> { return USE_MOCK ? mockProjectCalls : normalizeProjectCalls(await fetchTable(T.project_call)) }
 export async function getProjects(): Promise<Project[]> { return USE_MOCK ? mockProjects : normalizeProjects(await fetchTable(T.project)) }
 export async function getFinancialAgreements(): Promise<FinancialAgreement[]> { return USE_MOCK ? mockFinancialAgreements : normalizeFinancialAgreements(await fetchTable(T.financial_agreement)) }

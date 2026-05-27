@@ -6,7 +6,8 @@ import type {
     MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard,
     Group,
     GroupMember,
-    User
+    User,
+    Comment
 } from '@/lib/types'
 
 export const mockUser: User = {
@@ -386,4 +387,27 @@ export const mockAgreementActionCards: AgreementActionCard[] = [
     { id: 6, financial_agreement_id: 4, action_card_id: 13 },
     { id: 7, financial_agreement_id: 4, action_card_id: 28 },
     { id: 8, financial_agreement_id: 5, action_card_id: 9 },
+]
+
+export const mockComments: Comment[] = [
+    // Carte 1 — commentaires racine + réponses
+    { id: 1, owner_id: 1, action_card_id: 1, content: 'Le séminaire est confirmé pour le 3 septembre, salle A12.', timestamp: '2025-08-20T09:15:00' },
+    { id: 2, owner_id: 2, action_card_id: 1, parent_comment_id: 1, content: 'Parfait, je préviens les intervenants.', timestamp: '2025-08-20T10:02:00' },
+    { id: 3, owner_id: 3, action_card_id: 1, parent_comment_id: 1, content: 'J\'envoie les invitations cette semaine.', timestamp: '2025-08-20T11:30:00' },
+    { id: 4, owner_id: 1, action_card_id: 1, content: 'Penser à réserver le matériel de projection.', timestamp: '2025-08-21T08:45:00' },
+    { id: 5, owner_id: 4, action_card_id: 1, parent_comment_id: 4, content: 'C\'est déjà réservé, j\'ai confirmé avec la logistique.', timestamp: '2025-08-21T09:10:00' },
+
+    // Carte 2
+    { id: 6, owner_id: 2, action_card_id: 2, content: 'Le module est prêt à 80%, il manque la partie évaluation.', timestamp: '2025-10-05T14:00:00' },
+    { id: 7, owner_id: 5, action_card_id: 2, parent_comment_id: 6, content: 'Je m\'en charge cette semaine.', timestamp: '2025-10-06T09:30:00' },
+    { id: 8, owner_id: 2, action_card_id: 2, content: 'Pensez à valider avec la direction pédagogique avant diffusion.', timestamp: '2025-10-07T16:00:00' },
+
+    // Carte 9 — thèse en cours
+    { id: 9, owner_id: 2, action_card_id: 9, content: 'Réunion de suivi prévue mi-novembre, à confirmer avec le co-directeur.', timestamp: '2025-10-15T10:00:00' },
+    { id: 10, owner_id: 4, action_card_id: 9, parent_comment_id: 9, content: 'Le professeur Müller est disponible le 18 novembre.', timestamp: '2025-10-15T11:45:00' },
+    { id: 11, owner_id: 2, action_card_id: 9, parent_comment_id: 10, content: 'Noté, je bloque la date.', timestamp: '2025-10-15T12:00:00' },
+
+    // Carte 14
+    { id: 12, owner_id: 12, action_card_id: 14, content: 'Première version de l\'article envoyée aux co-auteurs pour relecture.', timestamp: '2025-10-20T08:00:00' },
+    { id: 13, owner_id: 13, action_card_id: 14, parent_comment_id: 12, content: 'Commentaires envoyés par mail, quelques ajustements sur la méthodologie.', timestamp: '2025-10-22T17:30:00' },
 ]

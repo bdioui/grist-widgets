@@ -127,6 +127,7 @@ function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: Mem
                     <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Rechercher un membre..." className="h-7 text-xs" />
                 </div>
                 <DropdownMenuSeparator />
+                <div className="max-h-72 overflow-y-auto">
                 {groups.map((group, i) => (
                     <div key={group.partner.id}>
                         {i > 0 && <DropdownMenuSeparator />}
@@ -141,6 +142,7 @@ function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: Mem
                         ))}
                     </div>
                 ))}
+                </div>
                 {selectedIds.length > 0 && (
                     <>
                         <DropdownMenuSeparator />
@@ -268,6 +270,7 @@ export default function Calendar() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" className="w-56">
+                                <div className="max-h-72 overflow-y-auto">
                                 {parents.map((parent, i) => {
                                     const subs   = children.filter(c => c.parent_category_id === parent.id)
                                     const allIds = subs.length > 0 ? subs.map(c => c.id) : [parent.id]
@@ -304,6 +307,7 @@ export default function Calendar() {
                                         </div>
                                     )
                                 })}
+                                </div>
                                 {selectedCategoryIds.length > 0 && (
                                     <>
                                         <DropdownMenuSeparator />
@@ -316,7 +320,7 @@ export default function Calendar() {
                         </DropdownMenu>
                     )
                 })()}
-                
+
                 {/* Filtre axes */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -329,6 +333,7 @@ export default function Calendar() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-52">
+                        <div className="max-h-72 overflow-y-auto">
                         {allAxes.map(axe => (
                             <DropdownMenuCheckboxItem
                                 key={axe.id}
@@ -340,6 +345,7 @@ export default function Calendar() {
                                 {axe.name}
                             </DropdownMenuCheckboxItem>
                         ))}
+                        </div>
                         {selectedAxeIds.length > 0 && (
                             <>
                                 <DropdownMenuSeparator />
