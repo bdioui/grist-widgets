@@ -448,12 +448,19 @@ export default function Tasks() {
                                 : [...prev, currentUser.id]
                         )}
                     >
-                        <div
-                            className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-medium shrink-0"
-                            style={{ backgroundColor: currentUser.partner?.color ?? '#E7E8E2' }}
-                        >
-                            {currentUser.first_name[0]}{currentUser.last_name[0]}
-                        </div>
+                       {currentUser.profile_image ? (
+                            <div
+                                className="w-9 h-9 rounded-full bg-cover bg-center shrink-0 mt-0.5"
+                                style={{ backgroundImage: `url(${currentUser.profile_image})` }}
+                            />
+                        ) : (
+                            <div
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 mt-0.5"
+                                style={{ backgroundColor: currentUser.partner?.color ?? '#E7E8E2' }}
+                            >
+                                {currentUser.first_name[0]}{currentUser.last_name[0]}
+                            </div>
+                        )}
                         Mes cartes
                     </Button>
                 )}

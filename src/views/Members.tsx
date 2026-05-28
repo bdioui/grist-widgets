@@ -517,12 +517,20 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
 
                 <CardHeader className="pb-2">
                     <div className="flex items-start gap-3">
-                        <div
-                            className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 mt-0.5"
-                            style={{ backgroundColor: member.partner?.color ?? '#E7E8E2' }}
-                        >
-                            {member.first_name[0]}{member.last_name[0]}
-                        </div>
+                        {member.profile_image ? (
+                            <div
+                                className="w-9 h-9 rounded-full bg-cover bg-center shrink-0 mt-0.5"
+                                style={{ backgroundImage: `url(${member.profile_image})` }}
+                            />
+                        ) : (
+                            <div
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 mt-0.5"
+                                style={{ backgroundColor: member.partner?.color ?? '#E7E8E2' }}
+                            >
+                                {member.first_name[0]}{member.last_name[0]}
+                            </div>
+                        )}
+                       
                         <div className="flex flex-col min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                                 <CardTitle className="text-sm leading-snug">
