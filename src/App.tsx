@@ -6,6 +6,7 @@ import Projects from './views/Projects'
 import { motion } from "framer-motion"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Menu, Download, RefreshCw, UserCircle, LogOut } from 'lucide-react'
 import type { MemberFull } from '@/lib/types'
 import { getMembersFull } from '@/lib/api'
@@ -64,12 +65,12 @@ export default function App() {
               {currentMember ? (
                 <>
                   <div className="flex items-center gap-2 px-2 py-2">
-                    <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0"
-                      style={{ backgroundColor: currentMember.partner?.color ?? '#E7E8E2' }}
-                    >
-                      {currentMember.first_name[0]}{currentMember.last_name[0]}
-                    </div>
+                    <Avatar className="h-7 w-7">
+                      <AvatarImage src={currentMember.profile_image} />
+                      <AvatarFallback className="text-xs" style={{ backgroundColor: currentMember.partner?.color ?? '#E7E8E2' }}>
+                        {currentMember.first_name[0]}{currentMember.last_name[0]}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="flex flex-col min-w-0">
                       <span className="text-xs font-medium truncate">{currentMember.first_name} {currentMember.last_name}</span>
                       <span className="text-xs text-muted-foreground truncate">{currentMember.position}</span>
@@ -112,12 +113,12 @@ export default function App() {
                           onClick={() => selectMember(m)}
                           className="w-full text-left flex items-center gap-2 px-1 py-1.5 rounded hover:bg-accent text-sm"
                         >
-                          <div
-                            className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium shrink-0"
-                            style={{ backgroundColor: m.partner?.color ?? '#E7E8E2' }}
-                          >
-                            {m.first_name[0]}{m.last_name[0]}
-                          </div>
+                          <Avatar className="h-5 w-5">
+                            <AvatarImage src={m.profile_image} />
+                            <AvatarFallback className="text-[10px]" style={{ backgroundColor: m.partner?.color ?? '#E7E8E2' }}>
+                              {m.first_name[0]}{m.last_name[0]}
+                            </AvatarFallback>
+                          </Avatar>
                           <span className="truncate">{m.first_name} {m.last_name}</span>
                         </button>
                       ))

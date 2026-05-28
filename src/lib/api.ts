@@ -694,6 +694,39 @@ export async function getOrCreateOtherCategory(): Promise<number> {
     return await addRecord(T.category, { title: 'Autre', parent_category_id: null })
 }
 
+export async function deleteCategory(id: number): Promise<void> {
+    const autreId = await getOrCreateOtherCategory()
+
+    if (USE_MOCK) {
+        // Reassign action cards to "Autre"
+        for (const card of mockActionCards) {
+            if (card.category_id === id) card.category_id = autreId
+        }
+        // Promote child categories to root
+        for (const cat of mockCategories) {
+            if (cat.parent_category_id === id) cat.parent_category_id = null
+        }
+        const i = mockCategories.findIndex(c => c.id === id)
+        if (i !== -1) mockCategories.splice(i, 1)
+        return
+    }
+
+    const [allCards, allCats] = await Promise.all([
+        fetchTable(T.action_card),
+        getCategories(),
+    ])
+
+    // Reassign action cards to "Autre"
+    const cardsToMove = allCards.filter(r => r.category_id === id)
+    await Promise.all(cardsToMove.map(r => updateRecord(T.action_card, r.id as number, { category_id: autreId })))
+
+    // Promote child categories to root
+    const children = allCats.filter(c => c.parent_category_id === id)
+    await Promise.all(children.map(c => updateRecord(T.category, c.id, { parent_category_id: 0 })))
+
+    await deleteRecord(T.category, id)
+}
+
 // --- Mutations ---
 
 // Formulaire de création d'une ActionCard complète

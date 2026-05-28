@@ -985,9 +985,12 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
                                                 <PopoverContent align="start" className="w-72 p-4 flex flex-col gap-3">
                                                     {/* En-tête */}
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-medium shrink-0">
-                                                            {l.member.first_name[0]}{l.member.last_name[0]}
-                                                        </div>
+                                                        <Avatar className="h-9 w-9 shrink-0">
+                                                            <AvatarImage src={l.member.profile_image} />
+                                                            <AvatarFallback className="text-sm bg-muted">
+                                                                {l.member.first_name[0]}{l.member.last_name[0]}
+                                                            </AvatarFallback>
+                                                        </Avatar>
                                                         <div className="flex flex-col min-w-0">
                                                             <span className="text-sm font-medium">{l.member.first_name} {l.member.last_name}</span>
                                                             <span className="text-xs text-muted-foreground truncate">{l.member.position}</span>

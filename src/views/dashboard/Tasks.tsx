@@ -15,6 +15,7 @@ import {
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { Plus, Search, Users, SlidersHorizontal, ListChecks, X, Copy, Trash, FileDown } from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getActionCardsFull, updateActionCard, deleteActionCard, getAxes, getMembers, getPartners, getCategories, getAllAxisActionCards, getAllMemberActionCards, getStatuses } from '@/lib/api'
 import type { ActionCardFull, Axis, Member, Partner, Category, AxisActionCard, MemberActionCard, Status } from '@/lib/types'
 import ActionCardSheet from './ActionCardSheet'
@@ -448,19 +449,12 @@ export default function Tasks() {
                                 : [...prev, currentUser.id]
                         )}
                     >
-                       {currentUser.profile_image ? (
-                            <div
-                                className="w-9 h-9 rounded-full bg-cover bg-center shrink-0 mt-0.5"
-                                style={{ backgroundImage: `url(${currentUser.profile_image})` }}
-                            />
-                        ) : (
-                            <div
-                                className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 mt-0.5"
-                                style={{ backgroundColor: currentUser.partner?.color ?? '#E7E8E2' }}
-                            >
+                        <Avatar className="h-5 w-5 shrink-0">
+                            <AvatarImage src={currentUser.profile_image} />
+                            <AvatarFallback className="text-[10px]" style={{ backgroundColor: currentUser.partner?.color ?? '#E7E8E2' }}>
                                 {currentUser.first_name[0]}{currentUser.last_name[0]}
-                            </div>
-                        )}
+                            </AvatarFallback>
+                        </Avatar>
                         Mes cartes
                     </Button>
                 )}

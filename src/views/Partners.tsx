@@ -261,9 +261,12 @@ function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDeleted }: Pa
                             <div className="flex flex-col gap-1">
                                 {partner.members.map(m => (
                                     <div key={m.id} className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-muted">
-                                        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium shrink-0 border border-border">
-                                            {m.first_name[0]}{m.last_name[0]}
-                                        </div>
+                                        <Avatar className="h-7 w-7 shrink-0 border border-border">
+                                            <AvatarImage src={m.profile_image} />
+                                            <AvatarFallback className="text-xs bg-muted">
+                                                {m.first_name[0]}{m.last_name[0]}
+                                            </AvatarFallback>
+                                        </Avatar>
                                         <div className="flex flex-col min-w-0">
                                             <span className="text-sm">{m.first_name} {m.last_name}</span>
                                             <span className="text-xs text-muted-foreground truncate">{m.position}</span>
@@ -616,9 +619,12 @@ function LabDetailSheet({ lab, open, onClose, onUpdated, onDeleted }: LabDetailS
                         {labState.members.length === 0 && <p className="text-xs text-muted-foreground italic">Aucun membre rattaché</p>}
                         {labState.members.map(m => (
                             <div key={m.id} className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-muted group">
-                                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium shrink-0 border border-border">
-                                    {m.first_name[0]}{m.last_name[0]}
-                                </div>
+                                <Avatar className="h-7 w-7 shrink-0 border border-border">
+                                    <AvatarImage src={m.profile_image} />
+                                    <AvatarFallback className="text-xs bg-muted">
+                                        {m.first_name[0]}{m.last_name[0]}
+                                    </AvatarFallback>
+                                </Avatar>
                                 <div className="flex flex-col min-w-0 flex-1">
                                     <span className="text-sm">{m.first_name} {m.last_name}</span>
                                     <span className="text-xs text-muted-foreground truncate">{m.position}</span>

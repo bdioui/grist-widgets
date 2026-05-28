@@ -4,23 +4,27 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getCategories, createCategory, updateCategory } from '@/lib/api'
+import { getCategories, createCategory, updateCategory, deleteCategory } from '@/lib/api'
 import type { Category } from '@/lib/types'
+import { Trash2 } from 'lucide-react'
 
 type Props = {
     open: boolean
     category?: Category        // fourni → mode édition, absent → mode création
     onClose: () => void
     onSaved: (category: Category) => void
+    onDeleted?: (id: number) => void
 }
 
-export default function CategorySheet({ open, category, onClose, onSaved }: Props) {
-    const [title,     setTitle]     = useState('')
-    const [parentId,  setParentId]  = useState<number | null>(null)
-    const [parents,   setParents]   = useState<Category[]>([])
+export default function CategorySheet({ open, category, onClose, onSaved, onDeleted }: Props) {
+    const [title,      setTitle]      = useState('')
+    const [parentId,   setParentId]   = useState<number | null>(null)
+    const [parents,    setParents]    = useState<Category[]>([])
     const [submitting, setSubmitting] = useState(false)
-    const [color, setColor] = useState<string | null >(null)
-    const [error,     setError]     = useState<string | null>(null)
+    const [color,      setColor]      = useState<string | null>(null)
+    const [error,      setError]      = useState<string | null>(null)
+    const [confirming, setConfirming] = useState(false)
+    const [deleting,   setDeleting]   = useState(false)
 
     const isEdit = !!category
     
@@ -38,6 +42,7 @@ export default function CategorySheet({ open, category, onClose, onSaved }: Prop
         setParentId(category?.parent_category_id ?? null)
         setColor(category?.color ?? null)
         setError(null)
+        setConfirming(false)
         getCategories().then(all => {
             // Seules les catégories sans parent peuvent être parent
             setParents(all.filter(c => !c.parent_category_id && c.id !== category?.id))
@@ -124,11 +129,38 @@ export default function CategorySheet({ open, category, onClose, onSaved }: Prop
 
                 <SheetFooter className="px-6 py-4 border-t flex flex-col gap-2">
                     {error && <p className="text-sm text-destructive">{error}</p>}
-                    <div className="flex gap-2 justify-end">
-                        <Button variant="outline" onClick={onClose} disabled={submitting}>Annuler</Button>
-                        <Button onClick={handleSubmit} disabled={submitting}>
-                            {submitting ? 'Enregistrement...' : isEdit ? 'Enregistrer' : 'Créer'}
-                        </Button>
+                    <div className="flex gap-2 justify-between">
+                        {isEdit && category?.title !== 'Autre' && (
+                            confirming ? (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-destructive">Supprimer ?</span>
+                                    <Button size="sm" variant="destructive" className="rounded-md h-7" disabled={deleting} onClick={async () => {
+                                        setDeleting(true)
+                                        try {
+                                            await deleteCategory(category!.id)
+                                            onDeleted?.(category!.id)
+                                            onClose()
+                                        } finally {
+                                            setDeleting(false)
+                                            setConfirming(false)
+                                        }
+                                    }}>
+                                        {deleting ? '...' : 'Confirmer'}
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="rounded-md h-7" onClick={() => setConfirming(false)}>Annuler</Button>
+                                </div>
+                            ) : (
+                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive rounded-md" onClick={() => setConfirming(true)}>
+                                    <Trash2 size={14} /> Supprimer
+                                </Button>
+                            )
+                        )}
+                        <div className="flex gap-2 ml-auto">
+                            <Button variant="outline" onClick={onClose} disabled={submitting}>Annuler</Button>
+                            <Button onClick={handleSubmit} disabled={submitting}>
+                                {submitting ? 'Enregistrement...' : isEdit ? 'Enregistrer' : 'Créer'}
+                            </Button>
+                        </div>
                     </div>
                 </SheetFooter>
             </SheetContent>
