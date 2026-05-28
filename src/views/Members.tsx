@@ -253,12 +253,19 @@ function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, o
                 {/* Header */}
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0">
-                        <div
-                            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium shrink-0"
-                            style={{ backgroundColor: member.partner?.color ?? '#E7E8E2' }}
-                        >
-                            {member.first_name[0]}{member.last_name[0]}
-                        </div>
+                        {member.profile_image ? (
+                            <div
+                                className="w-9 h-9 rounded-full bg-cover bg-center shrink-0 mt-0.5"
+                                style={{ backgroundImage: `url(${member.profile_image})` }}
+                            />
+                        ) : (
+                            <div
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium shrink-0 mt-0.5"
+                                style={{ backgroundColor: member.partner?.color ?? '#E7E8E2' }}
+                            >
+                                {member.first_name[0]}{member.last_name[0]}
+                            </div>
+                        )}
                         <div className="flex flex-col min-w-0">
                             <SheetTitle className="text-base leading-tight">
                                 {member.first_name} {member.last_name}
