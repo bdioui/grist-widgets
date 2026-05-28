@@ -147,13 +147,14 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
                         owner_id:    editCard.owner?.id ?? m[0]?.id ?? 0,
                     })
                 } else {
-                    const defaultOwnerId = currentUser
-                        ? (m.find(mb => mb.id === currentUser.id)?.id ?? m[0]?.id ?? 0)
-                        : (m[0]?.id ?? 0)
+                    const defaultMembers = currentUser && m.find(mb => mb.id === currentUser.id)
+                        ? [{ member_id: currentUser.id, role: 'Responsable' }]
+                        : []
                     setForm(f => ({
                         ...f,
                         status_id: s.find(s => s.context === 'action_card')?.id ?? 0,
-                        owner_id:  defaultOwnerId,
+                        owner_id:  currentUser?.id ?? m[0]?.id ?? 0,
+                        members:   defaultMembers,
                     }))
                 }
             })
@@ -165,7 +166,10 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
 
     function addMemberById(id: number) {
         if (!id || form.members.some(m => m.member_id === id)) return
-        set('members', [...form.members, { member_id: id, role: roleToAdd }])
+        const newMembers = roleToAdd === 'Responsable'
+            ? form.members.map(m => m.role === 'Responsable' ? { ...m, role: 'Contributeur' } : m)
+            : [...form.members]
+        set('members', [...newMembers, { member_id: id, role: roleToAdd }])
     }
 
     function removeMember(memberId: number) {
@@ -183,8 +187,13 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
     }
 
     async function handleSubmit() {
-        if (!form.title.trim() || !form.status_id || !form.owner_id) {
-            setError('Titre, statut et responsable sont obligatoires.')
+        const responsable = form.members.find(m => m.role === 'Responsable')
+        if (!form.title.trim() || !form.status_id) {
+            setError('Titre et statut sont obligatoires.')
+            return
+        }
+        if (!editCard && !responsable) {
+            setError('Au moins un participant avec le rôle Responsable est requis.')
             return
         }
         setError(null)
@@ -229,7 +238,7 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
             } else {
                 // Si aucune catégorie choisie, utiliser/créer "Autre"
                 const categoryId = form.category_id || await getOrCreateOtherCategory()
-                const full = await createActionCardFull({ ...form, category_id: categoryId })
+                const full = await createActionCardFull({ ...form, category_id: categoryId, owner_id: responsable!.member_id })
                 onCreated({
                     id:          full.id,
                     title:       full.title,
@@ -359,54 +368,39 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
 
                     {/* Personnes */}
                     <section className="flex flex-col gap-3">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Personnes</p>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
 
-                        <div className="flex flex-col gap-1.5">
-                            <Label>Responsable *</Label>
-                            {form.owner_id ? (
-                                <div className="flex items-center justify-between px-2 py-1.5 rounded border border-border bg-muted/40">
-                                    <span className="text-sm">
-                                        {members.find(m => m.id === form.owner_id)?.first_name}{' '}
-                                        {members.find(m => m.id === form.owner_id)?.last_name}
-                                    </span>
-                                    <button onClick={() => set('owner_id', 0)} className="text-muted-foreground hover:text-foreground">
-                                        <X size={12} />
-                                    </button>
-                                </div>
-                            ) : (
-                                <MemberSearchInput
-                                    members={members}
-                                    partners={partners}
-                                    onSelect={m => set('owner_id', m.id)}
-                                />
-                            )}
+                        <div className="flex gap-2">
+                            <MemberSearchInput
+                                members={members.filter(m => !form.members.some(fm => fm.member_id === m.id))}
+                                partners={partners}
+                                onSelect={m => addMemberById(m.id)}
+                            />
+                            <Select value={roleToAdd} onValueChange={setRoleToAdd}>
+                                <SelectTrigger className="w-36 shrink-0"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                         </div>
 
-                        <div className="flex flex-col gap-1.5">
-                            <Label>Participants</Label>
-                            <div className="flex gap-2">
-                                <MemberSearchInput
-                                    members={members.filter(m => m.id !== form.owner_id && !form.members.some(fm => fm.member_id === m.id))}
-                                    partners={partners}
-                                    onSelect={m => addMemberById(m.id)}
-                                />
-                                <Select value={roleToAdd} onValueChange={setRoleToAdd}>
-                                    <SelectTrigger className="w-36 shrink-0"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            {form.members.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5 mt-1">
-                                    {form.members.map(fm => {
-                                        const m = members.find(m => m.id === fm.member_id)
-                                        return m ? (
-                                            <Popover key={fm.member_id}>
+                        {form.members.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                                {form.members.map(fm => {
+                                    const m = members.find(m => m.id === fm.member_id)
+                                    if (!m) return null
+                                    const isResponsable = fm.role === 'Responsable'
+                                    return (
+                                        <Popover key={fm.member_id}>
                                             <PopoverTrigger asChild>
-                                                <Badge variant="secondary" className="gap-1.5">
-                                                        {m.first_name} {m.last_name} · {fm.role}
-                                                        <button onClick={(e) => {e.stopPropagation();removeMember(fm.member_id)}}><X size={10} /></button>
+                                                <Badge
+                                                    variant={isResponsable ? 'default' : 'secondary'}
+                                                    className="gap-1.5 cursor-pointer"
+                                                >
+                                                    {m.first_name} {m.last_name} · {fm.role}
+                                                    <button onClick={e => { e.stopPropagation(); removeMember(fm.member_id) }}>
+                                                        <X size={10} />
+                                                    </button>
                                                 </Badge>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-64 p-3 flex flex-col gap-1">
@@ -414,13 +408,13 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
                                                 <p className="text-xs text-muted-foreground">{m.position ?? ''}</p>
                                                 <p className="text-xs text-muted-foreground">{m.email}</p>
                                             </PopoverContent>
-                                            </Popover>
-                                            
-                                        ) : null
-                                    })}
-                                </div>
-                            )}
-                        </div>
+                                        </Popover>
+                                    )
+                                })}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-muted-foreground italic">Aucun participant — ajoutez au moins un Responsable.</p>
+                        )}
                     </section>
 
                     <Separator />

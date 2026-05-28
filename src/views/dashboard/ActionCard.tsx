@@ -21,6 +21,7 @@ import {
     getAgreementActionCardsByCard, addAgreementToCard, removeAgreementFromCard,
     deleteActionCard,
     getCommentsFull, createComment, updateComment, deleteComment,
+    updateMemberRole,
 } from '@/lib/api'
 import type { Status, Category, Member, Partner, Project, ToDoList, ToDoItem, MemberActionCard, ProjectActionCard, AgreementActionCard, FinancialAgreement, CommentFull } from '@/lib/types'
 import { useCurrentUser } from '@/lib/userContext'
@@ -599,6 +600,17 @@ function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: De
 
     async function handleAddMemberById(memberId: number) {
         if (!memberId) return
+        if (roleToAdd === 'Responsable') {
+            // Rétrograder l'ancien responsable en Contributeur
+            const prevResponsable = memberLinks.find(l => l.role === 'Responsable')
+            if (prevResponsable) {
+                await updateMemberRole(prevResponsable.id, 'Contributeur')
+                setMemberLinks(prev => prev.map(l => l.id === prevResponsable.id ? { ...l, role: 'Contributeur' } : l))
+            }
+            await updateActionCard(card.id, { owner_id: memberId })
+            const newOwner = allMembers.find(m => m.id === memberId)
+            if (newOwner) onUpdated({ owner: { id: newOwner.id, first_name: newOwner.first_name, last_name: newOwner.last_name, position: newOwner.position } })
+        }
         const link = await addMemberToCard(card.id, memberId, roleToAdd)
         setMemberLinks(prev => [...prev, link as MemberLink])
     }

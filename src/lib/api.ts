@@ -250,6 +250,15 @@ export async function removeMemberFromCard(linkId: number): Promise<void> {
     await deleteRecord(T.member_action_card, linkId)
 }
 
+export async function updateMemberRole(linkId: number, role: string): Promise<void> {
+    if (USE_MOCK) {
+        const link = mockMemberActionCards.find(l => l.id === linkId)
+        if (link) link.role = role
+        return
+    }
+    await updateRecord(T.member_action_card, linkId, { role })
+}
+
 export async function addProjectToCard(cardId: number, projectId: number): Promise<ProjectActionCard & { project: Project }> {
     if (USE_MOCK) {
         const newId = Math.max(0, ...mockProjectActionCards.map(p => p.id)) + 1
@@ -767,6 +776,15 @@ export async function createActionCardFull(form: ActionCardCreateForm): Promise<
         }
         mockActionCards.push(card)
 
+        // Ajouter l'owner comme participant Responsable s'il n'est pas déjà dans la liste
+        const allParticipants = form.members.some(m => m.member_id === form.owner_id)
+            ? form.members
+            : [{ member_id: form.owner_id, role: 'Responsable' }, ...form.members]
+        const linkId = Math.max(0, ...mockMemberActionCards.map(l => l.id)) + 1
+        allParticipants.forEach((m, i) => {
+            mockMemberActionCards.push({ id: linkId + i, member_id: m.member_id, action_card_id: newId, role: m.role })
+        })
+
         const statusMap = new Map(mockStatuses.map(s => [s.id, s]))
         const categoryMap = new Map(mockCategories.map(c => [c.id, c]))
         const memberMap = new Map(mockMembers.map(m => [m.id, m]))
@@ -788,10 +806,13 @@ export async function createActionCardFull(form: ActionCardCreateForm): Promise<
     })
 
     // 2. Lier les participants en parallèle avec les autres relations
+    // L'owner est toujours ajouté comme Responsable s'il n'est pas déjà dans la liste
+    const allParticipants = form.members.some(m => m.member_id === form.owner_id)
+        ? form.members
+        : [{ member_id: form.owner_id, role: 'Responsable' }, ...form.members]
+
     await Promise.all([
-        form.members.length > 0
-            ? addRecords(T.member_action_card, form.members.map(m => ({ member_id: m.member_id, action_card_id: cardId, role: m.role })))
-            : Promise.resolve([]),
+        addRecords(T.member_action_card, allParticipants.map(m => ({ member_id: m.member_id, action_card_id: cardId, role: m.role }))),
         form.project_id
             ? addRecord(T.project_action_card, { project_id: form.project_id, action_card_id: cardId })
             : Promise.resolve(0),

@@ -234,6 +234,7 @@ export default function Categories() {
     // États des filtres
     const [selectedAxeIds,    setSelectedAxeIds]    = useState<number[]>([])
     const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([])
+    const [myCardsOnly,       setMyCardsOnly]       = useState(false)
     const [searchQuery,       setSearchQuery]       = useState('')
 
     // Multi-select
@@ -383,6 +384,9 @@ export default function Categories() {
         if (selectedAxeIds.length > 0) {
             const cardAxes = axisLinks.filter(l => l.action_card_id === card.id).map(l => l.axis_id)
             if (!selectedAxeIds.some(id => cardAxes.includes(id))) return false
+        }
+        if (myCardsOnly && currentUser) {
+            if (card.owner?.id !== currentUser.id) return false
         }
         if (selectedMemberIds.length > 0) {
             const cardMembers = memberLinks.filter(l => l.action_card_id === card.id).map(l => l.member_id)
@@ -576,14 +580,10 @@ export default function Categories() {
                 {/* Filtre "Mes cartes" */}
                 {currentUser && (
                     <Button
-                        variant={selectedMemberIds.includes(currentUser.id) ? 'default' : 'outline'}
+                        variant={myCardsOnly ? 'default' : 'outline'}
                         size="sm"
                         className="gap-1.5 rounded-md"
-                        onClick={() => setSelectedMemberIds(prev =>
-                            prev.includes(currentUser.id)
-                                ? prev.filter(id => id !== currentUser.id)
-                                : [...prev, currentUser.id]
-                        )}
+                        onClick={() => setMyCardsOnly(v => !v)}
                     >
                         <Avatar className="h-5 w-5 shrink-0">
                             <AvatarImage src={currentUser.profile_image} />
