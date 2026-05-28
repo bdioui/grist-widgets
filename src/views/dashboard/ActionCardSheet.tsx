@@ -363,12 +363,23 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
 
                         <div className="flex flex-col gap-1.5">
                             <Label>Responsable *</Label>
-                            <Select value={String(form.owner_id)} onValueChange={v => set('owner_id', Number(v))}>
-                                <SelectTrigger><SelectValue placeholder="Responsable" /></SelectTrigger>
-                                <SelectContent>
-                                    {members.map(m => <SelectItem key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
+                            {form.owner_id ? (
+                                <div className="flex items-center justify-between px-2 py-1.5 rounded border border-border bg-muted/40">
+                                    <span className="text-sm">
+                                        {members.find(m => m.id === form.owner_id)?.first_name}{' '}
+                                        {members.find(m => m.id === form.owner_id)?.last_name}
+                                    </span>
+                                    <button onClick={() => set('owner_id', 0)} className="text-muted-foreground hover:text-foreground">
+                                        <X size={12} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <MemberSearchInput
+                                    members={members}
+                                    partners={partners}
+                                    onSelect={m => set('owner_id', m.id)}
+                                />
+                            )}
                         </div>
 
                         <div className="flex flex-col gap-1.5">
