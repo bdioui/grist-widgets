@@ -826,7 +826,7 @@ type ProjectDetailSheetProps = {
     onMemberRemove?: (id: number) => void
 }
 
-function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, statuses, members, onMemberAdd, onMemberRemove }: ProjectDetailSheetProps) {
+function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, statuses, members, onMemberRemove }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [loading,      setLoading]      = useState(false)
     const [editing,      setEditing]      = useState(false)
