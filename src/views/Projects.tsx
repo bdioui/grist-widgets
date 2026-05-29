@@ -871,10 +871,10 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
         setTimeout(() => setCopied(false), 2000)
     }
 
-    function removeMembers() {
-    selectedMembers.forEach(m => {
-        handleRemoveMember(m.id)
-        })
+    async function removeMembers() {
+        for (const m of selectedMembers) {
+            await handleRemoveMember(m.id)
+        }
         setSelectedMembers([])
     }
 
