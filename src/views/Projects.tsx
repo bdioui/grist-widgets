@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -839,6 +839,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
     const [selectedMembers, setSelectedMembers] = useState<ProjectMember[]>([])
     const [copied, setCopied] = useState(false)
+    const pendingMemberIds = useRef(new Set<number>())
 
     useEffect(() => {
         if (!open || !project) return
@@ -858,7 +859,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                 setProjectMembers(members)
             })
             .finally(() => setLoading(false))
-    }, [open, project?.id])
+    }, [open, project?.id ?? 0])
 
     function copyEmails() {
         const emails = selectedMembers
@@ -930,9 +931,16 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
 
     async function handleAddMember(memberId: number) {
         if (!project) return
-        const link = await addProjectMember(project.id, memberId)
-        setProjectMembers(prev => [...prev, link])
-        onMemberAdd?.(project.id, memberId)
+        if (pendingMemberIds.current.has(memberId)) return
+        pendingMemberIds.current.add(memberId)
+        try {
+            const link = await addProjectMember(project.id, memberId)
+            setProjectMembers(prev =>
+                prev.some(pm => pm.member_id === memberId) ? prev : [...prev, link]
+            )
+        } finally {
+            pendingMemberIds.current.delete(memberId)
+        }
     }
 
     async function handleRemoveMember(linkId: number) {
