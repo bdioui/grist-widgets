@@ -16,6 +16,7 @@ import { type MemberFull, type Partner, type Lab, type Group, type GroupMember }
 import { exportToCsv } from '@/lib/utils'
 import {ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger,}  from '@/components/ui/context-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import SearchInput from '@/components/SearchInput'
 
 // --- Constantes ---
 
@@ -148,31 +149,28 @@ function MemberFormSheet(props: MemberFormSheetProps) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-                <Label>Partenaire</Label>
-                <Select
-                    value={form.partner_id ? String(form.partner_id) : '0'}
-                    onValueChange={v => setField('partner_id', Number(v))}
-                >
-                    <SelectTrigger><SelectValue placeholder="Aucun partenaire" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="0">Aucun partenaire</SelectItem>
-                        {props.partners.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
+                <Label>Partenaire*</Label>
+
+                <SearchInput
+                    data={props.partners}
+                    onSelect={p => setField('partner_id', p.id)}
+                    getLabel={p => p.name}
+                    placeholder="Rechercher un partenaire..."
+                    value={props.partners.find(p => p.id === form.partner_id)?.name}
+                />
             </div>
+
+
 
             <div className="flex flex-col gap-1.5">
                 <Label>Laboratoire</Label>
-                <Select
-                    value={form.lab_id ? String(form.lab_id) : '0'}
-                    onValueChange={v => setField('lab_id', Number(v))}
-                >
-                    <SelectTrigger><SelectValue placeholder="Aucun laboratoire" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="0">Aucun laboratoire</SelectItem>
-                        {props.labs.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
+                <SearchInput
+                    data={props.labs}
+                    onSelect={l => setField('lab_id', l.id)}
+                    getLabel={l => l.name}
+                    placeholder="Rechercher un partenaire..."
+                    value={props.labs.find(l => l.id === form.lab_id)?.name}
+                />
             </div>
 
             <div className="flex flex-col gap-1.5">

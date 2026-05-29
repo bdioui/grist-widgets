@@ -13,16 +13,20 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import {
     getProjectCalls, getProjects, getAxes, getStatuses, getPartners, getFinancialAgreements,
     addProjectCall, updateProjectCall, deleteProjectCall,
     addProject, updateProject, deleteProject,
-    getAgreementsByProject, addAgreement, updateAgreement, deleteAgreement,
+    getAgreementsByProject, addAgreement, updateAgreement, deleteAgreement,addAgreementMember, 
+    getProjectMembers, addProjectMember, removeProjectMember, removeAgreementMember, 
+    getMembers
 } from '@/lib/api'
-import type { ProjectCall, Project, FinancialAgreement, Axis, Status, Partner } from '@/lib/types'
+import type { ProjectCall, Project, FinancialAgreement, Axis, Status, Partner, Member, ProjectMember } from '@/lib/types'
+import { Checkbox } from '@/components/ui/checkbox'
+import SearchInput from '@/components/SearchInput'
 
 // --- Couleurs de statut ---
 
@@ -418,7 +422,7 @@ type ProjectSheetProps = {
     defaultCallId?: number
 }
 
-function ProjectSheet({ open, onClose, onSaved, projectCalls, statuses, defaultCallId }: ProjectSheetProps) {
+function ProjectSheet({ open, onClose, onSaved, projectCalls, statuses, defaultCallId}: ProjectSheetProps) {
     const projectStatuses = statuses.filter(s => s.context === 'project')
 
     const [title,       setTitle]       = useState('')
@@ -693,12 +697,14 @@ function AgreementForm({ partners, statuses, projectId, initial, onSaved, onCanc
             <div className="flex gap-3">
                 <div className="flex flex-col gap-1.5 flex-1">
                     <Label className="text-xs">Partenaire *</Label>
-                    <Select value={partnerId ? String(partnerId) : ''} onValueChange={v => setPartnerId(Number(v))}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Partenaire" /></SelectTrigger>
-                        <SelectContent>
-                            {partners.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+
+                    <SearchInput
+                        data={partners}
+                        onSelect={p => setPartnerId(p.id)}
+                        getLabel={p => p.name}
+                        placeholder="Rechercher un partenaire..."
+                        value={partners.find(p => p.id === partnerId)?.name}
+                    />
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1">
                     <Label className="text-xs">Statut</Label>
@@ -736,6 +742,71 @@ function AgreementForm({ partners, statuses, projectId, initial, onSaved, onCanc
     )
 }
 
+
+// --- Composant recherche membre avec suggestions ---
+
+type MemberSearchInputProps = {
+    members: Member[]
+    partners: Partner[]
+    onSelect: (member: Member) => void
+}
+
+function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputProps) {
+    const [query, setQuery]   = useState('')
+    const [open, setOpen]     = useState(false)
+    const partnerMap = new Map(partners.map(p => [p.id, p]))
+
+    const filtered = query.trim().length === 0 ? members : members.filter(m => {
+        const full = `${m.first_name} ${m.last_name}`.toLowerCase()
+        const partner = partnerMap.get(m.partner_id)?.name.toLowerCase() ?? ''
+        return full.includes(query.toLowerCase()) || partner.includes(query.toLowerCase())
+    })
+
+    function select(m: Member) {
+        onSelect(m)
+        setQuery('')
+        setOpen(false)
+    }
+
+    return (
+        <div className="relative flex-1">
+            <Input
+                value={query}
+                onChange={e => { setQuery(e.target.value); setOpen(true) }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                placeholder="Rechercher un membre..."
+                className="h-8 text-xs"
+            />
+            {open && filtered.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden">
+                    <ul className="max-h-48 overflow-y-auto py-1">
+                        {filtered.map(m => {
+                            const partner = partnerMap.get(m.partner_id)
+                            return (
+                                <li
+                                    key={m.id}
+                                    onMouseDown={() => select(m)}
+                                    className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted"
+                                >
+                                    <span>{m.first_name} {m.last_name}</span>
+                                    {partner && (
+                                        <span
+                                            className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
+                                            style={partner.color ? { backgroundColor: partner.color } : {}}
+                                        >
+                                            {partner.name}
+                                        </span>
+                                    )}
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </div>
+            )}
+        </div>
+    )
+}
 // --- Sheet détail projet ---
 
 type ProjectDetailSheetProps = {
@@ -750,9 +821,12 @@ type ProjectDetailSheetProps = {
     projectCalls: ProjectCall[]
     axes: Axis[]
     statuses: Status[]
+    members: Member[]
+    onMemberAdd?: (projectId: number, memberId: number) => void
+    onMemberRemove?: (id: number) => void
 }
 
-function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, statuses }: ProjectDetailSheetProps) {
+function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, statuses, members, onMemberAdd, onMemberRemove }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [loading,      setLoading]      = useState(false)
     const [editing,      setEditing]      = useState(false)
@@ -762,6 +836,20 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     const [saving,       setSaving]       = useState(false)
     const [confirming,   setConfirming]   = useState(false)
     const [deleting,     setDeleting]     = useState(false)
+    const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
+    const [selectOn, setSelectOn] = useState(false)
+    const [selectedMembers, setSelectedMembers] = useState<ProjectMember[]>([])
+    const [copied, setCopied] = useState(false)
+    const [deleted, setDeleted] = useState(false)
+
+    useEffect(() => {
+    if (!project) return
+    async function load() {
+        const members = await getProjectMembers(project!.id)
+        setProjectMembers(members)
+    }
+    load()
+    }, [project])
 
     useEffect(() => {
         if (!open || !project) return
@@ -775,6 +863,33 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
             .then(setAgreements)
             .finally(() => setLoading(false))
     }, [open, project?.id])
+
+    function copyEmails() {
+        const emails = selectedMembers
+            .map(pm => members.find(m => m.id === pm.member_id)?.email ?? '')
+            .filter(e => e.length > 0)
+            .join(', ')
+
+        navigator.clipboard.writeText(emails)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    function removeMembers() {
+    selectedMembers.forEach(m => {
+        handleRemoveMember(m.id)
+        })
+        setDeleted(false)
+        setSelectedMembers([])
+    }
+
+    function toggleSelect(pm: ProjectMember) {
+        setSelectedMembers(prev => 
+            prev.find(m => m.id === pm.id)
+            ? prev.filter(m => m.id !== pm.id)
+            : [...prev, pm]
+        )
+    }
 
     async function saveProject() {
         if (!draft || !project) return
@@ -818,7 +933,23 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
         }
     }
 
+    async function handleAddMember(memberId: number) {
+        if (!project) return
+        const link = await addProjectMember(project.id, memberId)
+        setProjectMembers(prev => [...prev, link])
+        onMemberAdd?.(project.id, memberId)
+    }
+
+    async function handleRemoveMember(linkId: number) {
+        await removeProjectMember(linkId)
+        setProjectMembers(prev => prev.filter(pm => pm.id !== linkId))
+        onMemberRemove?.(linkId)
+    }
+
     if (!project) return null
+
+    const linkedMemberIds = projectMembers.map(pm => pm.member_id)
+    const availableMembers = members.filter(m => !linkedMemberIds.includes(m.id))
 
     const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
     const totalGrant  = agreements.reduce((s, a) => s + a.grant, 0)
@@ -967,6 +1098,73 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
 
                     <Separator />
 
+                    {/* Participants */}
+                    <section className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
+                            {selectedMembers.length > 0 && (
+                                <div className="flex items-center gap-1">
+                                    {selectedMembers.length > 1 && (
+                                        <span className="text-xs text-muted-foreground">{selectedMembers.length} sélectionnés</span>
+                                    )}
+                                    <Button variant="outline" className="rounded-md" size="sm" onClick={copyEmails}>
+                                        {copied ? <CheckIcon size={13} /> : <Copy size={13} />}
+                                    </Button>
+                                    <Button variant="outline" className="rounded-md" size="sm" onClick={removeMembers}>
+                                        <Trash size={13} />
+                                    </Button>
+                                </div>
+                            )}
+                            
+                        </div>
+
+                        {projectMembers.length > 0 && (
+                            <div className="flex flex-col gap-1">
+                                {projectMembers.map(pm => {
+                                    const member = members.find(m => m.id === pm.member_id)
+                                    if (!member) return null
+                                    const partner = partners.find(p => p.id === member.partner_id)
+                                    return (
+                                        <div key={pm.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group cursor-pointer">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                 <Checkbox onClick={() => toggleSelect(pm)} />
+                                                <span className="text-sm">{member.first_name} {member.last_name}</span>
+                                                {partner && (
+                                                    <span
+                                                        className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
+                                                        style={partner.color ? { backgroundColor: partner.color } : {}}
+                                                    >
+                                                        {partner.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div
+                                                onClick={e => { e.stopPropagation(); handleRemoveMember(pm.id) }}
+                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive ml-2 cursor-pointer"
+                                            >
+                                                <X size={13} />
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+
+                        {availableMembers.length > 0 && (
+                            <MemberSearchInput
+                                members={availableMembers}
+                                partners={partners}
+                                onSelect={m => handleAddMember(m.id)}
+                            />
+                        )}
+
+                        {projectMembers.length === 0 && (
+                            <p className="text-xs text-muted-foreground italic">Aucun participant</p>
+                        )}
+                    </section>
+                    <Separator />
+
+
                     {/* Conventions */}
                     <section className="flex flex-col gap-3">
                         <div className="flex items-center justify-between">
@@ -1053,6 +1251,7 @@ export default function Projects() {
     const [axes,          setAxes]          = useState<Axis[]>([])
     const [statuses,      setStatuses]      = useState<Status[]>([])
     const [partners,      setPartners]      = useState<Partner[]>([])
+    const [members,       setMembers]       = useState<Member[]>([])
     const [allAgreements, setAllAgreements] = useState<FinancialAgreement[]>([])
     const [loading,       setLoading]       = useState(true)
 
@@ -1072,8 +1271,8 @@ export default function Projects() {
     const [confirmingDeleteProjects, setConfirmingDeleteProjects] = useState(false)
 
     useEffect(() => {
-        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements()])
-            .then(([pcs, ps, axs, sts, pts, agrs]) => {
+        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers()])
+            .then(([pcs, ps, axs, sts, pts, agrs, m]) => {
                 const axisMap = new Map((axs as Axis[]).map(a => [a.id, a]))
 
                 const fullCalls: ProjectCallFull[] = (pcs as ProjectCall[]).map(pc => ({
@@ -1093,6 +1292,7 @@ export default function Projects() {
                 setProjectCalls(fullCalls)
                 setProjects(fullProjects)
                 setAllAgreements(agrs as FinancialAgreement[])
+                setMembers(m)
             })
             .finally(() => setLoading(false))
     }, [])
@@ -1124,6 +1324,22 @@ export default function Projects() {
         const call = projectCalls.find(pc => pc.id === p.project_call_id)!
         setProjects(prev => [...prev, { ...p, projectCall: call }])
         setProjectSheetOpen(false)
+    }
+
+    async function handleProjectMemberAdd(projectId: number, memberId: number) {
+        await addProjectMember(projectId, memberId)
+    }
+
+     async function handleProjectMemberRemove(id: number) {
+        await removeProjectMember(id)
+    }
+
+     async function handleAgreementMemberAdd(projectId: number, memberId: number) {
+        await addAgreementMember(projectId, memberId)
+    }
+
+     async function handleAgreementMemberRemove(id: number) {
+        await removeAgreementMember(id)
     }
 
     function handleCallCreated(pc: ProjectCall) {
@@ -1473,6 +1689,9 @@ export default function Projects() {
                 projectCalls={projectCalls}
                 axes={axes}
                 statuses={statuses}
+                members={members}
+                onMemberAdd={handleProjectMemberAdd}
+                onMemberRemove={handleProjectMemberRemove}
             />
         </div>
     )

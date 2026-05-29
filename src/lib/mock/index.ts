@@ -7,7 +7,9 @@ import type {
     Group,
     GroupMember,
     User,
-    Comment
+    Comment,
+    ProjectMember,
+    AgreementMember
 } from '@/lib/types'
 
 export const mockUser: User = {
@@ -410,4 +412,39 @@ export const mockComments: Comment[] = [
     // Carte 14
     { id: 12, owner_id: 12, action_card_id: 14, content: 'Première version de l\'article envoyée aux co-auteurs pour relecture.', timestamp: '2025-10-20T08:00:00' },
     { id: 13, owner_id: 13, action_card_id: 14, parent_comment_id: 12, content: 'Commentaires envoyés par mail, quelques ajustements sur la méthodologie.', timestamp: '2025-10-22T17:30:00' },
+]
+
+export const mockProjectMembers: ProjectMember[] = [
+    // Projet 1 — Formation Numérique
+    { id: 1, project_id: 1, member_id: 1 },  // Marie Dupont (coordinatrice)
+    { id: 2, project_id: 1, member_id: 3 },  // Claire Bernard (gestionnaire)
+    { id: 3, project_id: 1, member_id: 7 },  // Isabelle Petit (partenariats)
+    // Projet 2 — Recherche IA
+    { id: 4, project_id: 2, member_id: 2 },  // Thomas Martin
+    { id: 5, project_id: 2, member_id: 5 },  // Sophie Girard
+    { id: 6, project_id: 2, member_id: 6 },  // Julien Moreau (R&D)
+    { id: 7, project_id: 2, member_id: 4 },  // Antoine Leroy (doctorant)
+    // Projet 3 — Mobilités Europe
+    { id: 8, project_id: 3, member_id: 1 },  // Marie Dupont
+    { id: 9, project_id: 3, member_id: 5 },  // Sophie Girard
+    // Projet 4 — Transfert Technologique
+    { id: 10, project_id: 4, member_id: 2 }, // Thomas Martin
+    { id: 11, project_id: 4, member_id: 6 }, // Julien Moreau
+    { id: 12, project_id: 4, member_id: 7 }, // Isabelle Petit
+]
+
+export const mockAgreementMembers: AgreementMember[] = [
+    // Convention 1 — Entreprise A (projet 1)
+    { id: 1, agreement_id: 1, member_id: 1 }, // Marie Dupont
+    { id: 2, agreement_id: 1, member_id: 7 }, // Isabelle Petit
+    // Convention 2 — Association B (projet 2)
+    { id: 3, agreement_id: 2, member_id: 2 }, // Thomas Martin
+    { id: 4, agreement_id: 2, member_id: 5 }, // Sophie Girard
+    // Convention 3 — Institut Recherche (projet 3)
+    { id: 5, agreement_id: 3, member_id: 1 }, // Marie Dupont
+    // Convention 4 — Fondation E (projet 4)
+    { id: 6, agreement_id: 4, member_id: 6 }, // Julien Moreau
+    { id: 7, agreement_id: 4, member_id: 2 }, // Thomas Martin
+    // Convention 5 — Collectivité D (projet 2)
+    { id: 8, agreement_id: 5, member_id: 5 }, // Sophie Girard
 ]

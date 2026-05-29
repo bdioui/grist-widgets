@@ -10,7 +10,9 @@ import type {
     MemberActionCard, ProjectActionCard, AgreementActionCard, PartnerCardFull,
     Group,
     GroupMember,
-    Comment, CommentFull
+    Comment, CommentFull,
+    ProjectMember,
+    AgreementMember
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -199,6 +201,10 @@ export function normalizeProjects(rows: Record<string, unknown>[]): Project[] {
     }))
 }
 
+export function normalizeProjectMembers(rows: Record<string, unknown>[]): ProjectMember[] {
+    return rows.map(r => ({ id: num(r.id), member_id: num(r.member_id), project_id: num(r.project_id) }))
+}
+
 export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): FinancialAgreement[] {
     return rows.map(r => ({
         id: num(r.id),
@@ -211,6 +217,10 @@ export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): F
         grant: num(r.grant),
         signed_date: str(r.signed_date),
     }))
+}
+
+export function normalizeAgreementMembers(rows: Record<string, unknown>[]): AgreementMember[] {
+    return rows.map(r => ({ id: num(r.id), member_id: num(r.member_id), agreement_id: num(r.agreement_id) }))
 }
 
 export function normalizePhds(rows: Record<string, unknown>[]): Phd[] {

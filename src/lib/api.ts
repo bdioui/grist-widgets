@@ -5,7 +5,8 @@ import {
     mockFinancialAgreements, mockPhds, mockMobilityGrants,
     mockIndicatorDefinitions, mockBudgetCategories, mockBudgetDetails,
     mockToDoLists, mockToDoItems, mockMemberActionCards, mockAxisActionCards, mockProjectActionCards,
-    mockAgreementActionCards, mockGroup, mockGroupMember, mockComments
+    mockAgreementActionCards, mockGroup, mockGroupMember, mockComments,
+    mockProjectMembers, mockAgreementMembers
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -16,7 +17,7 @@ import {
     normalizeToDoLists, normalizeToDoItems,
     normalizeMemberActionCards, normalizeProjectActionCards, normalizeAgreementActionCards,
     normalizePartnerCardsFull, normalizeLabs, normalizePartnerLabs, normalizeLabCardsFull,
-    normalizeGroup, normalizeGroupMember, normalizeComments, normalizeCommentsFull
+    normalizeGroup, normalizeGroupMember, normalizeComments, normalizeCommentsFull, normalizeProjectMembers, normalizeAgreementMembers
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -24,7 +25,7 @@ import type {
     FinancialAgreement, Phd, MobilityGrant,
     IndicatorDefinition, BudgetCategory, BudgetDetail,
     ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard, MemberFull,
-    Group, GroupMember, Comment, CommentFull
+    Group, GroupMember, Comment, CommentFull, ProjectMember, AgreementMember
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -56,7 +57,9 @@ const T = {
     partner_lab: 'Partner_lab',
     group: 'Group',
     group_member: 'Group_member',
-    comment: 'Comment'
+    comment: 'Comment',
+    project_member: 'Project_member',
+    agreement_member: 'Agreement_member'
 }
 
 // --- Tables de référence ---
@@ -619,6 +622,35 @@ export async function deleteProject(id: number): Promise<void> {
     await deleteRecord(T.project, id)
 }
 
+export async function getProjectMembers(projectId: number): Promise<ProjectMember[]> {
+    if (USE_MOCK) {
+        return mockProjectMembers.filter(pm => pm.project_id === projectId)
+    }
+    const rows = await fetchTable(T.project_member)
+    return normalizeProjectMembers(rows).filter(pm => pm.project_id === projectId)
+}
+
+export async function addProjectMember(projectId: number, memberId: number): Promise<ProjectMember> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockProjectMembers.map(p => p.id)) + 1
+        const newProjectMember: ProjectMember = { id: newId, project_id: projectId, member_id: memberId }
+        mockProjectMembers.push(newProjectMember)
+        return newProjectMember
+    }
+    const id = await addRecord(T.project_member, { project_id: projectId, member_id: memberId })
+    return { id, project_id: projectId, member_id: memberId }
+}
+
+export async function removeProjectMember(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockProjectMembers.findIndex(mp => mp.id === id)
+        if (i !== -1) {
+            mockProjectMembers.splice(i, 1)
+        } return
+    }
+    await deleteRecord(T.project_member, id)
+}
+
 // --- Conventions financières ---
 
 export async function getAgreementsByProject(projectId: number): Promise<(FinancialAgreement & { partner: Partner })[]> {
@@ -634,6 +666,34 @@ export async function getAgreementsByProject(projectId: number): Promise<(Financ
         .filter(a => a.project_id === projectId)
         .map(a => ({ ...a, partner: partnerMap.get(a.partner_id)! }))
         .filter(a => a.partner)
+}
+
+export async function getAgreementMembers(agreementId: number): Promise<AgreementMember[]> {
+    if (USE_MOCK) {
+        return mockAgreementMembers.filter(am => am.agreement_id === agreementId)
+    }
+    const rows = await fetchTable(T.agreement_member)
+    return normalizeAgreementMembers(rows).filter(am => am.agreement_id === agreementId)
+}
+
+export async function addAgreementMember(agreementId: number, memberId: number): Promise<AgreementMember> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockAgreementMembers.map(a => a.id)) + 1
+        const newAgreementMember: AgreementMember = { id: newId, member_id: memberId, agreement_id: agreementId }
+        mockAgreementMembers.push(newAgreementMember)
+        return newAgreementMember
+    }
+    const id = await addRecord(T.agreement_member, { member_id: memberId, agreement_id: agreementId })
+    return { id, member_id: memberId, agreement_id: agreementId }
+}
+
+export async function removeAgreementMember(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockAgreementMembers.findIndex(ma => ma.id === id)
+        if (i !== -1) mockAgreementMembers.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.agreement_member, id)
 }
 
 export async function addAgreement(fields: Omit<FinancialAgreement, 'id'>): Promise<FinancialAgreement> {

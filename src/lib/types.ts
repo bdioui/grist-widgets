@@ -1,5 +1,7 @@
 // --- Tables de référence ---
 
+import { number } from "framer-motion"
+
 export type User = {
     first_name: string
     last_name: string
@@ -68,6 +70,18 @@ export type GroupMember = {
 export type Group = {
     id: number
     name: string
+}
+
+export type ProjectMember = {
+    id: number
+    member_id: number
+    project_id: number
+}
+
+export type AgreementMember = {
+    id: number
+    member_id: number
+    agreement_id: number
 }
 
 export type Axis = {
