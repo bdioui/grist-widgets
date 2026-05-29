@@ -841,24 +841,22 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     const [copied, setCopied] = useState(false)
 
     useEffect(() => {
-    if (!project) return
-    async function load() {
-        const members = await getProjectMembers(project!.id)
-        setProjectMembers(members)
-    }
-    load()
-    }, [project])
-
-    useEffect(() => {
         if (!open || !project) return
         setDraft({ ...project })
         setEditing(false)
         setShowAddForm(false)
         setEditingAgreement(null)
         setConfirming(false)
+        setSelectedMembers([])
         setLoading(true)
-        getAgreementsByProject(project.id)
-            .then(setAgreements)
+        Promise.all([
+            getAgreementsByProject(project.id),
+            getProjectMembers(project.id),
+        ])
+            .then(([agreements, members]) => {
+                setAgreements(agreements as AgreementFull[])
+                setProjectMembers(members)
+            })
             .finally(() => setLoading(false))
     }, [open, project?.id])
 
