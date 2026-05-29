@@ -1321,13 +1321,6 @@ export default function Projects() {
         setProjectSheetOpen(false)
     }
 
-    async function handleProjectMemberAdd(projectId: number, memberId: number) {
-        await addProjectMember(projectId, memberId)
-    }
-
-     async function handleProjectMemberRemove(id: number) {
-        await removeProjectMember(id)
-    }
 
 
     function handleCallCreated(pc: ProjectCall) {
@@ -1678,8 +1671,6 @@ export default function Projects() {
                 axes={axes}
                 statuses={statuses}
                 members={members}
-                onMemberAdd={handleProjectMemberAdd}
-                onMemberRemove={handleProjectMemberRemove}
             />
         </div>
     )
