@@ -20,8 +20,8 @@ import {
     getProjectCalls, getProjects, getAxes, getStatuses, getPartners, getFinancialAgreements,
     addProjectCall, updateProjectCall, deleteProjectCall,
     addProject, updateProject, deleteProject,
-    getAgreementsByProject, addAgreement, updateAgreement, deleteAgreement,addAgreementMember, 
-    getProjectMembers, addProjectMember, removeProjectMember, removeAgreementMember, 
+    getAgreementsByProject, addAgreement, updateAgreement, deleteAgreement,
+    getProjectMembers, addProjectMember, removeProjectMember,
     getMembers
 } from '@/lib/api'
 import type { ProjectCall, Project, FinancialAgreement, Axis, Status, Partner, Member, ProjectMember } from '@/lib/types'
@@ -877,7 +877,6 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     selectedMembers.forEach(m => {
         handleRemoveMember(m.id)
         })
-        setDeleted(false)
         setSelectedMembers([])
     }
 
