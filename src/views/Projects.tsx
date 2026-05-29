@@ -837,10 +837,8 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     const [confirming,   setConfirming]   = useState(false)
     const [deleting,     setDeleting]     = useState(false)
     const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
-    const [selectOn, setSelectOn] = useState(false)
     const [selectedMembers, setSelectedMembers] = useState<ProjectMember[]>([])
     const [copied, setCopied] = useState(false)
-    const [deleted, setDeleted] = useState(false)
 
     useEffect(() => {
     if (!project) return
@@ -1334,13 +1332,6 @@ export default function Projects() {
         await removeProjectMember(id)
     }
 
-     async function handleAgreementMemberAdd(projectId: number, memberId: number) {
-        await addAgreementMember(projectId, memberId)
-    }
-
-     async function handleAgreementMemberRemove(id: number) {
-        await removeAgreementMember(id)
-    }
 
     function handleCallCreated(pc: ProjectCall) {
         const axis = axes.find(a => a.id === pc.axis_id) ?? { id: 0, name: 'Inconnu', description: '' }

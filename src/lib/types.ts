@@ -1,6 +1,5 @@
 // --- Tables de référence ---
 
-import { number } from "framer-motion"
 
 export type User = {
     first_name: string
