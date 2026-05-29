@@ -1114,20 +1114,22 @@ export default function Members() {
 
             {/* Sheet création */}
             <Sheet open={showCreate} onOpenChange={v => { if (!v) setShowCreate(false) }}>
-                <SheetContent side="right" showCloseButton={false} className="!w-[480px] p-0">
-                    <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
+                <SheetContent side="right" showCloseButton={false} className="!w-[480px] p-0 flex flex-col">
+                    <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between shrink-0">
                         <SheetTitle>Nouveau contact</SheetTitle>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowCreate(false)}>
                             <X size={14} />
                         </Button>
                     </SheetHeader>
-                    <MemberFormSheet
-                        mode="create"
-                        partners={partners}
-                        labs={labs}
-                        onCreated={handleCreated}
-                        onClose={() => setShowCreate(false)}
-                    />
+                    <div className="flex-1 overflow-y-auto">
+                        <MemberFormSheet
+                            mode="create"
+                            partners={partners}
+                            labs={labs}
+                            onCreated={handleCreated}
+                            onClose={() => setShowCreate(false)}
+                        />
+                    </div>
                 </SheetContent>
             </Sheet>
 

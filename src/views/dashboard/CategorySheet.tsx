@@ -79,7 +79,7 @@ export default function CategorySheet({ open, category, onClose, onSaved, onDele
                     <SheetTitle>{isEdit ? 'Modifier la catégorie' : 'Nouvelle catégorie'}</SheetTitle>
                 </SheetHeader>
 
-                <div className="flex-1 px-6 py-5 flex flex-col gap-4">
+                <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
                     <div className="flex flex-col gap-1.5">
                         <Label>Titre *</Label>
                         <Input

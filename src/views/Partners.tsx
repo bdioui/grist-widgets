@@ -1384,23 +1384,27 @@ export default function Partners() {
 
             {/* Partner create sheet */}
             <Sheet open={showCreateP} onOpenChange={v => { if (!v) setShowCreateP(false) }}>
-                <SheetContent side="right" showCloseButton={false} className="!w-[480px] p-0">
-                    <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
+                <SheetContent side="right" showCloseButton={false} className="!w-[480px] p-0 flex flex-col">
+                    <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between shrink-0">
                         <SheetTitle>Nouveau partenaire</SheetTitle>
                         <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={() => setShowCreateP(false)}><X size={14} /></Button>
                     </SheetHeader>
-                    <PartnerFormSheet mode="create" onCreated={handlePartnerCreated} onClose={() => setShowCreateP(false)} />
+                    <div className="flex-1 overflow-y-auto">
+                        <PartnerFormSheet mode="create" onCreated={handlePartnerCreated} onClose={() => setShowCreateP(false)} />
+                    </div>
                 </SheetContent>
             </Sheet>
 
             {/* Lab create sheet */}
             <Sheet open={showCreateL} onOpenChange={v => { if (!v) setShowCreateL(false) }}>
-                <SheetContent side="right" showCloseButton={false} className="!w-[480px] p-0">
-                    <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
+                <SheetContent side="right" showCloseButton={false} className="!w-[480px] p-0 flex flex-col">
+                    <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between shrink-0">
                         <SheetTitle>Nouveau laboratoire</SheetTitle>
                         <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={() => setShowCreateL(false)}><X size={14} /></Button>
                     </SheetHeader>
-                    <LabFormSheet mode="create" onCreated={handleLabCreated} onClose={() => setShowCreateL(false)} />
+                    <div className="flex-1 overflow-y-auto">
+                        <LabFormSheet mode="create" onCreated={handleLabCreated} onClose={() => setShowCreateL(false)} />
+                    </div>
                 </SheetContent>
             </Sheet>
 
