@@ -6,13 +6,16 @@ import type {
     ActionCard, ActionCardFull,
     ProjectCall, Project, FinancialAgreement,
     Phd, MobilityGrant, ToDoList, ToDoItem,
-    IndicatorDefinition, BudgetCategory, BudgetDetail,
+    Kpi, BudgetCategory, BudgetDetail,
     MemberActionCard, ProjectActionCard, AgreementActionCard, PartnerCardFull,
     Group,
     GroupMember,
     Comment, CommentFull,
     ProjectMember,
-    AgreementMember
+    AgreementMember,
+    KpiEntry,
+    ProjectPartner,
+    ProjectMilestone,
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -55,13 +58,15 @@ export function normalizeMembers(rows: Record<string, unknown>[]): Member[] {
         genre: str(r.genre),
         status: str(r.status),
         profile_image: str(r.profile_image),
+        is_staff: Boolean(r.is_staff),
     }))
 }
 
 export function normalizeGroup(rows: Record<string, unknown>[]): Group[] {
     return rows.map(r => ({
         id: num(r.id),
-        name: str(r.name)
+        name: str(r.name),
+        owner_id: nullable(r.owner_id)
     }))
 }
 
@@ -197,12 +202,35 @@ export function normalizeProjects(rows: Record<string, unknown>[]): Project[] {
         title: str(r.title),
         description: str(r.description),
         budget: num(r.budget),
-        grant: num(r.grant),
+        start_date: str(r.start_date),
+        end_date: str(r.end_date),
+    }))
+}
+
+export function normalizeProjectPartners(rows: Record<string, unknown>[]): ProjectPartner[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        project_id: num(r.project_id),
+        partner_id: num(r.partner_id),
+        role: str(r.role),
+        amount: nullable(r.amount),
+        label: r.label ? str(r.label) : null,
+    }))
+}
+
+export function normalizeProjectMilestones(rows: Record<string, unknown>[]): ProjectMilestone[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        project_id: num(r.project_id),
+        title: str(r.title),
+        description: str(r.description),
+        due_date: str(r.due_date),
+        status_id: num(r.status_id),
     }))
 }
 
 export function normalizeProjectMembers(rows: Record<string, unknown>[]): ProjectMember[] {
-    return rows.map(r => ({ id: num(r.id), member_id: num(r.member_id), project_id: num(r.project_id) }))
+    return rows.map(r => ({ id: num(r.id), member_id: num(r.member_id), project_id: num(r.project_id), role: str(r.role) }))
 }
 
 export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): FinancialAgreement[] {
@@ -243,13 +271,27 @@ export function normalizeMobilityGrants(rows: Record<string, unknown>[]): Mobili
     }))
 }
 
-export function normalizeIndicatorDefinitions(rows: Record<string, unknown>[]): IndicatorDefinition[] {
+export function normalizeKpis(rows: Record<string, unknown>[]): Kpi[] {
     return rows.map(r => ({
         id: num(r.id),
         label: str(r.label),
         unit: str(r.unit),
         definition: str(r.definition),
         dimension: str(r.dimension),
+    }))
+}
+
+export function normalizeKpiEntries(rows: Record<string, unknown>[]): KpiEntry[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        project_id: num(r.project_id),
+        kpi_id: num(r.kpi_id),
+        member_id: num(r.member_id),
+        value: num(r.value),
+        comment: str(r.comment),
+        date: str(r.date),
+        year: str(r.year),
+        author_id: num(r.author_id),
     }))
 }
 

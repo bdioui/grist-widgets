@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { type MemberFull, type Partner, type Lab, type Group, type GroupMember } from '@/lib/types'
@@ -17,6 +17,8 @@ import { exportToCsv } from '@/lib/utils'
 import {ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger,}  from '@/components/ui/context-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import SearchInput from '@/components/SearchInput'
+import { useCurrentUser } from '@/lib/userContext'
+
 
 // --- Constantes ---
 
@@ -45,6 +47,7 @@ type MemberForm = {
     partner_id:    number
     lab_id:        number
     profile_image: string
+    is_staff:      boolean
 }
 
 const EMPTY_FORM: MemberForm = {
@@ -58,6 +61,7 @@ const EMPTY_FORM: MemberForm = {
     partner_id:    0,
     lab_id:        0,
     profile_image: '',
+    is_staff:      false,
 }
 
 // --- Formulaire création / édition ---
@@ -81,6 +85,7 @@ function MemberFormSheet(props: MemberFormSheetProps) {
                 partner_id:    props.member.partner_id,
                 lab_id:        props.member.lab_id,
                 profile_image: props.member.profile_image,
+                is_staff:      props.member.is_staff,
             }
             : EMPTY_FORM
     )
@@ -200,6 +205,15 @@ function MemberFormSheet(props: MemberFormSheetProps) {
                         />
                     )}
                 </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+                <Checkbox
+                    id="is_staff"
+                    checked={form.is_staff}
+                    onCheckedChange={v => setField('is_staff', Boolean(v))}
+                />
+                <Label htmlFor="is_staff">Membre de l'équipe (staff)</Label>
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -525,10 +539,22 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                        
                         <div className="flex flex-col min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
-                                <CardTitle className="text-sm leading-snug">
-                                    {member.first_name} {member.last_name}
-                                </CardTitle>
-                                <Badge variant="outline" className="text-xs shrink-0">{member.status}</Badge>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                    <CardTitle className="text-sm leading-snug truncate">
+                                        {member.first_name} {member.last_name}
+                                    </CardTitle>
+                                    <div className='bg-green-100 pr-2 rounded-full text-[10px] text-green-700 flex items-center'>
+                                    {member.is_staff && (
+                                        <>
+                                        <BadgeCheck className="text-[10px] px-1.5 py-0 shrink-0 border-green-200 hover:bg-blue-100" />
+                                        Equipe Iris
+                                        </>
+                                        
+                                    )}          
+                                    </div>
+                                </div>
+                                
+                                <Badge variant="outline" className="text-xs shrink-0">{member.status}</Badge> 
                             </div>
                             <CardDescription className="text-xs">{member.position}</CardDescription>
                         </div>
@@ -711,6 +737,13 @@ export default function Members() {
     const [selectedMembers, setSelectedMembers] = useState<MemberFull[]>([])
     const [confirmingDelete, setConfirmingDelete] = useState(false)
     const [confirmDeleteGroupId, setConfirmDeleteGroupId] = useState<number | null>(null)
+    const [myGroupsOnly, setMyGroupsOnly] = useState(false)
+
+    const currentUser = useCurrentUser()
+
+    const displayedGroups = myGroupsOnly && currentUser
+    ? groups.filter(g => g.owner_id === currentUser.id)
+    : groups
 
     function copyEmailsGroup() {
         const emails = selectedMembers.map(m => m.email).filter(Boolean).join(', ')
@@ -760,9 +793,10 @@ export default function Members() {
     }
 
     async function handleCreateGroup(name: string) {
-        const group = await addGroup(name)
-        setGroups(prev => [...prev, group])
+        if (!name) return
         setGroupSearch('')
+        const group = await addGroup(name, currentUser?.id ?? null)
+        setGroups(prev => prev.some(g => g.id === group.id) ? prev : [...prev, group])
     }
 
     async function handleToggleGroup(member: MemberFull, groupId: number) {
@@ -980,6 +1014,18 @@ export default function Members() {
                             className="h-7 text-xs mb-1"
                             autoFocus
                         />
+
+                        {currentUser && (
+                            <> 
+                                <label className="flex items-center gap-2 px-2 py-1.5 cursor-pointer text-xs flex-1 min-w-0">
+                                    <Checkbox id="terms-checkbox-basic" name="terms-checkbox-basic" onClick={() => setMyGroupsOnly(!myGroupsOnly)}/>
+                                    <span className="truncate">Mes groupes</span>
+                                </label>
+                                
+                                <Separator className="my-1" />
+                            </>
+                        )}
+
                         {groupFilter.length > 0 && (
                             <>
                                 <button
@@ -992,7 +1038,7 @@ export default function Members() {
                             </>
                         )}
                         <div className="max-h-56 overflow-y-auto flex flex-col gap-0.5">
-                            {groups
+                            {displayedGroups
                                 .filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase()))
                                 .map(g => (
                                     <div key={g.id} className="flex items-center rounded hover:bg-muted group/item">
@@ -1036,8 +1082,11 @@ export default function Members() {
                             }
                             {groupSearch.trim() && !groups.some(g => g.name.toLowerCase() === groupSearch.trim().toLowerCase()) && (
                                 <button
-                                    onClick={() => handleCreateGroup(groupSearch.trim())}
-                                    className="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted text-xs text-muted-foreground hover:text-foreground w-full text-left"
+                                    onClick={(e) => {
+                                        e.preventDefault()
+                                        handleCreateGroup(groupSearch.trim())}
+                                    }
+                                        className="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted text-xs text-muted-foreground hover:text-foreground w-full text-left"
                                 >
                                     <Plus size={12} />
                                     Créer « {groupSearch.trim()} »

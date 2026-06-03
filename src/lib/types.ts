@@ -58,6 +58,7 @@ export type Member = {
     genre: string
     status: string // 'Prof' | 'Enseignant-chercheur' | 'BIATSS' | ...
     profile_image: string
+    is_staff: boolean
 }
 
 export type GroupMember = {
@@ -69,12 +70,14 @@ export type GroupMember = {
 export type Group = {
     id: number
     name: string
+    owner_id: number | null
 }
 
 export type ProjectMember = {
     id: number
     member_id: number
     project_id: number
+    role: string
 }
 
 export type AgreementMember = {
@@ -91,7 +94,7 @@ export type Axis = {
 
 // --- Indicateurs ---
 
-export type IndicatorDefinition = {
+export type Kpi = {
     id: number
     label: string
     unit: string
@@ -99,10 +102,11 @@ export type IndicatorDefinition = {
     dimension: string
 }
 
-export type ActionIndicatorValue = {
+export type KpiEntry = {
     id: number
-    action_card_id: number
-    indicator_id: number
+    project_id: number
+    kpi_id: number
+    member_id: number
     value: number
     comment: string
     date: string
@@ -129,7 +133,27 @@ export type Project = {
     title: string
     description: string
     budget: number
-    grant: number
+    start_date: string
+    end_date: string
+}
+
+// types.ts
+export type ProjectPartner = {
+    id: number
+    project_id: number
+    partner_id: number
+    role: string
+    amount: number | null
+    label: string | null
+}
+
+export type ProjectMilestone = {
+    id: number
+    project_id: number
+    title: string
+    description: string
+    due_date: string
+    status_id: number
 }
 
 export type FinancialAgreement = {

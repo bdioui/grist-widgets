@@ -166,10 +166,7 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
 
     function addMemberById(id: number) {
         if (!id || form.members.some(m => m.member_id === id)) return
-        const newMembers = roleToAdd === 'Responsable'
-            ? form.members.map(m => m.role === 'Responsable' ? { ...m, role: 'Contributeur' } : m)
-            : [...form.members]
-        set('members', [...newMembers, { member_id: id, role: roleToAdd }])
+        set('members', [...form.members, { member_id: id, role: roleToAdd }])
     }
 
     function removeMember(memberId: number) {

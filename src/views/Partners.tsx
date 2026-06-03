@@ -197,7 +197,7 @@ type PartnerDetailSheetProps = {
     onDeleted: (id: number) => void
 }
 
-function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDeleted }: PartnerDetailSheetProps) {
+export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDeleted }: PartnerDetailSheetProps) {
     const [editing,    setEditing]    = useState(false)
     const [confirming, setConfirming] = useState(false)
     const [deleting,   setDeleting]   = useState(false)
@@ -297,7 +297,6 @@ function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDeleted }: Pa
                                                 <span className="text-sm font-medium">{p.title}</span>
                                                 <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
                                                     {p.budget > 0 && <span>{p.budget.toLocaleString('fr-FR')} €</span>}
-                                                    {p.budget > 0 && p.grant > 0 && <span className="text-green-600">{Math.round((p.grant / p.budget) * 100)} %</span>}
                                                 </div>
                                             </div>
                                             {projectAgreements.length === 0 ? (
