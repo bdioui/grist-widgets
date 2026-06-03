@@ -21,7 +21,6 @@ import {
     getAgreementActionCardsByCard, addAgreementToCard, removeAgreementFromCard,
     deleteActionCard,
     getCommentsFull, createComment, updateComment, deleteComment,
-    updateMemberRole,
 } from '@/lib/api'
 import type { Status, Category, Member, Partner, Project, ToDoList, ToDoItem, MemberActionCard, ProjectActionCard, AgreementActionCard, FinancialAgreement, CommentFull } from '@/lib/types'
 import { useCurrentUser } from '@/lib/userContext'
@@ -1109,18 +1108,6 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                             <div className="flex items-center gap-2">
                                                                 <span className="w-24 shrink-0 text-muted-foreground">Budget total</span>
                                                                 <span>{l.project.budget.toLocaleString('fr-FR')} €</span>
-                                                            </div>
-                                                        )}
-                                                        {l.project.grant > 0 && (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-24 shrink-0 text-muted-foreground">Subvention</span>
-                                                                <span>{l.project.grant.toLocaleString('fr-FR')} €</span>
-                                                            </div>
-                                                        )}
-                                                        {l.project.budget > 0 && l.project.grant > 0 && (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-24 shrink-0 text-muted-foreground">Taux financ.</span>
-                                                                <span>{Math.round((l.project.grant / l.project.budget) * 100)} %</span>
                                                             </div>
                                                         )}
                                                     </div>

@@ -48,7 +48,6 @@ function flattenProjects(projects: Project[]): Row[] {
         title:       p.title,
         description: p.description,
         budget:      String(p.budget),
-        grant:       String(p.grant),
     }))
 }
 

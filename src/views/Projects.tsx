@@ -149,7 +149,6 @@ type ProjectCardProps = {
 
 function ProjectCard({ project, agreements, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple: _onSelectMultiple, onSelectAll }: ProjectCardProps) {
     const totalGrant = agreements.reduce((s, a) => s + a.grant, 0)
-    const rate    = financingRate(project.budget, totalGrant)
     const partners = [...new Map(agreements.map(a => [a.partner_id, a.partner])).values()]
     const status  = statuses.find(s => s.id === project.status_id)
 
@@ -595,7 +594,7 @@ type AgreementDetailProps = {
     onDeleted: (id: number) => void
 }
 
-function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, projectId, onSaved, onDeleted }: AgreementDetailProps) {
+function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, projectId, onSaved, onDeleted: _onDeleted }: AgreementDetailProps) {
     const [editing, setEditing] = useState(false)
 
     useEffect(() => {
@@ -1305,7 +1304,7 @@ type PartnerQuickCreateFormProps = {
     onCancel: () => void
 }
 
-function PartnerQuickCreateForm({ projectRole, onSaved, onCancel }: PartnerQuickCreateFormProps) {
+function PartnerQuickCreateForm({ projectRole: _projectRole, onSaved, onCancel }: PartnerQuickCreateFormProps) {
     const [name,       setName]       = useState('')
     const [type,       setType]       = useState(PARTNER_TYPES[0])
     const [color,      setColor]      = useState('#E7E8E2')
@@ -1377,7 +1376,7 @@ type ProjectDetailSheetProps = {
     onPartnerCreated?: (p: Partner) => void
 }
 
-function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, statuses, members, onMemberRemove, onOpen, onMemberCreated, onPartnerCreated }: ProjectDetailSheetProps) {
+function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, statuses, members, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -1459,7 +1458,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                     .map(p => ({ ...p, partner: partnerMap.get(p.partner_id) ?? { id: 0, name: '?', description: '', color: '', logo: '', status_id: 0, type: '', consortium: false } }))
                 setProjectPartners(fullPartners)
                 setMilestones(ms as ProjectMilestone[])
-                setActionCards(acs as ActionCardFull[])
+                setActionCards(acs as (ActionCardFull & { linkId: number })[])
             })
             .finally(() => setLoading(false))
     }, [open, project?.id ?? 0])
@@ -2390,9 +2389,9 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                 onClose={() => setSelectedActionCard(null)}
                 onUpdated={patch => {
                     setActionCards(prev => prev.map(c =>
-                        c.id === selectedActionCard.id ? { ...c, ...patch } : c
+                        c.id === selectedActionCard.id ? { ...c, ...patch } as (ActionCardFull & { linkId: number }) : c
                     ))
-                    setSelectedActionCard(prev => prev ? { ...prev, ...patch } : null)
+                    setSelectedActionCard(prev => prev ? { ...prev, ...patch } as (ActionCardFull & { linkId: number }) : null)
                 }}
                 onDeleted={id => {
                     setActionCards(prev => prev.filter(c => c.id !== id))

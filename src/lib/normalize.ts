@@ -128,7 +128,7 @@ export function normalizeActionCardsFull(
 
     const FALLBACK_STATUS: Status = { id: 0, label: '—', context: 'action_card' }
     const FALLBACK_CATEGORY: Category = { id: 0, title: '—', parent_category_id: null, color: null }
-    const FALLBACK_MEMBER: Member = { id: 0, partner_id: 0, lab_id: 0, first_name: '?', last_name: '', position: '', email: '', tel: '', genre: '', status: '', profile_image: '' }
+    const FALLBACK_MEMBER: Member = { id: 0, partner_id: 0, lab_id: 0, first_name: '?', last_name: '', position: '', email: '', tel: '', genre: '', status: '', profile_image: '', is_staff: false }
 
     return normalizeActionCards(rows).map(card => {
         const category = categoryMap.get(card.category_id) ?? FALLBACK_CATEGORY
