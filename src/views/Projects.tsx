@@ -40,12 +40,6 @@ import { type ProjectCall, type Project, type FinancialAgreement, type Axis, typ
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs"
 
 // --- Couleurs de statut ---
 
@@ -2398,9 +2392,9 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                 onClose={() => setSelectedActionCard(null)}
                 onUpdated={patch => {
                     setActionCards(prev => prev.map(c =>
-                        c.id === selectedActionCard.id ? { ...c, ...patch } : c
+                        c.id === selectedActionCard.id ? { ...c, ...patch } as (ActionCardFull & { linkId: number }) : c
                     ))
-                    setSelectedActionCard(prev => prev ? { ...prev, ...patch } : null)
+                    setSelectedActionCard(prev => prev ? { ...prev, ...patch } as (ActionCardFull & { linkId: number }) : null)
                 }}
                 onDeleted={id => {
                     setActionCards(prev => prev.filter(c => c.id !== id))
@@ -3200,7 +3194,7 @@ export default function Projects() {
                                         <span className="text-sm font-medium px-2">{selectedProjects.length} sélectionné{selectedProjects.length > 1 ? 's' : ''}</span>
                                         <div className="w-px h-4 bg-background/20 mx-1" />
                                         <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10"
-                                            onClick={() => { setMultipleSelect(true); setSelectedProjects(sorted) }}>
+                                            onClick={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}>
                                             <ListChecks size={13} /> Tout sélectionner
                                         </Button>
                                         <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyProjectTitlesGroup}>
