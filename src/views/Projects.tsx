@@ -2839,7 +2839,7 @@ export default function Projects() {
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="sm" className="gap-2 rounded-md">
                                     <SlidersHorizontal size={14} />
-                                    AAP
+                                    Dispositifs
                                     {active > 0 && <span className="text-muted-foreground text-xs">{active}/{projectCalls.length}</span>}
                                 </Button>
                             </DropdownMenuTrigger>
@@ -2869,15 +2869,20 @@ export default function Projects() {
                 })()}
 
                 <div className="ml-auto flex items-center gap-2">
-                    {multipleSelect ? (
-                        <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
-                            <X size={14} /> Terminer
-                        </Button>
-                    ) : (
-                        <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
-                            <ListChecks size={14} /> Sélection multiple
-                        </Button>
+                    {viewMode === "cards" && (
+                        <>
+                        {multipleSelect ? (
+                            <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
+                                <X size={14} /> Terminer
+                            </Button>
+                        ) : (
+                            <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
+                                <ListChecks size={14} /> Sélection multiple
+                            </Button>
+                        )}
+                        </>
                     )}
+                    
                     <Button variant="outline" size="sm" className="gap-1.5 rounded-md" onClick={() => { setEditingCall(undefined); setCallSheetOpen(true) }}>
                         <Plus size={14} />Nouveau dispositif
                     </Button>
@@ -3082,6 +3087,7 @@ export default function Projects() {
                                         </TableHead>
                                         <TableHead className="cursor-pointer select-none min-w-48" onClick={() => handleSort('title')}>
                                             Titre <SortIcon col="title" />
+                                            <span className='text-xs ml-3 text-gray-500'>({sorted.length} projets)</span>
                                         </TableHead>
                                         <TableHead className="cursor-pointer select-none" onClick={() => handleSort('call')}>
                                             Dispositif <SortIcon col="call" />
