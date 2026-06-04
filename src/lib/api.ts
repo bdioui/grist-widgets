@@ -683,7 +683,10 @@ export async function addProject(fields: Omit<Project, 'id'>): Promise<Project> 
         mockProjects.push(project)
         return project
     }
-    const id = await addRecord(T.project, fields)
+    const gristFields = Object.fromEntries(
+        Object.entries(fields).filter(([, v]) => v !== '' && v !== null && v !== undefined)
+    )
+    const id = await addRecord(T.project, gristFields)
     return { id, ...fields }
 }
 
@@ -693,7 +696,10 @@ export async function updateProject(id: number, patch: Partial<Omit<Project, 'id
         if (p) Object.assign(p, patch)
         return
     }
-    await updateRecord(T.project, id, patch)
+    const gristPatch = Object.fromEntries(
+        Object.entries(patch).filter(([, v]) => v !== null && v !== undefined)
+    )
+    if (Object.keys(gristPatch).length > 0) await updateRecord(T.project, id, gristPatch)
 }
 
 export async function deleteProject(id: number): Promise<void> {

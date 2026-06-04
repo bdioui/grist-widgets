@@ -21,6 +21,7 @@ import { ActionCardDetailSheet } from '@/views/dashboard/ActionCard'
 import type { ActionCardData } from '@/views/dashboard/ActionCard'
 import { PartnerDetailSheet } from '@/views/Partners'
 import type { PartnerCardFull } from '@/lib/types'
+import { motion } from "framer-motion"
 import {
     getProjectCalls, getProjects, getAxes, getStatuses, getPartners, getFinancialAgreements,
     addProjectCall, updateProjectCall, deleteProjectCall,
@@ -37,7 +38,14 @@ import {
 } from '@/lib/api'
 import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 
 // --- Couleurs de statut ---
 
@@ -1776,10 +1784,11 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                         </>
                                     )
                                 })()}
-                                <Separator></Separator>
+                                
                                  
                                  {project.description && (
                                     <>
+                                    <Separator></Separator>
                                      <div className="flex items-center gap-2">
                                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</p>
                                          <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowDescription(v => !v)}>
@@ -2389,9 +2398,9 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                 onClose={() => setSelectedActionCard(null)}
                 onUpdated={patch => {
                     setActionCards(prev => prev.map(c =>
-                        c.id === selectedActionCard.id ? { ...c, ...patch } as (ActionCardFull & { linkId: number }) : c
+                        c.id === selectedActionCard.id ? { ...c, ...patch } : c
                     ))
-                    setSelectedActionCard(prev => prev ? { ...prev, ...patch } as (ActionCardFull & { linkId: number }) : null)
+                    setSelectedActionCard(prev => prev ? { ...prev, ...patch } : null)
                 }}
                 onDeleted={id => {
                     setActionCards(prev => prev.filter(c => c.id !== id))
@@ -2613,6 +2622,25 @@ export default function Projects() {
     const [selectedProjects,         setSelectedProjects]         = useState<ProjectFull[]>([])
     const [confirmingDeleteProjects, setConfirmingDeleteProjects] = useState(false)
 
+    type ViewMode = 'cards' | 'table'
+    const [viewMode, setViewMode] = useState<ViewMode>('cards')
+
+    type SortKey = 'title' | 'call' | 'axis' | 'status' | 'budget' | 'start_date' | 'end_date'
+    const [sortKey,  setSortKey]  = useState<SortKey>('title')
+    const [sortDir,  setSortDir]  = useState<'asc' | 'desc'>('asc')
+
+    function handleSort(key: SortKey) {
+        if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+        else { setSortKey(key); setSortDir('asc') }
+    }
+
+    function handleViewMode(mode: ViewMode) {
+        setViewMode(mode)
+        setSearch('')
+        setMultipleSelect(false)
+    }
+
+
     useEffect(() => {
         Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers()])
             .then(([pcs, ps, axs, sts, pts, agrs, m]) => {
@@ -2737,7 +2765,28 @@ export default function Projects() {
         <div className="flex flex-col h-full">
 
             {/* Toolbar */}
+            
             <div className="flex items-center gap-2 px-6 py-3 border-b  shrink-0">
+                <div className="bg-gray-200 rounded-full border p-1 flex relative">
+                    {(['cards', 'table'] as ViewMode[]).map(mode => (
+                        <button
+                            key={mode}
+                            onClick={() => handleViewMode(mode)}
+                            className={`relative px-4 py-1 rounded-full text-sm z-10 transition-colors duration-300 ${viewMode === mode ? 'text-white' : 'text-black'}`}
+                        >
+                            <span className="relative z-20">
+                                {mode === 'cards' ? 'Cartes' : 'Tableau'}
+                            </span>
+                            {viewMode === mode && (
+                                <motion.div 
+                                layoutId="activeProjectTab"
+                                className="absolute inset-0 bg-black rounded-full z-10" 
+                                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                />
+                            )}
+                        </button>
+                    ))}
+                </div>
                 <div className="relative flex-1 max-w-xs">
                     <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -2843,148 +2892,348 @@ export default function Projects() {
                     </Button>
                 </div>
             </div>
-
-            {/* Colonnes par axe → AAP */}
-            {loading ? (
-                <div className="flex gap-4 p-6 overflow-x-auto">
-                    {[1, 2, 3].map(i => (
-                        <div key={i} className="w-72 shrink-0 flex flex-col gap-3">
-                            <Skeleton className="h-8 w-40 rounded-lg" />
-                            {[1, 2].map(j => <Skeleton key={j} className="h-28 w-full rounded-xl" />)}
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <div className="flex-1 overflow-x-auto overflow-y-hidden">
-                    <div className="flex gap-0 h-full min-w-max">
-                        {activeAxes.map((axis, axisIdx) => {
-                            const calls = filteredCalls.filter(pc => pc.axis_id === axis.id)
-                            if (calls.length === 0) return null
-                            return (
-                                <div key={axis.id} className={`flex flex-col h-full border-r ${axisIdx === 0 ? 'border-l' : ''}`}>
-                                    {/* Header axe */}
-                                    <div className="px-4 py-2 bg-muted/50 border-b">
-                                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{axis.name}</span>
-                                    </div>
-
-                                    {/* Colonnes AAP */}
-                                    <div className="flex flex-row h-full overflow-x-auto">
-                                        {calls.map(pc => {
-                                            console.log("Calls :", calls)
-                                            const pcProjects = filteredProjects.filter(p => p.project_call_id === pc.id)
-                                            const pcStatus = statuses.find(s => s.id === pc.status_id)
-                                            const pcColor = pcStatus?.label === "Terminé" ? "#f3f4f6" : "#d1fae5"
-                                            return (
-                                                <div key={pc.id} className="w-72 shrink-0 flex flex-col h-full border-r last:border-r-0">
-                                                    {/* Header AAP */}
-                                                    <div className="px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="text-sm font-medium truncate">{pc.title}</span>
-                                                            {(pc.start_date || pc.end_date) && (
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    {formatDate(pc.start_date)}{pc.end_date ? ` → ${formatDate(pc.end_date)}` : ''}
-                                                                </span>
-                                                            )}
-                                                            {pcStatus && <Badge className="rounded-md mt-1 text-xs text-black" style={{backgroundColor:pcColor}}>{pcStatus.label}</Badge>}
-                                                        </div>
-                                                        <div className="flex items-center gap-1 shrink-0">
-                                                            <span className="text-xs text-muted-foreground">{pcProjects.length} projet{pcProjects.length > 1 ? 's' : ''}</span>
-                                                            <Button
-                                                                variant="ghost" size="icon" className="h-6 w-6 rounded-md"
-                                                                onClick={() => { setEditingCall(pc); setCallSheetOpen(true) }}
-                                                            >
-                                                                <Pencil size={11} />
-                                                            </Button>
-                                                            <Button
-                                                                variant="ghost" size="icon" className="h-6 w-6 rounded-md"
-                                                                onClick={() => { setDefaultCallId(pc.id); setProjectSheetOpen(true) }}
-                                                            >
-                                                                <Plus size={11} />
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Cartes projets */}
-                                                    <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-                                                        {pcProjects.map(p => (
-                                                            <ProjectCard
-                                                                key={p.id}
-                                                                project={p}
-                                                                agreements={agreementsByProject.get(p.id) ?? []}
-                                                                statuses={statuses}
-                                                                onClick={() => { setSelectedProject(p); setDetailOpen(true) }}
-                                                                selectOn={multipleSelect}
-                                                                selected={!!selectedProjects.find(sp => sp.id === p.id)}
-                                                                onToggle={() => toggleProject(p)}
-                                                                onDelete={id => {
-                                                                    setProjects(prev => prev.filter(x => x.id !== id))
-                                                                    setSelectedProjects(prev => prev.filter(x => x.id !== id))
-                                                                }}
-                                                                onEdit={() => { setSelectedProject(p); setProjectSheetOpen(true) }}
-                                                                selectedProjects={selectedProjects}
-                                                                onSelectMultiple={() => { setMultipleSelect(true); toggleProject(p) }}
-                                                                onSelectAll={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}
-                                                            />
-                                                        ))}
-                                                        {pcProjects.length === 0 && (
-                                                            <p className="text-xs text-muted-foreground italic px-1">Aucun projet</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
+            
+            {/* Vue Cartes */}
+            {viewMode === "cards" && (
+                <>
+                {/* Colonnes par axe → AAP */}
+                    {loading ? (
+                        <div className="flex gap-4 p-6 overflow-x-auto">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className="w-72 shrink-0 flex flex-col gap-3">
+                                    <Skeleton className="h-8 w-40 rounded-lg" />
+                                    {[1, 2].map(j => <Skeleton key={j} className="h-28 w-full rounded-xl" />)}
                                 </div>
-                            )
-                        })}
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex-1 overflow-x-auto overflow-y-hidden">
+                            <div className="flex gap-0 h-full min-w-max">
+                                {activeAxes.map((axis, axisIdx) => {
+                                    const calls = filteredCalls.filter(pc => pc.axis_id === axis.id)
+                                    if (calls.length === 0) return null
+                                    return (
+                                        <div key={axis.id} className={`flex flex-col h-full border-r ${axisIdx === 0 ? 'border-l' : ''}`}>
+                                            {/* Header axe */}
+                                            <div className="px-4 py-2 bg-muted/50 border-b">
+                                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{axis.name}</span>
+                                            </div>
 
-                        {filteredCalls.length === 0 && (
-                            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-                                Aucun dispositif correspondant aux filtres
+                                            {/* Colonnes AAP */}
+                                            <div className="flex flex-row h-full overflow-x-auto">
+                                                {calls.map(pc => {
+                                                    console.log("Calls :", calls)
+                                                    const pcProjects = filteredProjects.filter(p => p.project_call_id === pc.id)
+                                                    const pcStatus = statuses.find(s => s.id === pc.status_id)
+                                                    const pcColor = pcStatus?.label === "Terminé" ? "#f3f4f6" : "#d1fae5"
+                                                    return (
+                                                        <div key={pc.id} className="w-72 shrink-0 flex flex-col h-full border-r last:border-r-0">
+                                                            {/* Header AAP */}
+                                                            <div className="px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
+                                                                <div className="flex flex-col min-w-0">
+                                                                    <span className="text-sm font-medium truncate">{pc.title}</span>
+                                                                    {(pc.start_date || pc.end_date) && (
+                                                                        <span className="text-xs text-muted-foreground">
+                                                                            {formatDate(pc.start_date)}{pc.end_date ? ` → ${formatDate(pc.end_date)}` : ''}
+                                                                        </span>
+                                                                    )}
+                                                                    {pcStatus && <Badge className="rounded-md mt-1 text-xs text-black" style={{backgroundColor:pcColor}}>{pcStatus.label}</Badge>}
+                                                                </div>
+                                                                <div className="flex items-center gap-1 shrink-0">
+                                                                    <span className="text-xs text-muted-foreground">{pcProjects.length} projet{pcProjects.length > 1 ? 's' : ''}</span>
+                                                                    <Button
+                                                                        variant="ghost" size="icon" className="h-6 w-6 rounded-md"
+                                                                        onClick={() => { setEditingCall(pc); setCallSheetOpen(true) }}
+                                                                    >
+                                                                        <Pencil size={11} />
+                                                                    </Button>
+                                                                    <Button
+                                                                        variant="ghost" size="icon" className="h-6 w-6 rounded-md"
+                                                                        onClick={() => { setDefaultCallId(pc.id); setProjectSheetOpen(true) }}
+                                                                    >
+                                                                        <Plus size={11} />
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Cartes projets */}
+                                                            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+                                                                {pcProjects.map(p => (
+                                                                    <ProjectCard
+                                                                        key={p.id}
+                                                                        project={p}
+                                                                        agreements={agreementsByProject.get(p.id) ?? []}
+                                                                        statuses={statuses}
+                                                                        onClick={() => { setSelectedProject(p); setDetailOpen(true) }}
+                                                                        selectOn={multipleSelect}
+                                                                        selected={!!selectedProjects.find(sp => sp.id === p.id)}
+                                                                        onToggle={() => toggleProject(p)}
+                                                                        onDelete={id => {
+                                                                            setProjects(prev => prev.filter(x => x.id !== id))
+                                                                            setSelectedProjects(prev => prev.filter(x => x.id !== id))
+                                                                        }}
+                                                                        onEdit={() => { setSelectedProject(p); setProjectSheetOpen(true) }}
+                                                                        selectedProjects={selectedProjects}
+                                                                        onSelectMultiple={() => { setMultipleSelect(true); toggleProject(p) }}
+                                                                        onSelectAll={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}
+                                                                    />
+                                                                ))}
+                                                                {pcProjects.length === 0 && (
+                                                                    <p className="text-xs text-muted-foreground italic px-1">Aucun projet</p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+
+                                {filteredCalls.length === 0 && (
+                                    <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+                                        Aucun dispositif correspondant aux filtres
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Floating selection bar */}
+                    {multipleSelect && selectedProjects.length > 0 && (
+                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full bg-foreground text-background shadow-xl">
+                            {confirmingDeleteProjects ? (
+                                <>
+                                    <span className="text-sm px-2">Supprimer {selectedProjects.length} projet{selectedProjects.length > 1 ? 's' : ''} ?</span>
+                                    <div className="w-px h-4 bg-background/20 mx-1" />
+                                    <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(false)}>Annuler</Button>
+                                    <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelectedProjects}>Confirmer</Button>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-sm font-medium px-2">{selectedProjects.length} sélectionné{selectedProjects.length > 1 ? 's' : ''}</span>
+                                    <div className="w-px h-4 bg-background/20 mx-1" />
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}>
+                                        <ListChecks size={13} /> Tout sélectionner
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyProjectTitlesGroup}>
+                                        <Copy size={13} /> Copier les titres
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => exportToCsv(
+                                        'projets.csv',
+                                        ['Titre', 'Appel à projets', 'Axe', 'Budget (€)'],
+                                        selectedProjects.map(p => [p.title, p.projectCall.title, p.projectCall.axis.name, p.budget])
+                                    )}>
+                                        <FileDown size={13} /> Exporter en CSV
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(true)}>
+                                        <Trash2 size={13} /> Supprimer
+                                    </Button>
+                                    <div className="w-px h-4 bg-background/20 mx-1" />
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
+                                        <X size={13} />
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+                    )}
+                
+                </>
+            )}
+
+            {/* Vue Tableau */}
+            {viewMode === 'table' && (() => {
+                const statusMap = new Map(statuses.map(s => [s.id, s]))
+
+                const sorted = [...filteredProjects].sort((a, b) => {
+                    let va: string | number = ''
+                    let vb: string | number = ''
+                    if (sortKey === 'title')      { va = a.title;                          vb = b.title }
+                    if (sortKey === 'call')       { va = a.projectCall.title;              vb = b.projectCall.title }
+                    if (sortKey === 'axis')       { va = a.projectCall.axis.name;          vb = b.projectCall.axis.name }
+                    if (sortKey === 'status')     { va = statusMap.get(a.status_id)?.label ?? ''; vb = statusMap.get(b.status_id)?.label ?? '' }
+                    if (sortKey === 'budget')     { va = a.budget;                         vb = b.budget }
+                    if (sortKey === 'start_date') { va = a.start_date;                     vb = b.start_date }
+                    if (sortKey === 'end_date')   { va = a.end_date;                       vb = b.end_date }
+                    if (va < vb) return sortDir === 'asc' ? -1 : 1
+                    if (va > vb) return sortDir === 'asc' ? 1 : -1
+                    return 0
+                })
+
+                const allSelected = sorted.length > 0 && sorted.every(p => selectedProjects.find(sp => sp.id === p.id))
+
+                function SortIcon({ col }: { col: SortKey }) {
+                    if (sortKey !== col) return <span className="ml-1 text-muted-foreground/40">↕</span>
+                    return <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                }
+
+                return (
+                    <div className="flex-1 overflow-auto">
+                        {loading ? (
+                            <div className="flex flex-col gap-2 p-6">
+                                {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader className="sticky top-0 bg-background z-10 border-b">
+                                    <TableRow className="hover:bg-transparent">
+                                        <TableHead className="w-10 px-4">
+                                            <Checkbox
+                                                checked={allSelected}
+                                                onCheckedChange={checked => {
+                                                    setMultipleSelect(true)
+                                                    setSelectedProjects(checked ? sorted : [])
+                                                }}
+                                            />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none min-w-48" onClick={() => handleSort('title')}>
+                                            Titre <SortIcon col="title" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('call')}>
+                                            Dispositif <SortIcon col="call" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('axis')}>
+                                            Axe <SortIcon col="axis" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('status')}>
+                                            Statut <SortIcon col="status" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort('budget')}>
+                                            Budget <SortIcon col="budget" />
+                                        </TableHead>
+                                        <TableHead className="text-right">Subvention</TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('start_date')}>
+                                            Début <SortIcon col="start_date" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('end_date')}>
+                                            Fin <SortIcon col="end_date" />
+                                        </TableHead>
+                                        <TableHead className="w-16" />
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {sorted.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={10} className="text-center text-muted-foreground py-12 italic">
+                                                Aucun projet correspondant aux filtres
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                    {sorted.map(p => {
+                                        const agreements = agreementsByProject.get(p.id) ?? []
+                                        const totalGrant = agreements.reduce((s, a) => s + a.grant, 0)
+                                        const status = statusMap.get(p.status_id)
+                                        const isSelected = !!selectedProjects.find(sp => sp.id === p.id)
+                                        return (
+                                            <TableRow
+                                                key={p.id}
+                                                data-state={isSelected ? 'selected' : undefined}
+                                                className="cursor-pointer group"
+                                                onClick={() => { setSelectedProject(p); setDetailOpen(true) }}
+                                            >
+                                                <TableCell className="px-4" onClick={e => e.stopPropagation()}>
+                                                    <Checkbox
+                                                        checked={isSelected}
+                                                        onCheckedChange={() => { setMultipleSelect(true); toggleProject(p) }}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="font-medium max-w-72">
+                                                    <span className="truncate block">{p.title}</span>
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground max-w-48">
+                                                    <span className="truncate block">{p.projectCall.title}</span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="text-xs text-muted-foreground">{p.projectCall.axis.name}</span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {status && (
+                                                        <Badge variant="secondary" className="text-xs rounded-full text-black whitespace-nowrap"
+                                                            style={{ backgroundColor: PROJECT_STATUS_COLORS[status.label] ?? '#f3f4f6' }}>
+                                                            {status.label}
+                                                        </Badge>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-right tabular-nums">
+                                                    {p.budget > 0 ? p.budget.toLocaleString('fr-FR') + ' €' : <span className="text-muted-foreground">—</span>}
+                                                </TableCell>
+                                                <TableCell className="text-right tabular-nums text-green-700">
+                                                    {totalGrant > 0 ? totalGrant.toLocaleString('fr-FR') + ' €' : <span className="text-muted-foreground">—</span>}
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground text-xs">
+                                                    {formatDate(p.start_date) ?? '—'}
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground text-xs">
+                                                    {formatDate(p.end_date) ?? '—'}
+                                                </TableCell>
+                                                <TableCell onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7"
+                                                            onClick={() => { setSelectedProject(p); setProjectSheetOpen(true) }}>
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                                                            onClick={async () => { await deleteProject(p.id); setProjects(prev => prev.filter(x => x.id !== p.id)) }}>
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        )}
+
+                        {/* Floating selection bar — identique à la vue carte */}
+                        {multipleSelect && selectedProjects.length > 0 && (
+                            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full bg-foreground text-background shadow-xl">
+                                {confirmingDeleteProjects ? (
+                                    <>
+                                        <span className="text-sm px-2">Supprimer {selectedProjects.length} projet{selectedProjects.length > 1 ? 's' : ''} ?</span>
+                                        <div className="w-px h-4 bg-background/20 mx-1" />
+                                        <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(false)}>Annuler</Button>
+                                        <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelectedProjects}>Confirmer</Button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-sm font-medium px-2">{selectedProjects.length} sélectionné{selectedProjects.length > 1 ? 's' : ''}</span>
+                                        <div className="w-px h-4 bg-background/20 mx-1" />
+                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10"
+                                            onClick={() => { setMultipleSelect(true); setSelectedProjects(sorted) }}>
+                                            <ListChecks size={13} /> Tout sélectionner
+                                        </Button>
+                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyProjectTitlesGroup}>
+                                            <Copy size={13} /> Copier les titres
+                                        </Button>
+                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10"
+                                            onClick={() => exportToCsv('projets.csv',
+                                                ['Titre', 'Dispositif', 'Axe', 'Statut', 'Budget (€)', 'Subvention (€)', 'Début', 'Fin'],
+                                                selectedProjects.map(p => {
+                                                    const agrs = agreementsByProject.get(p.id) ?? []
+                                                    const grant = agrs.reduce((s, a) => s + a.grant, 0)
+                                                    const st = statusMap.get(p.status_id)?.label ?? ''
+                                                    return [p.title, p.projectCall.title, p.projectCall.axis.name, st, String(p.budget), String(grant), p.start_date, p.end_date]
+                                                })
+                                            )}>
+                                            <FileDown size={13} /> Exporter en CSV
+                                        </Button>
+                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10"
+                                            onClick={() => setConfirmingDeleteProjects(true)}>
+                                            <Trash2 size={13} /> Supprimer
+                                        </Button>
+                                        <div className="w-px h-4 bg-background/20 mx-1" />
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10"
+                                            onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
+                                            <X size={13} />
+                                        </Button>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
-                </div>
-            )}
-
-            {/* Floating selection bar */}
-            {multipleSelect && selectedProjects.length > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full bg-foreground text-background shadow-xl">
-                    {confirmingDeleteProjects ? (
-                        <>
-                            <span className="text-sm px-2">Supprimer {selectedProjects.length} projet{selectedProjects.length > 1 ? 's' : ''} ?</span>
-                            <div className="w-px h-4 bg-background/20 mx-1" />
-                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(false)}>Annuler</Button>
-                            <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelectedProjects}>Confirmer</Button>
-                        </>
-                    ) : (
-                        <>
-                            <span className="text-sm font-medium px-2">{selectedProjects.length} sélectionné{selectedProjects.length > 1 ? 's' : ''}</span>
-                            <div className="w-px h-4 bg-background/20 mx-1" />
-                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}>
-                                <ListChecks size={13} /> Tout sélectionner
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyProjectTitlesGroup}>
-                                <Copy size={13} /> Copier les titres
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => exportToCsv(
-                                'projets.csv',
-                                ['Titre', 'Appel à projets', 'Axe', 'Budget (€)'],
-                                selectedProjects.map(p => [p.title, p.projectCall.title, p.projectCall.axis.name, p.budget])
-                            )}>
-                                <FileDown size={13} /> Exporter en CSV
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(true)}>
-                                <Trash2 size={13} /> Supprimer
-                            </Button>
-                            <div className="w-px h-4 bg-background/20 mx-1" />
-                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
-                                <X size={13} />
-                            </Button>
-                        </>
-                    )}
-                </div>
-            )}
+                )
+            })()}
 
             {/* Sheets */}
             <ProjectCallSheet
