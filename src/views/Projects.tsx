@@ -1468,7 +1468,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     const [allActionCards,     setAllActionCards]     = useState<ActionCardFull[]>([])
     const [selectedActionCard, setSelectedActionCard] = useState<(ActionCardFull & { linkId: number }) | null>(null)
     const [selectedPartner,    setSelectedPartner]    = useState<PartnerCardFull | null>(null)
-    const [editingRolePmId,  setEditingRolePmId]  = useState<number | null>(null)
+    const [_editingRolePmId, setEditingRolePmId]  = useState<number | null>(null)
     const [editingPartnerId, setEditingPartnerId] = useState<number | null>(null)
     const [showCreateMember, setShowCreateMember] = useState(false)
     const [showCreatePartner, setShowCreatePartner] = useState(false)
@@ -3029,7 +3029,7 @@ export default function Projects() {
                 const callMap = new Map(fullCalls.map(pc => [pc.id, pc]))
                 const fullProjects: ProjectFull[] = (ps as Project[]).map(p => ({
                     ...p,
-                    projectCall: callMap.get(p.project_call_id) ?? { id: 0, axis_id: 0, title: 'Inconnu', description: '', start_date: '', end_date: '', status_id: 0, axis: { id: 0, name: 'Inconnu', description: '' } },
+                    projectCall: callMap.get(p.project_call_id) ?? { id: 0, axis_id: 0, title: 'Inconnu', description: '', start_date: '', end_date: '', status_id: 0, budget: 0, axis: { id: 0, name: 'Inconnu', description: '' } },
                 }))
 
                 setAxes(axs as Axis[])

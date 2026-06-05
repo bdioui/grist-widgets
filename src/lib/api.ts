@@ -317,7 +317,7 @@ export async function getToDoListsWithItemsByCard(cardId: number): Promise<(ToDo
 
 // --- Mutations sur les éléments d'une ActionCard ---
 
-export async function updateToDoItem(id: number, patch: Partial<Pick<ToDoItem, 'content' | 'status_id' | 'start_date' | 'end_time'>>): Promise<void> {
+export async function updateToDoItem(id: number, patch: Partial<Pick<ToDoItem, 'content' | 'status_id' | 'start_date' | 'end_time' | 'due_date'>>): Promise<void> {
     if (USE_MOCK) {
         const item = mockToDoItems.find(i => i.id === id)
         if (item) Object.assign(item, patch)
