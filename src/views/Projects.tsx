@@ -1943,7 +1943,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                                     />
                                                 </TableCell>
                                                 <TableCell className="px-2 py-1.5 whitespace-nowrap font-normal">{member.first_name} {member.last_name}</TableCell>
-                                                <TableCell className="px-2 py-1.5 whitespace-nowrap">
+                                                <TableCell className="px-0 py-1.5 whitespace-nowrap">
                                                     <Select value={pm.role} onValueChange={role => handleRoleChange(pm.id, role)}>
                                                         <SelectTrigger className="h-5 text-xs w-28 border-none p-0 shadow-none text-muted-foreground hover:text-foreground" onClick={e => e.stopPropagation()}><SelectValue /></SelectTrigger>
                                                         <SelectContent>
