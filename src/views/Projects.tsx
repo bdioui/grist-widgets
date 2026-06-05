@@ -14,7 +14,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Eye, EyeClosed, Maximize2, Minimize2 } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Eye, EyeClosed, Maximize2, Minimize2, Users } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { ActionCardDetailSheet } from '@/views/dashboard/ActionCard'
@@ -34,9 +34,11 @@ import {
     getProjectMilestones, addProjectMilestone, updateProjectMilestone, deleteProjectMilestone,
     getActionCardsByProject, linkActionCardToProject, removeProjectFromCard,
     getActionCardsFull, createActionCardFull, updateProjectMember, getCategories,
-    addMember, addPartner
+    addMember, addPartner,
+    getTimeEntries, addTimeEntry, removeTimeEntry, updateTimeEntry,
+    getAllProjectMembers
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
@@ -58,13 +60,16 @@ const AGREEMENT_STATUS_COLORS: Record<string, string> = {
 }
 
 const ROLES = [
-    'Lead',
-    'Equipe',
-    'Partenaire',
-    'Observateur'
+    'Participant',
+    'Intervenant',
+    'Equipe - Lead',
+    'Equipe - Contributeur',
+    'Equipe - Consultant',
+    'Equipe - Observateur',
+
 ]
 
-const ROLE_ORDER = ['Lead', 'Equipe', 'Partenaire', 'Observateur']
+const ROLE_ORDER = ['Equipe - Lead', 'Equipe - Contributeur', 'Equipe - Consultant', 'Equipe - Observateur', 'Participant', 'Intervenant']
 
 const PARTNER_ROLES = ['Associé', 'Bénéficiaire', 'Cofinanceur', 'Sous-traitant']
 
@@ -233,12 +238,24 @@ function ProjectCard({ project, agreements, statuses, onClick, selectOn, selecte
                 const progress = projectProgress(project.start_date, project.end_date)
                 if (progress === null) return null
                 return (
-                    <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: 'rgba(0,0,0,0.5)' }} />
+                    <>
+                    <div className="flex items-center gap-2">
+                        
+                        <div className="flex flex-col gap-1 pt-1">
+                        <div className="flex justify-between text-xs text-muted-foreground gap-1.5">
+                            <span>{formatDate(project.start_date)} → {formatDate(project.end_date)}</span>
+                            <span> ({progress} %)</span>
+                        </div>
+                        <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                            <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: 'rgba(0,0,0,0.5)' }} />
+                        </div>
                     </div>
+
+                    </div>
+                    
+                    </>
                 )
             })()}
-
             {/* Conventions + badges partenaires */}
             {agreements.length > 0 && (
                 <div className="flex items-center justify-between gap-2 pt-1 border-t border-border">
@@ -347,6 +364,7 @@ function ProjectCallSheet({ open, onClose, onSaved, onDeleted, axes, statuses, e
     const [statusId,    setStatusId]    = useState<number>(0)
     const [startDate,   setStartDate]   = useState('')
     const [endDate,     setEndDate]     = useState('')
+    const [budget,      setBudget]      = useState<number>(0)
     const [submitting,  setSubmitting]  = useState(false)
     const [deleting,    setDeleting]    = useState(false)
     const [confirming,  setConfirming]  = useState(false)
@@ -361,9 +379,10 @@ function ProjectCallSheet({ open, onClose, onSaved, onDeleted, axes, statuses, e
             setStatusId(editCall.status_id)
             setStartDate(editCall.start_date)
             setEndDate(editCall.end_date)
+            setBudget(editCall.budget ?? 0)
         } else {
             setTitle(''); setDescription(''); setAxisId(axes[0]?.id ?? 0)
-            setStatusId(statuses[0]?.id ?? 0); setStartDate(''); setEndDate('')
+            setStatusId(statuses[0]?.id ?? 0); setStartDate(''); setEndDate(''); setBudget(0)
         }
         setError(null)
         setConfirming(false)
@@ -373,7 +392,7 @@ function ProjectCallSheet({ open, onClose, onSaved, onDeleted, axes, statuses, e
         if (!title.trim() || !axisId) { setError('Titre et axe sont obligatoires.'); return }
         setSubmitting(true)
         try {
-            const fields = { title, description, axis_id: axisId, status_id: statusId, start_date: startDate, end_date: endDate }
+            const fields = { title, description, axis_id: axisId, status_id: statusId, start_date: startDate, end_date: endDate, budget }
             if (editCall) {
                 await updateProjectCall(editCall.id, fields)
                 onSaved({ ...editCall, ...fields })
@@ -464,6 +483,16 @@ function ProjectCallSheet({ open, onClose, onSaved, onDeleted, axes, statuses, e
                             <Label>Date de fin</Label>
                             <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
                         </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                        <Label>Budget alloué (€)</Label>
+                        <Input
+                            type="number"
+                            min={0}
+                            value={budget || ''}
+                            onChange={e => setBudget(Number(e.target.value))}
+                            placeholder="0"
+                        />
                     </div>
                 </div>
 
@@ -591,12 +620,13 @@ type AgreementDetailProps = {
     agreement: AgreementFull | null
     partners: Partner[]
     statuses: Status[]
+    axes: Axis[]
     projectId: number
     onSaved: (a: AgreementFull) => void
     onDeleted: (id: number) => void
 }
 
-function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, projectId, onSaved, onDeleted: _onDeleted }: AgreementDetailProps) {
+function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, axes, projectId, onSaved, onDeleted: _onDeleted }: AgreementDetailProps) {
     const [editing, setEditing] = useState(false)
 
     useEffect(() => {
@@ -682,6 +712,7 @@ function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, p
                         <AgreementForm
                             partners={partners}
                             statuses={statuses}
+                            axes={axes}
                             projectId={projectId}
                             initial={agreement}
                             onSaved={a => { onSaved(a); setEditing(false) }}
@@ -697,20 +728,28 @@ function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, p
 type AgreementRowProps = {
     agreement: AgreementFull
     statuses: Status[]
+    axe?: Axis
     onEdit: (a: AgreementFull) => void
     onDelete: (id: number) => void
     onOpen: (a: AgreementFull) => void
 }
 
 
-function AgreementRow({ agreement: a, statuses, onEdit, onDelete, onOpen }: AgreementRowProps) {
+function AgreementRow({ agreement: a, statuses, axe, onEdit, onDelete, onOpen }: AgreementRowProps) {
     const rate   = financingRate(a.budget, a.grant)
     const status = statuses.find(s => s.id === a.status_id)
     return (
                 <div onClick={() => onOpen(a)} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-border bg-muted/40 group cursor-pointer hover:bg-muted/70 transition-colors">
                     <div className="flex flex-col gap-0.5 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between gap-2">
                             <span className="text-sm font-medium truncate">{a.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {axe && (
+                                <span className="text-xs px-1.5 py-0.5 rounded-full border border-border shrink-0 text-black">
+                                    {axe.name}
+                                </span>
+                            )}
                             {status && (
                                 <span className="text-xs px-1.5 py-0.5 rounded-full border border-border shrink-0 text-black"
                                     style={{ backgroundColor: AGREEMENT_STATUS_COLORS[status.label] ?? '#f3f4f6' }}>
@@ -719,14 +758,14 @@ function AgreementRow({ agreement: a, statuses, onEdit, onDelete, onOpen }: Agre
                             )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span
+                             <span
                                 className="px-1.5 py-0.5 rounded-full border border-border shrink-0"
                                 style={a.partner.color ? { backgroundColor: a.partner.color } : {}}
                             >
                                 {a.partner.name}
                             </span>
-                            {a.budget > 0 && <span>{fmt(a.budget)}</span>}
-                            {rate !== null && <span className="font-medium text-foreground">{rate} %</span>}
+                            {a.budget > 0 && <span className="font-medium text-foreground">{fmt(a.grant)}</span>}
+                            {rate !== null && <span>{rate} %</span>}
                             {a.signed_date && <span>{formatDate(a.signed_date)}</span>}
                         </div>
                     </div>
@@ -753,13 +792,14 @@ function AgreementRow({ agreement: a, statuses, onEdit, onDelete, onOpen }: Agre
 type AgreementFormProps = {
     partners: Partner[]
     statuses: Status[]
+    axes: Axis[]
     projectId: number
     initial?: AgreementFull
     onSaved: (a: AgreementFull) => void
     onCancel: () => void
 }
 
-function AgreementForm({ partners, statuses, projectId, initial, onSaved, onCancel }: AgreementFormProps) {
+function AgreementForm({ partners, statuses, axes, projectId, initial, onSaved, onCancel }: AgreementFormProps) {
     const agreementStatuses = statuses.filter(s => s.context === 'financial_agreement')
     const defaultStatusId   = agreementStatuses[0]?.id ?? 14
 
@@ -767,6 +807,7 @@ function AgreementForm({ partners, statuses, projectId, initial, onSaved, onCanc
     const [description,setDescription]= useState(initial?.description ?? '')
     const [partnerId,  setPartnerId]  = useState<number>(initial?.partner_id ?? partners[0]?.id ?? 0)
     const [statusId,   setStatusId]   = useState<number>(initial?.status_id ?? defaultStatusId)
+    const [axisId,     setAxisId]     = useState<number | null>(initial?.axis_id ?? null)
     const [budget,     setBudget]     = useState(initial?.budget ? String(initial.budget) : '')
     const [grant,      setGrant]      = useState(initial?.grant  ? String(initial.grant)  : '')
     const [signedDate, setSignedDate] = useState(initial?.signed_date ?? '')
@@ -779,7 +820,7 @@ function AgreementForm({ partners, statuses, projectId, initial, onSaved, onCanc
         try {
             const fields = {
                 title, description, partner_id: partnerId, project_id: projectId,
-                status_id: statusId,
+                axis_id: axisId, status_id: statusId,
                 budget: Number(budget) || 0, grant: Number(grant) || 0, signed_date: signedDate,
             }
             const partner = partners.find(p => p.id === partnerId)!
@@ -828,6 +869,16 @@ function AgreementForm({ partners, statuses, projectId, initial, onSaved, onCanc
                         </SelectContent>
                     </Select>
                 </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Axe</Label>
+                <Select value={axisId ? String(axisId) : 'none'} onValueChange={v => setAxisId(v === 'none' ? null : Number(v))}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Aucun axe" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">Aucun axe</SelectItem>
+                        {axes.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
             </div>
             <div className="flex gap-3">
                 <div className="flex flex-col gap-1.5 flex-1">
@@ -888,7 +939,7 @@ function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputPro
                 onChange={e => { setQuery(e.target.value); setOpen(true) }}
                 onFocus={() => setOpen(true)}
                 onBlur={() => setTimeout(() => setOpen(false), 150)}
-                placeholder="Rechercher un membre..."
+                placeholder="Ajouter un membre..."
                 className="h-8 text-xs"
             />
             {open && filtered.length > 0 && (
@@ -1332,8 +1383,8 @@ function PartnerQuickCreateForm({ projectRole: _projectRole, onSaved, onCancel }
                 <Input value={name} onChange={e => setName(e.target.value)}
                     placeholder="Nom du partenaire *" className="h-8 text-xs flex-1" autoFocus />
                 <Select value={type} onValueChange={setType}>
-                    <SelectTrigger className="h-8 text-xs w-44 shrink-0"><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectTrigger className="h-8 text-xs w-50 shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent position="popper">
                         {PARTNER_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                 </Select>
@@ -1341,7 +1392,7 @@ function PartnerQuickCreateForm({ projectRole: _projectRole, onSaved, onCancel }
             <div className="flex flex-wrap gap-1.5">
                 {PALETTE.map(c => (
                     <button key={c.hexa} title={c.label} type="button" onClick={() => setColor(c.hexa)}
-                        className="w-5 h-5 rounded-full border-2 transition-all"
+                        className="w-4 h-7 rounded-full border-2 transition-all"
                         style={{ backgroundColor: c.hexa, borderColor: color === c.hexa ? '#000' : 'transparent' }}
                     />
                 ))}
@@ -1371,14 +1422,19 @@ type ProjectDetailSheetProps = {
     axes: Axis[]
     statuses: Status[]
     members: Member[]
+    projectTimes: TimeEntry[]
+    axis: Axis[]
     onMemberAdd?: (projectId: number, memberId: number) => void
     onMemberRemove?: (id: number) => void
     onOpen?: (id: number) => void
     onMemberCreated?: (m: Member) => void
     onPartnerCreated?: (p: Partner) => void
+    onTimeEntryAdded?: (e: TimeEntry) => void
+    onTimeEntryUpdated?: (e: TimeEntry) => void
+    onTimeEntryDeleted?: (id: number) => void
 }
 
-function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, statuses, members, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated }: ProjectDetailSheetProps) {
+function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses, members, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -1420,6 +1476,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     const [milestones,       setMilestones]       = useState<ProjectMilestone[]>([])
     const [showAddMilestone, setShowAddMilestone] = useState(false)
     const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | null>(null)
+    const [selectedPm, setSelectedPm] = useState<ProjectMember | null>(null)
 
     useEffect(() => {
         if (!open || !project) return
@@ -1427,7 +1484,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
         setEditing(false)
         setShowAddForm(false)
         setEditingAgreement(null)
-        setConfirming(false)
+        setConfirming(false) 
         setSelectedMembers([])
         setExpanded(false)
         setShowAddMilestone(false)
@@ -1597,7 +1654,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     return (
         <>
         <Sheet open={open} onOpenChange={v => { if (!v) onClose() }}>
-            <SheetContent side="right" showCloseButton={false} className={`${expanded ? '!w-screen' : '!w-[520px]'} flex flex-col gap-0 p-0 overflow-y-auto transition-all duration-300`}>
+            <SheetContent side="right" showCloseButton={false} className={`${expanded ? '!w-screen' : '!w-[520px]'} flex flex-col gap-0 p-0 transition-all duration-300`}>
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
                     <SheetTitle className="flex-1 min-w-0 truncate">
                         {editing && draft ? (
@@ -1812,19 +1869,6 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                     <span className="text-xs text-muted-foreground">{selectedMembers.length} sélectionné{selectedMembers.length > 1 ? 's' : ''}</span>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <div className="flex items-center gap-1 px-2 h-8 rounded-md border border-input bg-background hover:bg-accent cursor-pointer"
-                                                onClick={toggleSelectAll}>
-                                                <Checkbox
-                                                    checked={selectedMembers.length === projectMembers.length}
-                                                    onCheckedChange={toggleSelectAll}
-                                                    className="pointer-events-none"
-                                                />
-                                            </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent><p>Tout sélectionner</p></TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
                                             <Button variant="outline" className="rounded-md" size="sm" onClick={copyEmails}>
                                                 {copied ? <CheckIcon size={13} /> : <Copy size={13} />}
                                             </Button>
@@ -1852,47 +1896,72 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                         </div>
 
                         {showParticipants && projectMembers.length > 0 && (
-                            <div className="flex flex-col gap-1">
-                                {projectMembers.slice().sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role)).map(pm => {
-                                    const member = members.find(m => m.id === pm.member_id)
-                                    if (!member) return null
-                                    const partner = partners.find(p => p.id === member.partner_id)
-                                    return (
-                                        <div key={pm.id} onClick={() => toggleSelect(pm)} className={selectedMembers.some(m => m.id === pm.id) ? 'flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group cursor-pointer bg-gray-100' : 'flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group cursor-pointer'}>
-                                            <div className='flex items-center gap-2 min-w-0'>
-                                                <div className='flex flex-col'>
-                                                     <span className="text-sm">{member.first_name} {member.last_name} </span>
-                                                     {editingRolePmId === pm.id ? (
-                                                         <Select value={pm.role} onValueChange={role => handleRoleChange(pm.id, role)}>
-                                                             <SelectTrigger className="h-5 text-xs w-28 border-none p-0 shadow-none" onClick={e => e.stopPropagation()}><SelectValue /></SelectTrigger>
-                                                             <SelectContent>
-                                                                 {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                                                             </SelectContent>
-                                                         </Select>
-                                                     ) : (
-                                                         <span className='text-xs text-gray-400 cursor-pointer hover:text-foreground' onClick={e => { e.stopPropagation(); setEditingRolePmId(pm.id) }}>{pm.role}</span>
-                                                     )}
-                                                </div>
-
-                                                {partner && (
-                                                    <span
-                                                        className="shrink-0 text-[10px] px-1.5 py-0.2 rounded-full border border-border"
-                                                        style={partner.color ? { backgroundColor: partner.color } : {}}
-                                                    >
-                                                        {partner.name}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div
-                                                onClick={e => { e.stopPropagation(); handleRemoveMember(pm.id) }}
-                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive ml-2 cursor-pointer"
+                            <Table className="text-xs">
+                                <TableHeader>
+                                    <TableRow className="hover:bg-transparent">
+                                        <TableHead className="h-7 w-6 px-2">
+                                            <Checkbox
+                                                checked={selectedMembers.length > 0 && selectedMembers.length < projectMembers.length ? 'indeterminate' : selectedMembers.length === projectMembers.length && projectMembers.length > 0}
+                                                onCheckedChange={toggleSelectAll}
+                                                className="h-3.5 w-3.5"
+                                            />
+                                        </TableHead>
+                                        <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Nom</TableHead>
+                                        <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Rôle</TableHead>
+                                        <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Partenaire</TableHead>
+                                        <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground text-right">Jours</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {projectMembers.slice().sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role)).map(pm => {
+                                        const member = members.find(m => m.id === pm.member_id)
+                                        if (!member) return null
+                                        const partner = partners.find(p => p.id === member.partner_id)
+                                        const total_entries = projectTimes.filter(pt => pt.member_id === pm.member_id).reduce((acc, t) => acc + t.days, 0)
+                                        const isSelected = selectedMembers.some(m => m.id === pm.id)
+                                        return (
+                                            <TableRow
+                                                key={pm.id}
+                                                className={`group cursor-pointer ${isSelected ? 'bg-muted' : ''}`}
+                                                onClick={() => setSelectedPm(pm)}
                                             >
-                                                <X size={13} />
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
+                                                <TableCell className="px-2 py-1.5">
+                                                    <Checkbox
+                                                        checked={isSelected}
+                                                        onClick={e => e.stopPropagation()}
+                                                        onCheckedChange={() => toggleSelect(pm)}
+                                                        className="h-3.5 w-3.5"
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="px-2 py-1.5 whitespace-nowrap font-normal">{member.first_name} {member.last_name}</TableCell>
+                                                <TableCell className="px-2 py-1.5 whitespace-nowrap">
+                                                    <Select value={pm.role} onValueChange={role => handleRoleChange(pm.id, role)}>
+                                                        <SelectTrigger className="h-5 text-xs w-28 border-none p-0 shadow-none text-muted-foreground hover:text-foreground" onClick={e => e.stopPropagation()}><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </TableCell>
+                                                <TableCell className="px-2 py-1.5">
+                                                    {partner && (
+                                                        <span
+                                                            className="text-[10px] px-1.5 py-0.5 rounded-full border border-border whitespace-nowrap"
+                                                            style={partner.color ? { backgroundColor: partner.color } : {}}
+                                                        >
+                                                            {partner.name}
+                                                        </span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="px-2 py-1.5 text-right whitespace-nowrap">
+                                                    {total_entries > 0 && (
+                                                        <span className="font-medium text-gray-700">{total_entries}</span>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
                         )}
 
                         {showParticipants && (
@@ -1911,7 +1980,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                     </Select>
                                     {!showCreateMember && (
                                         <Button variant="outline" size="sm" className="h-8 text-xs gap-1 shrink-0 rounded-md" onClick={() => setShowCreateMember(true)}>
-                                            <Plus size={11} />Nouveau
+                                            <Plus size={11} />
                                         </Button>
                                     )}
                                 </div>
@@ -1946,7 +2015,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                 </Button>
                             </div>
                             {showConventions && !showAddForm && !editingAgreement && (
-                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowAddForm(true)}>
+                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddForm(true)}>
                                     <Plus size={11} />Ajouter
                                 </Button>
                             )}
@@ -1964,6 +2033,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                             key={a.id}
                                             partners={partners}
                                             statuses={statuses}
+                                            axes={axes}
                                             projectId={project.id}
                                             initial={a}
                                             onSaved={handleAgreementSaved}
@@ -1974,6 +2044,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                             key={a.id}
                                             agreement={a}
                                             statuses={statuses}
+                                            axe={axis.find(ax => ax.id === a.axis_id)}
                                             onEdit={setEditingAgreement}
                                             onDelete={handleDeleteAgreement}
                                             onOpen={() => setSelectedAgreement(a)}
@@ -1985,6 +2056,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                     <AgreementForm
                                         partners={partners}
                                         statuses={statuses}
+                                        axes={axes}
                                         projectId={project.id}
                                         onSaved={handleAgreementSaved}
                                         onCancel={() => setShowAddForm(false)}
@@ -2080,10 +2152,10 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                             </div>
                             {showPartenaires && !showAddPartner && !showCreatePartner && (
                                 <div className="flex items-center gap-1">
-                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowAddPartner(true)}>
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddPartner(true)}>
                                         <Plus size={11} />Lier
                                     </Button>
-                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowCreatePartner(true)}>
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowCreatePartner(true)}>
                                         <Plus size={11} />Nouveau
                                     </Button>
                                 </div>
@@ -2190,10 +2262,10 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                             </div>
                             {showActionCards && !showLinkCard && !showCreateCard && (
                                 <div className="flex items-center gap-1">
-                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowLinkCard(true)}>
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowLinkCard(true)}>
                                         <Plus size={11} />Lier
                                     </Button>
-                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowCreateCard(true)}>
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowCreateCard(true)}>
                                         <Plus size={11} />Créer
                                     </Button>
                                 </div>
@@ -2294,7 +2366,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                 </Button>
                             </div>
                             {showJalons && !showAddMilestone && !editingMilestone && (
-                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowAddMilestone(true)}>
+                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddMilestone(true)}>
                                     <Plus size={11} />Ajouter
                                 </Button>
                             )}
@@ -2362,6 +2434,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
             agreement={selectedAgreement ?? null}
             partners={partners}
             statuses={statuses}
+            axes={axes}
             projectId={project?.id ?? 0}
             onSaved={a => setAgreements(prev => prev.map(x => x.id === a.id ? a : x))}
             onDeleted={id => { setAgreements(prev => prev.filter(x => x.id !== id)); setSelectedAgreement(null) }}
@@ -2383,6 +2456,30 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                 )}
             </DialogContent>
         </Dialog>
+
+        {/* Dialog déclarations de temps */}
+        <Dialog open={!!selectedPm} onOpenChange={open => { if (!open) setSelectedPm(null) }}>
+            <DialogContent style={{ maxWidth: '550px' }} className="flex flex-col max-h-[80vh]">
+                {selectedPm && (() => {
+                    const pmMember = members.find(m => m.id === selectedPm.member_id)
+                    const pmPartner = pmMember ? partners.find(p => p.id === pmMember.partner_id) : undefined
+                    if (!pmMember) return null
+                    return (
+                        <MemberTimeDialog
+                            pm={selectedPm}
+                            member={pmMember}
+                            partner={pmPartner}
+                            entries={projectTimes.filter(pt => pt.member_id === selectedPm.member_id)}
+                            projectId={project?.id ?? 0}
+                            onEntryAdded={e => onTimeEntryAdded?.(e)}
+                            onEntryUpdated={e => onTimeEntryUpdated?.(e)}
+                            onEntryDeleted={id => onTimeEntryDeleted?.(id)}
+                        />
+                    )
+                })()}
+            </DialogContent>
+        </Dialog>
+
 
         {/* Sheet détail ActionCard */}
         {selectedActionCard && (
@@ -2443,6 +2540,162 @@ function toActionCardData(card: ActionCardFull): ActionCardData {
             ? { id: card.owner.id, first_name: card.owner.first_name, last_name: card.owner.last_name, position: card.owner.position }
             : undefined,
     }
+}
+
+// --- MemberTimeDialog ---
+
+type MemberTimeDialogProps = {
+    pm: ProjectMember
+    member: Member
+    partner?: Partner
+    entries: TimeEntry[]
+    projectId: number
+    onEntryAdded: (e: TimeEntry) => void
+    onEntryUpdated: (e: TimeEntry) => void
+    onEntryDeleted: (id: number) => void
+}
+
+function MemberTimeDialog({ pm, member, partner, entries, projectId, onEntryAdded, onEntryUpdated, onEntryDeleted }: MemberTimeDialogProps) {
+    const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
+    const [showAddForm, setShowAddForm] = useState(false)
+    const totalDays = entries.reduce((acc, e) => acc + e.days, 0)
+
+    return (
+        <>
+            <DialogHeader>
+                <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+                    {member.first_name} {member.last_name}
+                    {partner && (
+                        <span
+                            className="text-[10px] font-normal px-1.5 py-0.5 rounded-full border border-border"
+                            style={partner.color ? { backgroundColor: partner.color } : {}}
+                        >
+                            {partner.name}
+                        </span>
+                    )}
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground">{pm.role}{totalDays > 0 ? ` · ${totalDays}j déclarés` : ''}</p>
+            </DialogHeader>
+
+            <div className="flex flex-col gap-3 mt-2 overflow-y-auto min-h-0">
+                {entries.length > 0 && (
+                    <Table className="text-xs">
+                        <TableHeader>
+                            <TableRow className="hover:bg-transparent ">
+                                <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Début</TableHead>
+                                <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Fin</TableHead>
+                                <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground text-right">Jours</TableHead>
+                                <TableHead className="h-7 w-8 px-2" />
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {entries.map(entry => (
+                                editingEntry?.id === entry.id ? (
+                                    <TableRow key={entry.id} className="">
+                                        <TableCell colSpan={4} className="px-2 py-1">
+                                            <MemberTimeEntryForm
+                                                projectId={projectId}
+                                                memberId={member.id}
+                                                initial={entry}
+                                                onSaved={e => { onEntryUpdated(e); setEditingEntry(null) }}
+                                                onCancel={() => setEditingEntry(null)}
+                                            />
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    <TableRow key={entry.id} className="group border-none hover:bg-muted cursor-pointer" onClick={() => setEditingEntry(entry)}>
+                                        <TableCell className="px-2 py-1.5">{formatDate(entry.start_date)}</TableCell>
+                                        <TableCell className="px-2 py-1.5">{formatDate(entry.end_date)}</TableCell>
+                                        <TableCell className="px-2 py-1.5 text-right font-medium">{entry.days}j</TableCell>
+                                        <TableCell className="px-2 py-1.5">
+                                            <button
+                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                                                onClick={async e => { e.stopPropagation(); await removeTimeEntry(entry.id); onEntryDeleted(entry.id) }}
+                                            >
+                                                <X size={13} />
+                                            </button>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+
+                {!editingEntry && (
+                    showAddForm ? (
+                        <MemberTimeEntryForm
+                            projectId={projectId}
+                            memberId={member.id}
+                            onSaved={e => { onEntryAdded(e); setShowAddForm(false) }}
+                            onCancel={() => setShowAddForm(false)}
+                        />
+                    ) : (
+                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1 self-start rounded-md" onClick={() => setShowAddForm(true)}>
+                            <Plus size={12} /> Ajouter une déclaration
+                        </Button>
+                    )
+                )}
+            </div>
+        </>
+    )
+}
+
+// --- MemberTimeEntryForm ---
+
+type MemberTimeEntryFormProps = {
+    projectId: number
+    memberId: number
+    initial?: TimeEntry
+    onSaved: (e: TimeEntry) => void
+    onCancel?: () => void
+}
+
+function MemberTimeEntryForm({ projectId, memberId, initial, onSaved, onCancel }: MemberTimeEntryFormProps) {
+    const [days, setDays] = useState(initial?.days ?? 0)
+    const [startDate, setStartDate] = useState(initial?.start_date ?? '')
+    const [endDate, setEndDate] = useState(initial?.end_date ?? '')
+    const [saving, setSaving] = useState(false)
+
+    async function handleSave() {
+        if (!days || !startDate || !endDate) return
+        setSaving(true)
+        try {
+            if (initial) {
+                await updateTimeEntry(initial.id, { days, start_date: startDate, end_date: endDate })
+                onSaved({ ...initial, days, start_date: startDate, end_date: endDate })
+            } else {
+                const entry = await addTimeEntry(projectId, memberId, days, startDate, endDate)
+                onSaved(entry)
+                setDays(0); setStartDate(''); setEndDate('')
+            }
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-1 flex-1">
+                <Label className="text-xs">Début</Label>
+                <Input type="date" className="h-7 text-xs" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1 flex-1">
+                <Label className="text-xs">Fin</Label>
+                <Input type="date" className="h-7 text-xs" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1 w-16">
+                <Label className="text-xs">Jours</Label>
+                <Input type="number" min={0} className="h-7 text-xs" value={days || ''} onChange={e => setDays(Number(e.target.value))} />
+            </div>
+            <Button size="sm" className="h-7 text-xs rounded-md" disabled={saving || !days || !startDate || !endDate} onClick={handleSave}>
+                {initial ? 'Modifier' : 'Ajouter'}
+            </Button>
+            {onCancel && (
+                <Button size="sm" variant="ghost" className="h-7 text-xs rounded-md" onClick={onCancel}>Annuler</Button>
+            )}
+        </div>
+    )
 }
 
 // --- KpiEntryDialog ---
@@ -2524,6 +2777,128 @@ function KpiEntryDialog({ kpi, projectId, entries, currentUserId, onEntryAdded, 
     )
 }
 
+
+// --- Filtre membres : dropdown avec recherche et groupement par établissement ---
+
+type MemberFilterProps = {
+    allMembers: Member[]
+    allPartners: Partner[]
+    selectedIds: number[]
+    onChangeIds: (ids: number[]) => void
+}
+
+function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: MemberFilterProps) {
+    const [query, setQuery] = useState('')
+    const partnerMap = new Map(allPartners.map(p => [p.id, p]))
+
+    const filtered = query.trim() === ''
+        ? allMembers
+        : allMembers.filter(m =>
+            `${m.first_name} ${m.last_name}`.toLowerCase().includes(query.toLowerCase())
+        )
+
+    // Grouper par établissement
+    const groupMap = new Map<number, { partner: Partner; members: Member[] }>()
+    for (const m of filtered) {
+        const partner = partnerMap.get(m.partner_id)
+        if (!partner) continue
+        if (!groupMap.has(partner.id)) groupMap.set(partner.id, { partner, members: [] })
+        groupMap.get(partner.id)!.members.push(m)
+    }
+    const groups = Array.from(groupMap.values())
+
+    function toggle(id: number) {
+        onChangeIds(selectedIds.includes(id)
+            ? selectedIds.filter(i => i !== id)
+            : [...selectedIds, id]
+        )
+    }
+
+    function toggleGroup(members: Member[]) {
+        const ids = members.map(m => m.id)
+        const allChecked = ids.every(id => selectedIds.includes(id))
+        onChangeIds(allChecked
+            ? selectedIds.filter(id => !ids.includes(id))
+            : [...new Set([...selectedIds, ...ids])]
+        )
+    }
+
+    function groupState(members: Member[]): boolean | 'indeterminate' {
+        const count = members.filter(m => selectedIds.includes(m.id)).length
+        if (count === 0) return false
+        if (count === members.length) return true
+        return 'indeterminate'
+    }
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant={selectedIds.length > 0 ? 'default' : 'outline'}
+                    size="sm"
+                    className="gap-2 rounded-md"
+                >
+                    <Users size={14} />
+                    Membres
+                    {selectedIds.length > 0 && (
+                        <span className="text-xs opacity-75">{selectedIds.length}</span>
+                    )}
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-60">
+                <div className="px-2 py-1.5">
+                    <Input
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Rechercher un membre..."
+                        className="h-7 text-xs"
+                    />
+                </div>
+                <DropdownMenuSeparator />
+                <div className="max-h-72 overflow-y-auto">
+                {groups.map((group, i) => {
+                    const state = groupState(group.members)
+                    return (
+                        <div key={group.partner.id}>
+                            {i > 0 && <DropdownMenuSeparator />}
+                            <DropdownMenuCheckboxItem
+                                checked={state === true}
+                                onCheckedChange={() => toggleGroup(group.members)}
+                                className="font-medium gap-2"
+                            >
+                                <span
+                                    className="w-2.5 h-2.5 rounded-full shrink-0 border border-border"
+                                    style={group.partner.color ? { backgroundColor: group.partner.color } : {}}
+                                />
+                                {group.partner.name}
+                            </DropdownMenuCheckboxItem>
+                            {group.members.map(m => (
+                                <DropdownMenuCheckboxItem
+                                    key={m.id}
+                                    checked={selectedIds.includes(m.id)}
+                                    onCheckedChange={() => toggle(m.id)}
+                                    className="pl-7"
+                                >
+                                    {m.first_name} {m.last_name}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                        </div>
+                    )
+                })}
+                </div>
+                {selectedIds.length > 0 && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem checked={false} onCheckedChange={() => onChangeIds([])}>
+                            Tout effacer
+                        </DropdownMenuCheckboxItem>
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
 // --- KpiEntryForm ---
 
 type KpiEntryFormProps = {
@@ -2598,12 +2973,18 @@ export default function Projects() {
     const [statuses,      setStatuses]      = useState<Status[]>([])
     const [partners,      setPartners]      = useState<Partner[]>([])
     const [members,       setMembers]       = useState<Member[]>([])
+    const [allProjectMembers, setAllProjectMembers] = useState<ProjectMember[]>([])
     const [allAgreements, setAllAgreements] = useState<FinancialAgreement[]>([])
     const [loading,       setLoading]       = useState(true)
+    const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
 
+
+    // Filtres
     const [search,            setSearch]            = useState('')
     const [selectedAxisIds,   setSelectedAxisIds]   = useState<number[]>([])
     const [selectedCallIds,   setSelectedCallIds]   = useState<number[]>([])
+    const [selectedStatuses, setSelectedStatuses] = useState<number[]>([])
+    const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([])
 
     const [callSheetOpen,    setCallSheetOpen]    = useState(false)
     const [projectSheetOpen, setProjectSheetOpen] = useState(false)
@@ -2636,8 +3017,8 @@ export default function Projects() {
 
 
     useEffect(() => {
-        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers()])
-            .then(([pcs, ps, axs, sts, pts, agrs, m]) => {
+        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers()])
+            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm]) => {
                 const axisMap = new Map((axs as Axis[]).map(a => [a.id, a]))
 
                 const fullCalls: ProjectCallFull[] = (pcs as ProjectCall[]).map(pc => ({
@@ -2658,6 +3039,8 @@ export default function Projects() {
                 setProjects(fullProjects)
                 setAllAgreements(agrs as FinancialAgreement[])
                 setMembers(m)
+                setTimeEntries(te)
+                setAllProjectMembers(pm)
             })
             .finally(() => setLoading(false))
     }, [])
@@ -2673,6 +3056,7 @@ export default function Projects() {
     }, new Map())
 
     // Filtres
+
     const filteredCalls = projectCalls.filter(pc => {
         if (selectedAxisIds.length > 0 && !selectedAxisIds.includes(pc.axis_id)) return false
         if (selectedCallIds.length > 0 && !selectedCallIds.includes(pc.id)) return false
@@ -2681,9 +3065,17 @@ export default function Projects() {
 
     const filteredProjects = projects.filter(p => {
         if (!filteredCalls.find(pc => pc.id === p.project_call_id)) return false
+        if (selectedStatuses.length > 0 && !selectedStatuses.includes(p.status_id)) return false
+        if (selectedMemberIds.length > 0) {
+            const projectMemberIds = allProjectMembers
+                .filter(pm => pm.project_id === p.id)
+                .map(pm => pm.member_id)
+            if (!selectedMemberIds.some(id => projectMemberIds.includes(id))) return false
+        }
         if (search.trim() && !p.title.toLowerCase().includes(search.toLowerCase())) return false
         return true
     })
+
 
     function handleProjectCreated(p: Project) {
         const call = projectCalls.find(pc => pc.id === p.project_call_id)!
@@ -2791,6 +3183,14 @@ export default function Projects() {
                     />
                 </div>
 
+                {/* Filtre membres */}
+                <MemberFilter
+                    allMembers={members}
+                    allPartners={partners}
+                    selectedIds={selectedMemberIds}
+                    onChangeIds={setSelectedMemberIds}
+                />
+
                 {/* Filtre axes */}
                 {(() => {
                     const active = selectedAxisIds.length
@@ -2868,6 +3268,44 @@ export default function Projects() {
                     )
                 })()}
 
+                {/* filtre Status */}
+                {(() => {
+                    const active = selectedStatuses.length
+                    const projectStatuses = statuses.filter(s => s.context === "project")
+                    return (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="gap-2 rounded-md">
+                                    <SlidersHorizontal size={14} />
+                                    Status
+                                    {active > 0 && <span className="text-muted-foreground text-xs">{active}/{projectStatuses.length}</span>}
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-64">
+                                {projectStatuses.map(s => (
+                                    <DropdownMenuCheckboxItem
+                                        key={s.id}
+                                        checked={selectedStatuses.includes(s.id)}
+                                        onCheckedChange={() => setSelectedStatuses(prev =>
+                                            prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id]
+                                        )}
+                                    >
+                                        {s.label}
+                                    </DropdownMenuCheckboxItem>
+                                ))}
+                                {active > 0 && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuCheckboxItem checked={false} onCheckedChange={() => setSelectedStatuses([])}>
+                                            Tout effacer
+                                        </DropdownMenuCheckboxItem>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )
+                })()}
+
                 <div className="ml-auto flex items-center gap-2">
                     {viewMode === "cards" && (
                         <>
@@ -2920,44 +3358,84 @@ export default function Projects() {
 
                                             {/* Colonnes AAP */}
                                             <div className="flex flex-row h-full overflow-x-auto">
-                                                {calls.map(pc => {
+                                                {calls.sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date)).map(pc => {
                                                     console.log("Calls :", calls)
                                                     const pcProjects = filteredProjects.filter(p => p.project_call_id === pc.id)
                                                     const pcStatus = statuses.find(s => s.id === pc.status_id)
                                                     const pcColor = pcStatus?.label === "Terminé" ? "#f3f4f6" : "#d1fae5"
+                                                    const pcGrantTotal = pcProjects.reduce((sum, p) =>
+                                                        sum + (agreementsByProject.get(p.id) ?? []).reduce((s, a) => s + (a.grant ?? 0), 0), 0
+                                                    )
+
+                                                    const pcGrantLength = pcProjects.reduce((sum, p) =>
+                                                        sum + (agreementsByProject.get(p.id) ?? []).length, 0
+                                                    )
+                                                    
+                                                    
+                                                    const pcBudgetPct = pc.budget > 0 ? Math.round((pcGrantTotal / pc.budget) * 100) : null
+
                                                     return (
                                                         <div key={pc.id} className="w-72 shrink-0 flex flex-col h-full border-r last:border-r-0">
                                                             {/* Header AAP */}
                                                             <div className="px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
-                                                                <div className="flex flex-col min-w-0">
-                                                                    <span className="text-sm font-medium truncate">{pc.title}</span>
-                                                                    {(pc.start_date || pc.end_date) && (
-                                                                        <span className="text-xs text-muted-foreground">
-                                                                            {formatDate(pc.start_date)}{pc.end_date ? ` → ${formatDate(pc.end_date)}` : ''}
-                                                                        </span>
+                                                                    <div className="flex flex-col w-full">
+                                                                        
+                                                                        <div className="flex flex-col min-w-0">
+                                                                            <span className="text-sm font-medium truncate">{pc.title}</span>
+                                                                            {(pc.start_date || pc.end_date) && (
+                                                                                <span className="text-xs text-muted-foreground">
+                                                                                    {formatDate(pc.start_date)}{pc.end_date ? ` → ${formatDate(pc.end_date)}` : ''}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                     
+                                                                    
+                                                                   
+                                                                    {pc.budget > 0 && (
+                                                                        <div className="mt-2 flex flex-col gap-0.5 mt-4">
+                                                                            <div className="flex items-center justify-between text-xs">
+                                                                                <span className="text-muted-foreground">Budget</span>
+                                                                                <span className="font-medium">{pc.budget.toLocaleString('fr-FR')} €</span>
+                                                                            </div>
+                                                                            <div className="flex items-center justify-between text-xs">
+                                                                                <span className="text-muted-foreground">Subventions allouées {pcGrantLength !== null ? ` (${pcGrantLength})` : ''}</span>
+                                                                                <span className={`font-medium ${pcBudgetPct !== null && pcBudgetPct >= 100 ? 'text-green-600' : pcBudgetPct !== null && pcBudgetPct >= 75 ? 'text-amber-600' : ''}`}>
+                                                                                    {pcGrantTotal.toLocaleString('fr-FR')} €
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
                                                                     )}
-                                                                    {pcStatus && <Badge className="rounded-md mt-1 text-xs text-black" style={{backgroundColor:pcColor}}>{pcStatus.label}</Badge>}
-                                                                </div>
-                                                                <div className="flex items-center gap-1 shrink-0">
-                                                                    <span className="text-xs text-muted-foreground">{pcProjects.length} projet{pcProjects.length > 1 ? 's' : ''}</span>
-                                                                    <Button
-                                                                        variant="ghost" size="icon" className="h-6 w-6 rounded-md"
-                                                                        onClick={() => { setEditingCall(pc); setCallSheetOpen(true) }}
-                                                                    >
-                                                                        <Pencil size={11} />
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant="ghost" size="icon" className="h-6 w-6 rounded-md"
-                                                                        onClick={() => { setDefaultCallId(pc.id); setProjectSheetOpen(true) }}
-                                                                    >
-                                                                        <Plus size={11} />
-                                                                    </Button>
+
+                                                                    <div className="flex justify-between items-center gap-2 mt-4">
+                                                                        {pcStatus && (
+                                                                        <Badge className="rounded-full text-xs text-black shrink-0 mt-0.5" style={{backgroundColor:pcColor}}>
+                                                                            {pcStatus.label}
+                                                                        </Badge>
+                                                                        )}
+
+                                                                        <div className="flex items-center gap-1 shrink-0">
+                                                                            <span className="text-xs text-muted-foreground">{pcProjects.length} projet{pcProjects.length > 1 ? 's' : ''}</span>
+                                                                            <Button
+                                                                                variant="ghost" size="icon" className="h-6 w-6 rounded-md"
+                                                                                onClick={() => { setEditingCall(pc); setCallSheetOpen(true) }}
+                                                                            >
+                                                                                <Pencil size={11} />
+                                                                            </Button>
+                                                                            <Button
+                                                                                variant="ghost" size="icon" className="h-6 w-6 rounded-md"
+                                                                                onClick={() => { setDefaultCallId(pc.id); setProjectSheetOpen(true) }}
+                                                                            >
+                                                                                <Plus size={11} />
+                                                                            </Button>
+                                                                        </div>
+
+                                                                    </div>
                                                                 </div>
                                                             </div>
 
                                                             {/* Cartes projets */}
                                                             <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-                                                                {pcProjects.map(p => (
+                                                                {pcProjects.slice().sort((a, b) => (b.start_date ?? '').localeCompare(a.start_date ?? '')).map(p => (
                                                                     <ProjectCard
                                                                         key={p.id}
                                                                         project={p}
@@ -3005,31 +3483,31 @@ export default function Projects() {
                                 <>
                                     <span className="text-sm px-2">Supprimer {selectedProjects.length} projet{selectedProjects.length > 1 ? 's' : ''} ?</span>
                                     <div className="w-px h-4 bg-background/20 mx-1" />
-                                    <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(false)}>Annuler</Button>
-                                    <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelectedProjects}>Confirmer</Button>
+                                    <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md" onClick={() => setConfirmingDeleteProjects(false)}>Annuler</Button>
+                                    <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10 rounded-md" onClick={handleDeleteSelectedProjects}>Confirmer</Button>
                                 </>
                             ) : (
                                 <>
                                     <span className="text-sm font-medium px-2">{selectedProjects.length} sélectionné{selectedProjects.length > 1 ? 's' : ''}</span>
                                     <div className="w-px h-4 bg-background/20 mx-1" />
-                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md" onClick={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}>
                                         <ListChecks size={13} /> Tout sélectionner
                                     </Button>
-                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyProjectTitlesGroup}>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md" onClick={copyProjectTitlesGroup}>
                                         <Copy size={13} /> Copier les titres
                                     </Button>
-                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => exportToCsv(
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md" onClick={() => exportToCsv(
                                         'projets.csv',
                                         ['Titre', 'Appel à projets', 'Axe', 'Budget (€)'],
                                         selectedProjects.map(p => [p.title, p.projectCall.title, p.projectCall.axis.name, p.budget])
                                     )}>
                                         <FileDown size={13} /> Exporter en CSV
                                     </Button>
-                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(true)}>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10 rounded-md" onClick={() => setConfirmingDeleteProjects(true)}>
                                         <Trash2 size={13} /> Supprimer
                                     </Button>
                                     <div className="w-px h-4 bg-background/20 mx-1" />
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
                                         <X size={13} />
                                     </Button>
                                 </>
@@ -3168,11 +3646,11 @@ export default function Projects() {
                                                 </TableCell>
                                                 <TableCell onClick={e => e.stopPropagation()}>
                                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                                                        <Button variant="ghost" size="icon" className="h-7 w-7"
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md"
                                                             onClick={() => { setSelectedProject(p); setProjectSheetOpen(true) }}>
                                                             <Pencil size={13} />
                                                         </Button>
-                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive rounded-md"
                                                             onClick={async () => { await deleteProject(p.id); setProjects(prev => prev.filter(x => x.id !== p.id)) }}>
                                                             <Trash2 size={13} />
                                                         </Button>
@@ -3192,21 +3670,21 @@ export default function Projects() {
                                     <>
                                         <span className="text-sm px-2">Supprimer {selectedProjects.length} projet{selectedProjects.length > 1 ? 's' : ''} ?</span>
                                         <div className="w-px h-4 bg-background/20 mx-1" />
-                                        <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10" onClick={() => setConfirmingDeleteProjects(false)}>Annuler</Button>
-                                        <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={handleDeleteSelectedProjects}>Confirmer</Button>
+                                        <Button variant="ghost" size="sm" className="h-7 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md" onClick={() => setConfirmingDeleteProjects(false)}>Annuler</Button>
+                                        <Button variant="ghost" size="sm" className="h-7 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10 rounded-md" onClick={handleDeleteSelectedProjects}>Confirmer</Button>
                                     </>
                                 ) : (
                                     <>
                                         <span className="text-sm font-medium px-2">{selectedProjects.length} sélectionné{selectedProjects.length > 1 ? 's' : ''}</span>
                                         <div className="w-px h-4 bg-background/20 mx-1" />
-                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10"
+                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md"
                                             onClick={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}>
                                             <ListChecks size={13} /> Tout sélectionner
                                         </Button>
-                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10" onClick={copyProjectTitlesGroup}>
+                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md" onClick={copyProjectTitlesGroup}>
                                             <Copy size={13} /> Copier les titres
                                         </Button>
-                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10"
+                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md"
                                             onClick={() => exportToCsv('projets.csv',
                                                 ['Titre', 'Dispositif', 'Axe', 'Statut', 'Budget (€)', 'Subvention (€)', 'Début', 'Fin'],
                                                 selectedProjects.map(p => {
@@ -3218,12 +3696,12 @@ export default function Projects() {
                                             )}>
                                             <FileDown size={13} /> Exporter en CSV
                                         </Button>
-                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10"
+                                        <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10 rounded-md"
                                             onClick={() => setConfirmingDeleteProjects(true)}>
                                             <Trash2 size={13} /> Supprimer
                                         </Button>
                                         <div className="w-px h-4 bg-background/20 mx-1" />
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10"
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md"
                                             onClick={() => { setMultipleSelect(false); setSelectedProjects([]) }}>
                                             <X size={13} />
                                         </Button>
@@ -3268,8 +3746,13 @@ export default function Projects() {
                 axes={axes}
                 statuses={statuses}
                 members={members}
+                projectTimes={timeEntries.filter(te => te.project_id === selectedProject?.id)}
+                axis={axes}
                 onMemberCreated={m => setMembers(prev => [...prev, m])}
                 onPartnerCreated={p => setPartners(prev => [...prev, p])}
+                onTimeEntryAdded={e => setTimeEntries(prev => [...prev, e])}
+                onTimeEntryUpdated={e => setTimeEntries(prev => prev.map(x => x.id === e.id ? e : x))}
+                onTimeEntryDeleted={id => setTimeEntries(prev => prev.filter(e => e.id !== id))}
             />
         </div>
     )

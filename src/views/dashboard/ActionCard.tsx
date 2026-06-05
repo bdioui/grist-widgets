@@ -10,17 +10,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown, File, Folder, Users, MessageCircle, Eye, EyeClosed} from 'lucide-react'
+import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown, File, Folder, Users, MessageCircle, Eye, EyeClosed, Calendar } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import {
     getMemberActionCardsByCard, getProjectActionCardsByCard, getToDoListsWithItemsByCard,
     getStatuses, getCategories, getMembers, getProjects, getPartners, getFinancialAgreements,
-    updateActionCard, updateToDoItem, addToDoItemToList, addToDoListToCard,
+    updateActionCard, updateToDoItem, addToDoItemToList, addToDoListToCard, deleteToDoList,
     addMemberToCard, removeMemberFromCard, addProjectToCard, removeProjectFromCard,
     getAgreementActionCardsByCard, addAgreementToCard, removeAgreementFromCard,
     deleteActionCard,
     getCommentsFull, createComment, updateComment, deleteComment,
+    addMember,
 } from '@/lib/api'
 import type { Status, Category, Member, Partner, Project, ToDoList, ToDoItem, MemberActionCard, ProjectActionCard, AgreementActionCard, FinancialAgreement, CommentFull } from '@/lib/types'
 import { useCurrentUser } from '@/lib/userContext'
@@ -32,6 +33,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import SearchInput from '@/components/SearchInput'
+
+const MEMBER_STATUSES = [
+    'Enseignant-chercheur', 'Chercheur', 'Ingénieur', 'Doctorant',
+    'Post-doc', 'BIATSS', 'Autre',
+]
 
 // --- Types exportés (utilisés par Categories, DraggableCard, etc.) ---
 
@@ -83,10 +90,14 @@ type TodoItemRowProps = {
     item: ToDoItem
     onToggle: (item: ToDoItem) => void
     onDelete: (item: ToDoItem) => void
+    onDueDateChange: (item: ToDoItem, due_date: string) => void
 }
 
-function TodoItemRow({ item, onToggle, onDelete }: TodoItemRowProps) {
+function TodoItemRow({ item, onToggle, onDelete, onDueDateChange }: TodoItemRowProps) {
+    const [editingDate, setEditingDate] = useState(false)
     const done = item.status_id === 9
+    const today = new Date().toISOString().slice(0, 10)
+    const isOverdue = item.due_date && !done && item.due_date < today
     return (
         <li className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted group">
             <Checkbox
@@ -100,6 +111,24 @@ function TodoItemRow({ item, onToggle, onDelete }: TodoItemRowProps) {
             >
                 {item.content}
             </label>
+            {item.due_date || editingDate ? (
+                <input
+                    type="date"
+                    autoFocus={editingDate && !item.due_date}
+                    value={item.due_date ?? ''}
+                    onChange={e => { onDueDateChange(item, e.target.value); setEditingDate(false) }}
+                    onBlur={() => setEditingDate(false)}
+                    onClick={e => e.stopPropagation()}
+                    className={`text-xs border-none bg-transparent outline-none w-28 cursor-pointer ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}
+                />
+            ) : (
+                <button
+                    onClick={e => { e.stopPropagation(); setEditingDate(true) }}
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                >
+                    <Calendar size={12} />
+                </button>
+            )}
             <button
                 onClick={() => onDelete(item)}
                 className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
@@ -116,32 +145,50 @@ type TodoSectionProps = {
     list: ToDoList & { items: ToDoItem[] }
     onToggle: (listId: number, item: ToDoItem) => void
     onDeleteItem: (listId: number, item: ToDoItem) => void
-    onAddItem: (listId: number, content: string) => void
+    onAddItem: (listId: number, content: string, due_date?: string) => void
+    onDeleteList: (listId: number) => void
+    onDueDateChange: (listId: number, item: ToDoItem, due_date: string) => void
 }
 
-function TodoSection({ list, onToggle, onDeleteItem, onAddItem }: TodoSectionProps) {
+function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, onDueDateChange }: TodoSectionProps) {
     const [input, setInput] = useState('')
+    const [dueDate, setDueDate] = useState('')
     const done = list.items.filter(i => i.status_id === 9).length
 
     function submit() {
         if (!input.trim()) return
-        onAddItem(list.id, input.trim())
+        onAddItem(list.id, input.trim(), dueDate || undefined)
         setInput('')
+        setDueDate('')
     }
 
     return (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 group/list">
             <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-medium">{list.title}</span>
-                <span className="text-xs text-muted-foreground">{done}/{list.items.length}</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{done}/{list.items.length}</span>
+                    <button
+                        onClick={() => onDeleteList(list.id)}
+                        className="opacity-0 group-hover/list:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                    >
+                        <Trash2 size={12} />
+                    </button>
+                </div>
             </div>
             <ul className="flex flex-col gap-0.5">
-                {list.items.map(item => (
+                {list.items.slice().sort((a, b) => {
+                    if (!a.due_date && !b.due_date) return 0
+                    if (!a.due_date) return 1
+                    if (!b.due_date) return -1
+                    return a.due_date.localeCompare(b.due_date)
+                }).map(item => (
                     <TodoItemRow
                         key={item.id}
                         item={item}
                         onToggle={item => onToggle(list.id, item)}
                         onDelete={item => onDeleteItem(list.id, item)}
+                        onDueDateChange={(item, due_date) => onDueDateChange(list.id, item, due_date)}
                     />
                 ))}
             </ul>
@@ -151,9 +198,15 @@ function TodoSection({ list, onToggle, onDeleteItem, onAddItem }: TodoSectionPro
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && submit()}
                     placeholder="Nouvelle tâche..."
-                    className="h-7 text-xs"
+                    className="h-7 text-xs flex-1"
                 />
-                <Button variant="outline" size="icon" className="h-7 w-7" onClick={submit} disabled={!input.trim()}>
+                <input
+                    type="date"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    className="h-7 text-xs border border-input rounded-md px-2 bg-background text-muted-foreground w-32"
+                />
+                <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={submit} disabled={!input.trim()}>
                     <Plus size={12} />
                 </Button>
             </div>
@@ -370,6 +423,82 @@ type DetailSheetProps = {
     onDeleted?: (id: number) => void
 }
 
+// --- Formulaire création rapide membre (dans le sheet détail) ---
+
+function MemberQuickCreateForm({ partners, role, onSaved, onCancel }: {
+    partners: Partner[]
+    role: string
+    onSaved: (member: Member) => void
+    onCancel: () => void
+}) {
+    const [firstName,  setFirstName]  = useState('')
+    const [lastName,   setLastName]   = useState('')
+    const [email,      setEmail]      = useState('')
+    const [position,   setPosition]   = useState('')
+    const [statusVal,  setStatusVal]  = useState(MEMBER_STATUSES[0])
+    const [partnerId,  setPartnerId]  = useState<number>(partners[0]?.id ?? 0)
+    const [submitting, setSubmitting] = useState(false)
+
+    async function handleSubmit() {
+        if (!firstName.trim() || !lastName.trim()) return
+        setSubmitting(true)
+        try {
+            const member = await addMember({
+                first_name: firstName, last_name: lastName,
+                email, position, status: statusVal,
+                partner_id: partnerId, lab_id: 0,
+                tel: '', genre: '', profile_image: '', is_staff: false,
+            })
+            onSaved(member)
+        } finally {
+            setSubmitting(false)
+        }
+    }
+
+    return (
+        <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-muted/30">
+            <p className="text-xs font-medium text-muted-foreground">
+                Nouveau contact · rôle : <span className="text-foreground">{role}</span>
+            </p>
+            <div className="flex gap-2">
+                <Input value={firstName} onChange={e => setFirstName(e.target.value)}
+                    placeholder="Prénom *" className="h-8 text-xs flex-1" autoFocus />
+                <Input value={lastName} onChange={e => setLastName(e.target.value)}
+                    placeholder="Nom *" className="h-8 text-xs flex-1" />
+            </div>
+            <div className="flex gap-2">
+                <Input value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="Email" className="h-8 text-xs flex-1" type="email" />
+                <Input value={position} onChange={e => setPosition(e.target.value)}
+                    placeholder="Fonction" className="h-8 text-xs flex-1" />
+            </div>
+            <div className="flex gap-2">
+                <Select value={statusVal} onValueChange={setStatusVal}>
+                    <SelectTrigger className="h-8 text-xs w-40 shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent position="popper">
+                        {MEMBER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <div className="flex-1 min-w-0">
+                    <SearchInput
+                        data={partners}
+                        onSelect={p => setPartnerId(p.id)}
+                        getLabel={p => p.name}
+                        placeholder="Partenaire..."
+                        value={partners.find(p => p.id === partnerId)?.name}
+                    />
+                </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>Annuler</Button>
+                <Button size="sm" onClick={handleSubmit} disabled={submitting || !firstName.trim() || !lastName.trim()}>
+                    <Check size={12} className="mr-1" />{submitting ? '...' : 'Créer et ajouter'}
+                </Button>
+            </div>
+        </div>
+    )
+}
+
 type MemberLink    = MemberActionCard    & { member: Member }
 type ProjectLink   = ProjectActionCard   & { project: Project }
 type AgreementLink = AgreementActionCard & { agreement: FinancialAgreement }
@@ -413,7 +542,8 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
 
     // Togglers des section
     const [toDoExtended, setToDoExtended] = useState(true)
-    const [membersExtended, setMembersExtended] = useState(true)
+    const [membersExtended,  setMembersExtended]  = useState(true)
+    const [showCreateMember, setShowCreateMember] = useState(false)
     const [projectsExtended, setProjectsExtended] = useState(true)
     const [agreementsExtended, setAgreementsExtended] = useState(true)
     const [commentsExtended, setCommentsExtended] = useState(true)
@@ -580,11 +710,23 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
         ))
     }
 
-    async function addTodoItem(listId: number, content: string) {
-        const newItem = await addToDoItemToList(listId, content)
+    function updateDueDate(listId: number, item: ToDoItem, due_date: string) {
+        updateToDoItem(item.id, { due_date })
+        setTodoLists(prev => prev.map(l =>
+            l.id !== listId ? l : { ...l, items: l.items.map(i => i.id === item.id ? { ...i, due_date } : i) }
+        ))
+    }
+
+    async function addTodoItem(listId: number, content: string, due_date?: string) {
+        const newItem = await addToDoItemToList(listId, content, due_date)
         setTodoLists(prev => prev.map(l =>
             l.id !== listId ? l : { ...l, items: [...l.items, newItem] }
         ))
+    }
+
+    async function deleteList(listId: number) {
+        await deleteToDoList(listId)
+        setTodoLists(prev => prev.filter(l => l.id !== listId))
     }
 
     async function addList() {
@@ -668,7 +810,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
 
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) { setConfirming(false); onClose() } }}>
-            <SheetContent side="right" showCloseButton={false} className="!w-[580px] overflow-y-auto flex flex-col gap-0 p-0">
+            <SheetContent side="right" showCloseButton={false} className="!w-[580px] flex flex-col gap-0 p-0">
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
                     <SheetTitle className="flex-1 min-w-0 text-base truncate">
                         {editing ? (
@@ -921,6 +1063,8 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                     onToggle={toggleTodo}
                                                     onDeleteItem={deleteTodoItem}
                                                     onAddItem={addTodoItem}
+                                                    onDeleteList={deleteList}
+                                                    onDueDateChange={updateDueDate}
                                                 />
                                             ))}
                                         </div>
@@ -950,6 +1094,12 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                             <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setMembersExtended(true)}><EyeClosed /></Button>
                                         )}
                                     </div>
+                                    {membersExtended && !showCreateMember && (
+                                        <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
+                                            onClick={() => setShowCreateMember(true)}>
+                                            <Plus size={11} />Nouveau contact
+                                        </Button>
+                                    )}
                                 </div>
 
                                 {membersExtended && memberLinks.length > 0 && (
@@ -1043,7 +1193,20 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                     </div>
                                 )}
 
-                                {membersExtended && availableMembers.length > 0 && (
+                                {membersExtended && showCreateMember && (
+                                    <MemberQuickCreateForm
+                                        partners={allPartners}
+                                        role={roleToAdd}
+                                        onSaved={async member => {
+                                            setAllMembers(prev => [...prev, member])
+                                            await handleAddMemberById(member.id)
+                                            setShowCreateMember(false)
+                                        }}
+                                        onCancel={() => setShowCreateMember(false)}
+                                    />
+                                )}
+
+                                {membersExtended && !showCreateMember && availableMembers.length > 0 && (
                                     <div className="flex gap-2">
                                         <MemberSearchInput
                                             members={availableMembers}

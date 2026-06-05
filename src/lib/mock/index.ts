@@ -12,6 +12,7 @@ import type {
     AgreementMember,
     ProjectPartner,
     ProjectMilestone,
+    TimeEntry,
 } from '@/lib/types'
 
 export const mockUser: User = {
@@ -211,10 +212,10 @@ export const mockActionCards: ActionCard[] = [
 ]
 
 export const mockProjectCalls: ProjectCall[] = [
-    { id: 1, axis_id: 1, title: 'AAP-01 – Formation innovante', description: 'Appel à projets pour des actions de formation innovante.', start_date: '2024-01-01', end_date: '2025-12-31', status_id: 7 },
-    { id: 2, axis_id: 2, title: 'AAP-02 – Recherche appliquée', description: 'Appel à projets pour des travaux de recherche appliquée.', start_date: '2024-06-01', end_date: '2026-05-31', status_id: 6 },
-    { id: 3, axis_id: 3, title: 'AAP-03 – Mobilité internationale', description: 'Appel à projets pour les mobilités et coopérations.', start_date: '2025-01-01', end_date: '2026-12-31', status_id: 6 },
-    { id: 4, axis_id: 4, title: 'AAP-04 – Innovation et transfert', description: 'Appel à projets pour l\'innovation et le transfert de technologie.', start_date: '2025-06-01', end_date: '2027-05-31', status_id: 6 },
+    { id: 1, axis_id: 1, title: 'AAP-01 – Formation innovante', description: 'Appel à projets pour des actions de formation innovante.', start_date: '2024-01-01', end_date: '2025-12-31', status_id: 7, budget: 150000 },
+    { id: 2, axis_id: 2, title: 'AAP-02 – Recherche appliquée', description: 'Appel à projets pour des travaux de recherche appliquée.', start_date: '2024-06-01', end_date: '2026-05-31', status_id: 6, budget: 300000 },
+    { id: 3, axis_id: 3, title: 'AAP-03 – Mobilité internationale', description: 'Appel à projets pour les mobilités et coopérations.', start_date: '2025-01-01', end_date: '2026-12-31', status_id: 6, budget: 120000 },
+    { id: 4, axis_id: 4, title: 'AAP-04 – Innovation et transfert', description: 'Appel à projets pour l\'innovation et le transfert de technologie.', start_date: '2025-06-01', end_date: '2027-05-31', status_id: 6, budget: 250000 },
 ]
 
 export const mockProjects: Project[] = [
@@ -225,11 +226,11 @@ export const mockProjects: Project[] = [
 ]
 
 export const mockFinancialAgreements: FinancialAgreement[] = [
-    { id: 1, project_id: 1, partner_id: 2, status_id: 16, title: 'Convention Entreprise A', description: 'Accord de co-financement formation', budget: 45000, grant: 30000, signed_date: '2024-03-01' },
-    { id: 2, project_id: 2, partner_id: 3, status_id: 15, title: 'Convention Association B', description: 'Accord de partenariat recherche', budget: 60000, grant: 50000, signed_date: '2024-06-15' },
-    { id: 3, project_id: 3, partner_id: 4, status_id: 15, title: 'Convention Institut Recherche', description: 'Accord de coopération internationale', budget: 30000, grant: 25000, signed_date: '2025-02-01' },
-    { id: 4, project_id: 4, partner_id: 6, status_id: 14, title: 'Convention Fondation E', description: 'Subvention innovation et transfert', budget: 80000, grant: 70000, signed_date: '2025-07-01' },
-    { id: 5, project_id: 2, partner_id: 5, status_id: 15, title: 'Convention Collectivité D', description: 'Cofinancement recherche territoriale', budget: 20000, grant: 15000, signed_date: '2025-03-15' },
+    { id: 1, project_id: 1, partner_id: 2, axis_id: 1, status_id: 16, title: 'Convention Entreprise A', description: 'Accord de co-financement formation', budget: 45000, grant: 30000, signed_date: '2024-03-01' },
+    { id: 2, project_id: 2, partner_id: 3, axis_id: 2, status_id: 15, title: 'Convention Association B', description: 'Accord de partenariat recherche', budget: 60000, grant: 50000, signed_date: '2024-06-15' },
+    { id: 3, project_id: 3, partner_id: 4, axis_id: 3, status_id: 15, title: 'Convention Institut Recherche', description: 'Accord de coopération internationale', budget: 30000, grant: 25000, signed_date: '2025-02-01' },
+    { id: 4, project_id: 4, partner_id: 6, axis_id: null, status_id: 14, title: 'Convention Fondation E', description: 'Subvention innovation et transfert', budget: 80000, grant: 70000, signed_date: '2025-07-01' },
+    { id: 5, project_id: 2, partner_id: 5, axis_id: 2, status_id: 15, title: 'Convention Collectivité D', description: 'Cofinancement recherche territoriale', budget: 20000, grant: 15000, signed_date: '2025-03-15' },
 ]
 
 export const mockPhds: Phd[] = [
@@ -299,14 +300,14 @@ export const mockToDoLists: ToDoList[] = [
 ]
 
 export const mockToDoItems: ToDoItem[] = [
-    { id: 1, list_id: 1, content: 'Réserver la salle', status_id: 9, start_date: '2025-08-01', end_time: '2025-08-15' },
-    { id: 2, list_id: 1, content: 'Envoyer les invitations', status_id: 9, start_date: '2025-08-15', end_time: '2025-08-30' },
-    { id: 3, list_id: 2, content: 'Collecter les indicateurs', status_id: 9, start_date: '2025-06-01', end_time: '2025-06-15' },
-    { id: 4, list_id: 2, content: 'Rédiger la synthèse', status_id: 9, start_date: '2025-06-15', end_time: '2025-06-25' },
-    { id: 5, list_id: 3, content: 'Préparer les supports', status_id: 8, start_date: '2026-04-25', end_time: '2026-05-01' },
-    { id: 6, list_id: 3, content: 'Inviter les participants', status_id: 8, start_date: '2026-04-28', end_time: '2026-05-05' },
-    { id: 7, list_id: 4, content: 'Envoyer l\'ordre du jour', status_id: 8, start_date: '2026-05-28', end_time: '2026-06-01' },
-    { id: 8, list_id: 4, content: 'Préparer les indicateurs', status_id: 8, start_date: '2026-05-28', end_time: '2026-06-04' },
+    { id: 1, list_id: 1, content: 'Réserver la salle', status_id: 9, start_date: '2025-08-01', end_time: '2025-08-15', due_date: '2025-08-10' },
+    { id: 2, list_id: 1, content: 'Envoyer les invitations', status_id: 9, start_date: '2025-08-15', end_time: '2025-08-30', due_date: '2025-08-25' },
+    { id: 3, list_id: 2, content: 'Collecter les indicateurs', status_id: 9, start_date: '2025-06-01', end_time: '2025-06-15', due_date: '' },
+    { id: 4, list_id: 2, content: 'Rédiger la synthèse', status_id: 9, start_date: '2025-06-15', end_time: '2025-06-25', due_date: '' },
+    { id: 5, list_id: 3, content: 'Préparer les supports', status_id: 8, start_date: '2026-04-25', end_time: '2026-05-01', due_date: '2026-04-30' },
+    { id: 6, list_id: 3, content: 'Inviter les participants', status_id: 8, start_date: '2026-04-28', end_time: '2026-05-05', due_date: '' },
+    { id: 7, list_id: 4, content: 'Envoyer l\'ordre du jour', status_id: 8, start_date: '2026-05-28', end_time: '2026-06-01', due_date: '2026-05-30' },
+    { id: 8, list_id: 4, content: 'Préparer les indicateurs', status_id: 8, start_date: '2026-05-28', end_time: '2026-06-04', due_date: '' },
 ]
 
 export const mockMemberActionCards: MemberActionCard[] = [
@@ -495,22 +496,42 @@ export const mockProjectPartners: ProjectPartner[] = [
 
 export const mockProjectMilestones: ProjectMilestone[] = [
     // Projet 1 – Formation Numérique
-    { id: 1,  project_id: 1, title: 'Lancement du projet',        description: 'Réunion de démarrage et validation du plan de travail', due_date: '2024-02-01', status_id: 3 },
-    { id: 2,  project_id: 1, title: 'Livraison module pilote',     description: 'Premier module pédagogique livré et testé',             due_date: '2024-09-01', status_id: 3 },
-    { id: 3,  project_id: 1, title: 'Évaluation finale',           description: 'Bilan et rapport de clôture',                          due_date: '2025-11-01', status_id: 3 },
+    { id: 1, project_id: 1, title: 'Lancement du projet', description: 'Réunion de démarrage et validation du plan de travail', due_date: '2024-02-01', status_id: 3 },
+    { id: 2, project_id: 1, title: 'Livraison module pilote', description: 'Premier module pédagogique livré et testé', due_date: '2024-09-01', status_id: 3 },
+    { id: 3, project_id: 1, title: 'Évaluation finale', description: 'Bilan et rapport de clôture', due_date: '2025-11-01', status_id: 3 },
 
     // Projet 2 – Recherche IA
-    { id: 4,  project_id: 2, title: 'Revue de littérature',        description: 'État de l\'art sur l\'IA appliquée à l\'analyse de données', due_date: '2024-09-01', status_id: 3 },
-    { id: 5,  project_id: 2, title: 'Prototype v1',                description: 'Premier prototype fonctionnel de l\'outil d\'analyse',  due_date: '2025-03-01', status_id: 1 },
-    { id: 6,  project_id: 2, title: 'Publication des résultats',   description: 'Soumission d\'un article dans une revue indexée',       due_date: '2025-12-01', status_id: 2 },
+    { id: 4, project_id: 2, title: 'Revue de littérature', description: 'État de l\'art sur l\'IA appliquée à l\'analyse de données', due_date: '2024-09-01', status_id: 3 },
+    { id: 5, project_id: 2, title: 'Prototype v1', description: 'Premier prototype fonctionnel de l\'outil d\'analyse', due_date: '2025-03-01', status_id: 1 },
+    { id: 6, project_id: 2, title: 'Publication des résultats', description: 'Soumission d\'un article dans une revue indexée', due_date: '2025-12-01', status_id: 2 },
 
     // Projet 3 – Mobilités Europe
-    { id: 7,  project_id: 3, title: 'Sélection des candidats',     description: 'Appel à candidatures et sélection des mobilités',      due_date: '2025-03-01', status_id: 3 },
-    { id: 8,  project_id: 3, title: 'Départ première vague',       description: 'Départ des premiers chercheurs sélectionnés',          due_date: '2025-06-01', status_id: 1 },
-    { id: 9,  project_id: 3, title: 'Rapport intermédiaire',       description: 'Bilan mi-parcours des mobilités réalisées',            due_date: '2026-01-01', status_id: 2 },
+    { id: 7, project_id: 3, title: 'Sélection des candidats', description: 'Appel à candidatures et sélection des mobilités', due_date: '2025-03-01', status_id: 3 },
+    { id: 8, project_id: 3, title: 'Départ première vague', description: 'Départ des premiers chercheurs sélectionnés', due_date: '2025-06-01', status_id: 1 },
+    { id: 9, project_id: 3, title: 'Rapport intermédiaire', description: 'Bilan mi-parcours des mobilités réalisées', due_date: '2026-01-01', status_id: 2 },
 
     // Projet 4 – Transfert Technologique
-    { id: 10, project_id: 4, title: 'Audit des brevets',           description: 'Identification et valorisation des brevets existants',  due_date: '2025-06-01', status_id: 1 },
-    { id: 11, project_id: 4, title: 'Accord de licence signé',     description: 'Signature d\'un accord de licence avec partenaire industriel', due_date: '2026-01-01', status_id: 2 },
-    { id: 12, project_id: 4, title: 'Clôture et bilan',            description: 'Rapport final et évaluation de l\'impact du transfert', due_date: '2027-01-01', status_id: 2 },
+    { id: 10, project_id: 4, title: 'Audit des brevets', description: 'Identification et valorisation des brevets existants', due_date: '2025-06-01', status_id: 1 },
+    { id: 11, project_id: 4, title: 'Accord de licence signé', description: 'Signature d\'un accord de licence avec partenaire industriel', due_date: '2026-01-01', status_id: 2 },
+    { id: 12, project_id: 4, title: 'Clôture et bilan', description: 'Rapport final et évaluation de l\'impact du transfert', due_date: '2027-01-01', status_id: 2 },
+]
+
+export const mockTimeEntry: TimeEntry[] = [
+    // Projet 1 — Formation Numérique
+    { id: 1, project_id: 1, member_id: 1, days: 20, start_date: '2024-01-01', end_date: '2024-06-30' }, // Marie Dupont
+    { id: 2, project_id: 1, member_id: 3, days: 10, start_date: '2024-01-01', end_date: '2024-06-30' }, // Claire Bernard
+    { id: 3, project_id: 1, member_id: 7, days: 8, start_date: '2024-07-01', end_date: '2024-12-31' }, // Isabelle Petit
+    { id: 4, project_id: 1, member_id: 1, days: 15, start_date: '2025-01-01', end_date: '2025-06-30' }, // Marie Dupont (2e période)
+    // Projet 2 — Recherche IA
+    { id: 5, project_id: 2, member_id: 2, days: 30, start_date: '2024-06-01', end_date: '2024-12-31' }, // Thomas Martin
+    { id: 6, project_id: 2, member_id: 5, days: 25, start_date: '2024-06-01', end_date: '2024-12-31' }, // Sophie Girard
+    { id: 7, project_id: 2, member_id: 6, days: 12, start_date: '2024-09-01', end_date: '2025-02-28' }, // Julien Moreau
+    { id: 8, project_id: 2, member_id: 4, days: 5, start_date: '2025-01-01', end_date: '2025-06-30' }, // Antoine Leroy
+    // Projet 3 — Mobilités Europe
+    { id: 9, project_id: 3, member_id: 1, days: 10, start_date: '2025-01-01', end_date: '2025-06-30' }, // Marie Dupont
+    { id: 10, project_id: 3, member_id: 5, days: 8, start_date: '2025-03-01', end_date: '2025-09-30' }, // Sophie Girard
+    // Projet 4 — Transfert Technologique
+    { id: 11, project_id: 4, member_id: 2, days: 20, start_date: '2025-03-01', end_date: '2025-09-30' }, // Thomas Martin
+    { id: 12, project_id: 4, member_id: 6, days: 18, start_date: '2025-03-01', end_date: '2025-09-30' }, // Julien Moreau
+    { id: 13, project_id: 4, member_id: 7, days: 10, start_date: '2025-06-01', end_date: '2025-12-31' }, // Isabelle Petit
 ]

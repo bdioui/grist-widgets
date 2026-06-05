@@ -261,7 +261,7 @@ function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, o
 
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) { setEditing(false); setConfirming(false); onClose() } }}>
-            <SheetContent side="right" showCloseButton={false} className="!w-[520px] overflow-y-auto flex flex-col gap-0 p-0">
+            <SheetContent side="right" showCloseButton={false} className="!w-[520px] flex flex-col gap-0 p-0">
 
                 {/* Header */}
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">

@@ -7,7 +7,8 @@ import {
     mockToDoLists, mockToDoItems, mockMemberActionCards, mockAxisActionCards, mockProjectActionCards,
     mockAgreementActionCards, mockGroup, mockGroupMember, mockComments,
     mockProjectMembers, mockAgreementMembers,
-    mockProjectPartners, mockProjectMilestones
+    mockProjectPartners, mockProjectMilestones,
+    mockTimeEntry
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -19,7 +20,8 @@ import {
     normalizeMemberActionCards, normalizeProjectActionCards, normalizeAgreementActionCards,
     normalizePartnerCardsFull, normalizeLabs, normalizePartnerLabs, normalizeLabCardsFull,
     normalizeGroup, normalizeGroupMember, normalizeComments, normalizeCommentsFull, normalizeProjectMembers, normalizeAgreementMembers,
-    normalizeKpiEntries, normalizeProjectPartners, normalizeProjectMilestones
+    normalizeKpiEntries, normalizeProjectPartners, normalizeProjectMilestones,
+    normalizeTimeEntry
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -28,7 +30,8 @@ import type {
     Kpi, BudgetCategory, BudgetDetail,
     ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard, MemberFull,
     Group, GroupMember, Comment, CommentFull, ProjectMember, AgreementMember,
-    KpiEntry, ProjectPartner, ProjectMilestone
+    KpiEntry, ProjectPartner, ProjectMilestone,
+    TimeEntry
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -66,6 +69,7 @@ const T = {
     kpi_entry: 'Kpi_entry',
     project_partner: 'Project_partner',
     project_milestone: 'Project_milestone',
+    time_entry: 'Time_entry'
 }
 
 // --- Tables de référence ---
@@ -244,6 +248,41 @@ export async function updateProjectMember(id: number, role: string): Promise<voi
     await updateRecord(T.project_member, id, { role })
 }
 
+// Declaration des temps
+
+export async function getTimeEntries(): Promise<TimeEntry[]> { return USE_MOCK ? mockTimeEntry : normalizeTimeEntry(await fetchTable(T.time_entry)) }
+
+export async function addTimeEntry(projectId: number, memberId: number, days: number, start_date: string, end_date: string): Promise<TimeEntry> {
+    const fields = { project_id: projectId, member_id: memberId, days, start_date, end_date }
+    if (USE_MOCK) {
+        const entry: TimeEntry = { id: Math.max(0, ...mockTimeEntry.map(e => e.id)) + 1, ...fields }
+        mockTimeEntry.push(entry)
+        return entry
+    }
+    const id = await addRecord(T.time_entry, fields)
+    return { id, ...fields }
+}
+
+export async function removeTimeEntry(entryId: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockTimeEntry.findIndex(m => m.id === entryId)
+        if (i !== -1) {
+            mockTimeEntry.splice(i, 1)
+            return
+        }
+    }
+    await deleteRecord(T.time_entry, entryId)
+}
+
+export async function updateTimeEntry(entryId: number, patch: Partial<Omit<TimeEntry, 'id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const entry = mockTimeEntry.find(m => m.id === entryId)
+        if (entry) Object.assign(entry, patch)
+        return
+    }
+    if (Object.keys(patch).length > 0) await updateRecord(T.time_entry, entryId, patch)
+}
+
 export async function getProjectActionCardsByCard(cardId: number): Promise<(ProjectActionCard & { project: Project })[]> {
     const [links, projects] = await (USE_MOCK
         ? Promise.resolve([
@@ -287,15 +326,17 @@ export async function updateToDoItem(id: number, patch: Partial<Pick<ToDoItem, '
     await updateRecord(T.to_do_item, id, patch)
 }
 
-export async function addToDoItemToList(listId: number, content: string): Promise<ToDoItem> {
+export async function addToDoItemToList(listId: number, content: string, due_date = ''): Promise<ToDoItem> {
     if (USE_MOCK) {
         const newId = Math.max(0, ...mockToDoItems.map(i => i.id)) + 1
-        const item: ToDoItem = { id: newId, list_id: listId, content, status_id: 8, start_date: '', end_time: '' }
+        const item: ToDoItem = { id: newId, list_id: listId, content, status_id: 8, start_date: '', end_time: '', due_date }
         mockToDoItems.push(item)
         return item
     }
-    const id = await addRecord(T.to_do_item, { list_id: listId, content, status_id: 8 })
-    return { id, list_id: listId, content, status_id: 8, start_date: '', end_time: '' }
+    const fields: Record<string, unknown> = { list_id: listId, content, status_id: 8 }
+    if (due_date) fields.due_date = due_date
+    const id = await addRecord(T.to_do_item, fields)
+    return { id, list_id: listId, content, status_id: 8, start_date: '', end_time: '', due_date }
 }
 
 export async function addToDoListToCard(cardId: number, title: string): Promise<ToDoList & { items: ToDoItem[] }> {
@@ -307,6 +348,17 @@ export async function addToDoListToCard(cardId: number, title: string): Promise<
     }
     const id = await addRecord(T.to_do_list, { action_card_id: cardId, title })
     return { id, action_card_id: cardId, title, items: [] }
+}
+
+export async function deleteToDoList(listId: number): Promise<void> {
+    if (USE_MOCK) {
+        const idx = mockToDoLists.findIndex(l => l.id === listId)
+        if (idx !== -1) mockToDoLists.splice(idx, 1)
+        const itemIds = mockToDoItems.filter(i => i.list_id === listId).map(i => i.id)
+        itemIds.forEach(id => { const i = mockToDoItems.findIndex(x => x.id === id); if (i !== -1) mockToDoItems.splice(i, 1) })
+        return
+    }
+    await deleteRecord(T.to_do_list, listId)
 }
 
 export async function addMemberToCard(cardId: number, memberId: number, role: string): Promise<MemberActionCard & { member: Member }> {
@@ -719,6 +771,12 @@ export async function getProjectMembers(projectId: number): Promise<ProjectMembe
     return normalizeProjectMembers(rows).filter(pm => pm.project_id === projectId)
 }
 
+export async function getAllProjectMembers(): Promise<ProjectMember[]> {
+    return USE_MOCK
+        ? mockProjectMembers
+        : normalizeProjectMembers(await fetchTable(T.project_member))
+}
+
 export async function addProjectMember(projectId: number, memberId: number, role: string): Promise<ProjectMember> {
     if (USE_MOCK) {
         const newId = Math.max(0, ...mockProjectMembers.map(p => p.id)) + 1
@@ -791,6 +849,27 @@ export async function getAgreementsByProject(projectId: number): Promise<(Financ
     const partnerMap = new Map((partners as Partner[]).map(p => [p.id, p]))
     return (agreements as FinancialAgreement[])
         .filter(a => a.project_id === projectId)
+        .map(a => ({ ...a, partner: partnerMap.get(a.partner_id)! }))
+        .filter(a => a.partner)
+}
+
+export async function getAgreementsByProjectCall(projectCallId: number): Promise<(FinancialAgreement & { partner: Partner })[]> {
+    const [agreements, projects, partners] = await (USE_MOCK
+        ? Promise.resolve([mockFinancialAgreements, mockProjects, mockPartners])
+        : Promise.all([
+            getFinancialAgreements(),
+            getProjects(),
+            getPartners(),
+        ])
+    )
+    const callProjectIds = new Set(
+        (projects as Project[])
+            .filter(p => p.project_call_id === projectCallId)
+            .map(p => p.id)
+    )
+    const partnerMap = new Map((partners as Partner[]).map(p => [p.id, p]))
+    return (agreements as FinancialAgreement[])
+        .filter(a => callProjectIds.has(a.project_id))
         .map(a => ({ ...a, partner: partnerMap.get(a.partner_id)! }))
         .filter(a => a.partner)
 }

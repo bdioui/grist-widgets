@@ -216,7 +216,7 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
 
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) { setEditing(false); setConfirming(false); onClose() } }}>
-            <SheetContent side="right" showCloseButton={false} className="!w-[560px] overflow-y-auto flex flex-col gap-0 p-0">
+            <SheetContent side="right" showCloseButton={false} className="!w-[560px] flex flex-col gap-0 p-0">
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0">
                         {partner.color && <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: partner.color }} />}
@@ -540,7 +540,7 @@ function LabDetailSheet({ lab, open, onClose, onUpdated, onDeleted }: LabDetailS
 
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) { setEditing(false); setConfirming(false); onClose() } }}>
-            <SheetContent side="right" showCloseButton={false} className="!w-[560px] overflow-y-auto flex flex-col gap-0 p-0">
+            <SheetContent side="right" showCloseButton={false} className="!w-[560px] flex flex-col gap-0 p-0">
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0">
                         <FlaskConical size={16} className="shrink-0 text-muted-foreground" />

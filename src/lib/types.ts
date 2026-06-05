@@ -80,6 +80,15 @@ export type ProjectMember = {
     role: string
 }
 
+export type TimeEntry = {
+    id: number
+    member_id: number
+    project_id: number
+    days: number
+    start_date: string
+    end_date: string
+}
+
 export type AgreementMember = {
     id: number
     member_id: number
@@ -124,6 +133,7 @@ export type ProjectCall = {
     start_date: string
     end_date: string
     status_id: number
+    budget: number
 }
 
 export type Project = {
@@ -160,6 +170,7 @@ export type FinancialAgreement = {
     id: number
     project_id: number
     partner_id: number
+    axis_id: number | null
     status_id: number
     title: string
     description: string
@@ -268,6 +279,7 @@ export type ToDoItem = {
     status_id: number
     start_date: string
     end_time: string
+    due_date: string
 }
 
 // --- Types enrichis (jointures côté front) ---

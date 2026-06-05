@@ -16,6 +16,7 @@ import type {
     KpiEntry,
     ProjectPartner,
     ProjectMilestone,
+    TimeEntry,
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -191,6 +192,7 @@ export function normalizeProjectCalls(rows: Record<string, unknown>[]): ProjectC
         start_date: str(r.start_date),
         end_date: str(r.end_date),
         status_id: num(r.status_id),
+        budget: num(r.budget),
     }))
 }
 
@@ -229,6 +231,17 @@ export function normalizeProjectMilestones(rows: Record<string, unknown>[]): Pro
     }))
 }
 
+export function normalizeTimeEntry(rows: Record<string, unknown>[]): TimeEntry[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        project_id: num(r.project_id),
+        member_id: num(r.member_id),
+        days: num(r.days),
+        start_date: str(r.start_date),
+        end_date: str(r.end_date)
+    }))
+}
+
 export function normalizeProjectMembers(rows: Record<string, unknown>[]): ProjectMember[] {
     return rows.map(r => ({ id: num(r.id), member_id: num(r.member_id), project_id: num(r.project_id), role: str(r.role) }))
 }
@@ -238,6 +251,7 @@ export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): F
         id: num(r.id),
         project_id: num(r.project__id ?? r.project_id),
         partner_id: num(r.partner_id),
+        axis_id: r.axis_id ? num(r.axis_id) : null,
         status_id: num(r.status_id),
         title: str(r.title),
         description: str(r.description),
@@ -329,6 +343,7 @@ export function normalizeToDoItems(rows: Record<string, unknown>[]): ToDoItem[] 
         status_id: num(r.status_id),
         start_date: str(r.start_date),
         end_time: str(r.end_time),
+        due_date: str(r.due_date),
     }))
 }
 

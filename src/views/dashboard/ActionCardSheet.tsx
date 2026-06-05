@@ -7,13 +7,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
-import { X, Plus } from 'lucide-react'
+import { X, Plus, Check } from 'lucide-react'
 import {
     getStatuses, getCategories, getMembers, getPartners, getProjects, getAxes,
     getOrCreateOtherCategory, createActionCardFull, updateActionCard, type ActionCardCreateForm,
-    getCommentsFull,
+    getCommentsFull, addMember,
 } from '@/lib/api'
 import type { Status, Category, Member, Partner, Project, Axis, CommentFull } from '@/lib/types'
+import SearchInput from '@/components/SearchInput'
 import type { ActionCardData } from './ActionCard'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useCurrentUser } from '@/lib/userContext'
@@ -27,6 +28,12 @@ type Props = {
 }
 
 const ROLES = ['Responsable', 'Contributeur', 'Observateur']
+
+const MEMBER_STATUSES = [
+    'Enseignant-chercheur', 'Chercheur', 'Ingénieur', 'Doctorant',
+    'Post-doc', 'BIATSS', 'Autre',
+]
+
 
 const EMPTY_FORM: ActionCardCreateForm = {
     title: '', description: '',
@@ -103,6 +110,84 @@ function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputPro
     )
 }
 
+// --- Formulaire création rapide membre ---
+
+type MemberQuickCreateFormProps = {
+    partners: Partner[]
+    role: string
+    onSaved: (member: Member) => void
+    onCancel: () => void
+}
+
+function MemberQuickCreateForm({ partners, role, onSaved, onCancel }: MemberQuickCreateFormProps) {
+    const [firstName,  setFirstName]  = useState('')
+    const [lastName,   setLastName]   = useState('')
+    const [email,      setEmail]      = useState('')
+    const [position,   setPosition]   = useState('')
+    const [statusVal,  setStatusVal]  = useState(MEMBER_STATUSES[0])
+    const [partnerId,  setPartnerId]  = useState<number>(partners[0]?.id ?? 0)
+    const [submitting, setSubmitting] = useState(false)
+
+    async function handleSubmit() {
+        if (!firstName.trim() || !lastName.trim()) return
+        setSubmitting(true)
+        try {
+            const member = await addMember({
+                first_name: firstName, last_name: lastName,
+                email, position, status: statusVal,
+                partner_id: partnerId, lab_id: 0,
+                tel: '', genre: '', profile_image: '', is_staff: false,
+            })
+            onSaved(member)
+        } finally {
+            setSubmitting(false)
+        }
+    }
+
+    return (
+        <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-muted/30">
+            <p className="text-xs font-medium text-muted-foreground">
+                Nouveau contact · rôle : <span className="text-foreground">{role}</span>
+            </p>
+            <div className="flex gap-2">
+                <Input value={firstName} onChange={e => setFirstName(e.target.value)}
+                    placeholder="Prénom *" className="h-8 text-xs flex-1" autoFocus />
+                <Input value={lastName} onChange={e => setLastName(e.target.value)}
+                    placeholder="Nom *" className="h-8 text-xs flex-1" />
+            </div>
+            <div className="flex gap-2">
+                <Input value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="Email" className="h-8 text-xs flex-1" type="email" />
+                <Input value={position} onChange={e => setPosition(e.target.value)}
+                    placeholder="Fonction" className="h-8 text-xs flex-1" />
+            </div>
+            <div className="flex gap-2">
+                <Select value={statusVal} onValueChange={setStatusVal}>
+                    <SelectTrigger className="h-8 text-xs w-40 shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent position="popper">
+                        {MEMBER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <div className="flex-1 min-w-0">
+                    <SearchInput
+                        data={partners}
+                        onSelect={p => setPartnerId(p.id)}
+                        getLabel={p => p.name}
+                        placeholder="Partenaire..."
+                        value={partners.find(p => p.id === partnerId)?.name}
+                    />
+                </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>Annuler</Button>
+                <Button size="sm" onClick={handleSubmit} disabled={submitting || !firstName.trim() || !lastName.trim()}>
+                    <Check size={12} className="mr-1" />{submitting ? '...' : 'Créer et ajouter'}
+                </Button>
+            </div>
+        </div>
+    )
+}
+
 export default function ActionCardSheet({ open, onClose, onCreated, editCard, onUpdated }: Props) {
     const currentUser = useCurrentUser()
     const [form, setForm]             = useState<ActionCardCreateForm>(EMPTY_FORM)
@@ -117,8 +202,9 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
     const [axes,       setAxes]       = useState<Axis[]>([])
     const [_comments, setComments]     = useState<CommentFull[]>([])
 
-    const [roleToAdd,  setRoleToAdd]  = useState<string>(ROLES[1])
-    const [todoInput,  setTodoInput]  = useState('')
+    const [roleToAdd,       setRoleToAdd]       = useState<string>(ROLES[1])
+    const [todoInput,       setTodoInput]       = useState('')
+    const [showCreateMember, setShowCreateMember] = useState(false)
 
 
     useEffect(() => {
@@ -273,7 +359,7 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
 
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) onClose() }}>
-            <SheetContent side="right" showCloseButton={false} className="!w-[480px] overflow-y-auto flex flex-col gap-0 p-0">
+            <SheetContent side="right" showCloseButton={false} className="!w-[480px] flex flex-col gap-0 p-0">
                 <SheetHeader className="px-6 py-4 border-b">
                     <SheetTitle>
                         {editCard ? editCard.title : 'Nouvelle action card'}
@@ -365,21 +451,44 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
 
                     {/* Personnes */}
                     <section className="flex flex-col gap-3">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
-
-                        <div className="flex gap-2">
-                            <MemberSearchInput
-                                members={members.filter(m => !form.members.some(fm => fm.member_id === m.id))}
-                                partners={partners}
-                                onSelect={m => addMemberById(m.id)}
-                            />
-                            <Select value={roleToAdd} onValueChange={setRoleToAdd}>
-                                <SelectTrigger className="w-36 shrink-0"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
+                            {!showCreateMember && (
+                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
+                                    onClick={() => setShowCreateMember(true)}>
+                                    <Plus size={11} />Nouveau contact
+                                </Button>
+                            )}
                         </div>
+
+                        {!showCreateMember && (
+                            <div className="flex gap-2">
+                                <MemberSearchInput
+                                    members={members.filter(m => !form.members.some(fm => fm.member_id === m.id))}
+                                    partners={partners}
+                                    onSelect={m => addMemberById(m.id)}
+                                />
+                                <Select value={roleToAdd} onValueChange={setRoleToAdd}>
+                                    <SelectTrigger className="w-36 shrink-0"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
+                        {showCreateMember && (
+                            <MemberQuickCreateForm
+                                partners={partners}
+                                role={roleToAdd}
+                                onSaved={member => {
+                                    setMembers(prev => [...prev, member])
+                                    set('members', [...form.members, { member_id: member.id, role: roleToAdd }])
+                                    setShowCreateMember(false)
+                                }}
+                                onCancel={() => setShowCreateMember(false)}
+                            />
+                        )}
 
                         {form.members.length > 0 ? (
                             <div className="flex flex-wrap gap-1.5">
