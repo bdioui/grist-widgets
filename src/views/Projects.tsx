@@ -739,6 +739,7 @@ function AgreementRow({ agreement: a, statuses, axe, onEdit, onDelete, onOpen }:
     const rate   = financingRate(a.budget, a.grant)
     const status = statuses.find(s => s.id === a.status_id)
     return (
+        <>
                 <div onClick={() => onOpen(a)} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-border bg-muted/40 group cursor-pointer hover:bg-muted/70 transition-colors">
                     <div className="flex flex-col gap-0.5 min-w-0">
                         <div className="flex items-center justify-between gap-2">
@@ -758,12 +759,19 @@ function AgreementRow({ agreement: a, statuses, axe, onEdit, onDelete, onOpen }:
                             )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                             <span
-                                className="px-1.5 py-0.5 rounded-full border border-border shrink-0"
-                                style={a.partner.color ? { backgroundColor: a.partner.color } : {}}
-                            >
-                                {a.partner.name}
-                            </span>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span
+                                        className="text-xs px-2.5 py-0.5 rounded-full border border-border truncate inline-block max-w-[120px]"
+                                        style={a.partner.color ? { backgroundColor: a.partner.color } : {}}
+                                    >
+                                        {a.partner.name}
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>{a.partner.name}</p>
+                                </TooltipContent>
+                            </Tooltip>
                             {a.budget > 0 && <span className="font-medium text-foreground">{fmt(a.grant)}</span>}
                             {rate !== null && <span>{rate} %</span>}
                             {a.signed_date && <span>{formatDate(a.signed_date)}</span>}
@@ -784,6 +792,7 @@ function AgreementRow({ agreement: a, statuses, axe, onEdit, onDelete, onOpen }:
                         </div>
                     </div>
                 </div>
+        </>
     )
 }
 
@@ -1944,12 +1953,19 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                                 </TableCell>
                                                 <TableCell className="px-2 py-1.5">
                                                     {partner && (
-                                                        <span
-                                                            className="text-[10px] px-1.5 py-0.5 rounded-full border border-border whitespace-nowrap"
-                                                            style={partner.color ? { backgroundColor: partner.color } : {}}
-                                                        >
-                                                            {partner.name}
-                                                        </span>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <span
+                                                                    className="text-xs px-2.5 py-0.5 rounded-full border border-border truncate inline-block max-w-[120px]"
+                                                                    style={partner.color ? { backgroundColor: partner.color } : {}}
+                                                                >
+                                                                    {partner.name}
+                                                                </span>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>{partner.name}</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="px-2 py-1.5 text-right whitespace-nowrap">
@@ -2211,13 +2227,21 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                             const partnerAgreements = agreements.filter(a => a.partner_id === pp.partner_id)
                                             setSelectedPartner({ ...pp.partner, members: partnerMembers, agreements: partnerAgreements, projects: project ? [project] : [] })
                                         }}>
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <span
-                                                    className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
-                                                    style={pp.partner.color ? { backgroundColor: pp.partner.color } : {}}
-                                                >
-                                                    {pp.partner.name}
-                                                </span>
+                                            <div className="flex flex-col items-start gap-2 min-w-0">
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                         <span
+                                                            className="shrink-0 text-xs px-2.5 py-0.5 rounded-full border border-border truncate max-w-[150px]"
+                                                            style={pp.partner.color ? { backgroundColor: pp.partner.color } : {}}
+                                                        >
+                                                            {pp.partner.name}
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>{pp.partner.name}</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                               
                                                 <span className="text-xs text-muted-foreground">{pp.role}</span>
                                                 {pp.amount !== null && (
                                                     <span className="text-xs font-medium text-foreground">
