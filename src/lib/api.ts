@@ -8,7 +8,8 @@ import {
     mockAgreementActionCards, mockGroup, mockGroupMember, mockComments,
     mockProjectMembers, mockAgreementMembers,
     mockProjectPartners, mockProjectMilestones,
-    mockTimeEntry
+    mockTimeEntry,
+    mockFormations, mockProjectFormations,
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -21,7 +22,8 @@ import {
     normalizePartnerCardsFull, normalizeLabs, normalizePartnerLabs, normalizeLabCardsFull,
     normalizeGroup, normalizeGroupMember, normalizeComments, normalizeCommentsFull, normalizeProjectMembers, normalizeAgreementMembers,
     normalizeKpiEntries, normalizeProjectPartners, normalizeProjectMilestones,
-    normalizeTimeEntry
+    normalizeTimeEntry,
+    normalizeFormations, normalizeProjectFormations,
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -31,7 +33,7 @@ import type {
     ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard, MemberFull,
     Group, GroupMember, Comment, CommentFull, ProjectMember, AgreementMember,
     KpiEntry, ProjectPartner, ProjectMilestone,
-    TimeEntry
+    TimeEntry, Formation, ProjectFormation,
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -69,7 +71,9 @@ const T = {
     kpi_entry: 'Kpi_entry',
     project_partner: 'Project_partner',
     project_milestone: 'Project_milestone',
-    time_entry: 'Time_entry'
+    time_entry: 'Time_entry',
+    formation: 'Formation',
+    project_formation: 'Project_formation',
 }
 
 // --- Tables de référence ---
@@ -1236,4 +1240,49 @@ export async function deleteProjectMilestone(id: number): Promise<void> {
         return
     }
     await deleteRecord(T.project_milestone, id)
+}
+
+// --- Formations ---
+
+export async function getFormations(): Promise<Formation[]> {
+    return USE_MOCK ? mockFormations : normalizeFormations(await fetchTable(T.formation))
+}
+
+export async function getProjectFormationLinks(projectId: number): Promise<ProjectFormation[]> {
+    return USE_MOCK
+        ? mockProjectFormations.filter(pf => pf.project_id === projectId)
+        : normalizeProjectFormations(await fetchTable(T.project_formation)).filter(pf => pf.project_id === projectId)
+}
+
+export async function getFormationsByProject(projectId: number): Promise<Formation[]> {
+    if (USE_MOCK) {
+        const ids = mockProjectFormations.filter(pf => pf.project_id === projectId).map(pf => pf.formation_id)
+        return mockFormations.filter(f => ids.includes(f.id))
+    }
+    const [links, formations] = await Promise.all([
+        fetchTable(T.project_formation).then(normalizeProjectFormations),
+        getFormations(),
+    ])
+    const ids = links.filter(pf => pf.project_id === projectId).map(pf => pf.formation_id)
+    return formations.filter(f => ids.includes(f.id))
+}
+
+export async function addProjectFormation(projectId: number, formationId: number): Promise<ProjectFormation> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockProjectFormations.map(pf => pf.id)) + 1
+        const link: ProjectFormation = { id: newId, project_id: projectId, formation_id: formationId }
+        mockProjectFormations.push(link)
+        return link
+    }
+    const id = await addRecord(T.project_formation, { project_id: projectId, formation_id: formationId })
+    return { id, project_id: projectId, formation_id: formationId }
+}
+
+export async function removeProjectFormation(linkId: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockProjectFormations.findIndex(pf => pf.id === linkId)
+        if (i !== -1) mockProjectFormations.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.project_formation, linkId)
 }

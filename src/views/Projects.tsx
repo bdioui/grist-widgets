@@ -36,9 +36,10 @@ import {
     getActionCardsFull, createActionCardFull, updateProjectMember, getCategories,
     addMember, addPartner,
     getTimeEntries, addTimeEntry, removeTimeEntry, updateTimeEntry,
-    getAllProjectMembers
+    getAllProjectMembers,
+    getFormations, getFormationsByProject, getProjectFormationLinks, addProjectFormation, removeProjectFormation,
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
@@ -1441,9 +1442,10 @@ type ProjectDetailSheetProps = {
     onTimeEntryAdded?: (e: TimeEntry) => void
     onTimeEntryUpdated?: (e: TimeEntry) => void
     onTimeEntryDeleted?: (id: number) => void
+    allFormations: Formation[]
 }
 
-function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses, members, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted }: ProjectDetailSheetProps) {
+function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses, members, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -1486,6 +1488,9 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     const [showAddMilestone, setShowAddMilestone] = useState(false)
     const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | null>(null)
     const [selectedPm, setSelectedPm] = useState<ProjectMember | null>(null)
+    const [formations,     setFormations]     = useState<Formation[]>([])
+    const [formationLinks, setFormationLinks] = useState<ProjectFormation[]>([])
+    const [showFormations, setShowFormations] = useState(true)
 
     useEffect(() => {
         if (!open || !project) return
@@ -1514,8 +1519,10 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
             getProjectPartners(),
             getProjectMilestones(project.id),
             getActionCardsByProject(project.id),
+            getFormationsByProject(project.id),
+            getProjectFormationLinks(project.id),
         ])
-            .then(([agreements, members, kpis, kpiEntries, pp, ms, acs]) => {
+            .then(([agreements, members, kpis, kpiEntries, pp, ms, acs, formations, formationLinks]) => {
                 setAgreements(agreements as AgreementFull[])
                 setProjectMembers(members)
                 setKpis(kpis)
@@ -1527,6 +1534,8 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                 setProjectPartners(fullPartners)
                 setMilestones(ms as ProjectMilestone[])
                 setActionCards(acs as (ActionCardFull & { linkId: number })[])
+                setFormations(formations as Formation[])
+                setFormationLinks(formationLinks as ProjectFormation[])
             })
             .finally(() => setLoading(false))
     }, [open, project?.id ?? 0])
@@ -2100,6 +2109,69 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                     </div>
                                 </div>
                             </>
+                        )}
+                    </section>
+
+                    {!expanded && <Separator />}
+
+                    {/* Formations */}
+                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Formations</p>
+                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowFormations(v => !v)}>
+                                    {showFormations ? <Eye size={12} /> : <EyeClosed size={12} />}
+                                </Button>
+                            </div>
+                        </div>
+
+                        {showFormations && (
+                            <div className="flex flex-col gap-2">
+                                <SearchInput
+                                    data={allFormations.filter(f => !formations.find(pf => pf.id === f.id))}
+                                    onSelect={async f => {
+                                        const link = await addProjectFormation(project!.id, f.id)
+                                        setFormations(prev => [...prev, f])
+                                        setFormationLinks(prev => [...prev, link])
+                                    }}
+                                    getLabel={f => `${f.code} — ${f.title}`}
+                                    placeholder="Rechercher une formation..."
+                                />
+
+                                {formations.length === 0 && (
+                                    <p className="text-xs text-muted-foreground italic">Aucune formation rattachée</p>
+                                )}
+
+                                {formations.map(f => (
+                                    <div key={f.id} className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2.5">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex flex-col gap-0.5 min-w-0">
+                                                <span className="text-xs font-medium truncate">{f.title}</span>
+                                                <span className="text-xs text-muted-foreground">{f.code} · {f.degree_type} · {f.level}</span>
+                                                <span className="text-xs text-muted-foreground truncate">{f.institution}</span>
+                                            </div>
+                                            <Button
+                                                variant="ghost" size="icon" className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:text-destructive"
+                                                onClick={async () => {
+                                                    const link = formationLinks.find(l => l.formation_id === f.id)
+                                                    if (link) await removeProjectFormation(link.id)
+                                                    setFormations(prev => prev.filter(x => x.id !== f.id))
+                                                    setFormationLinks(prev => prev.filter(l => l.formation_id !== f.id))
+                                                }}
+                                            >
+                                                <X size={12} />
+                                            </Button>
+                                        </div>
+                                        {f.formacode && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {f.formacode.split(',').slice(0, 2).map((code, i) => (
+                                                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground truncate max-w-[160px]">{code.trim()}</span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </section>
 
@@ -2999,6 +3071,7 @@ export default function Projects() {
     const [members,       setMembers]       = useState<Member[]>([])
     const [allProjectMembers, setAllProjectMembers] = useState<ProjectMember[]>([])
     const [allAgreements, setAllAgreements] = useState<FinancialAgreement[]>([])
+    const [allFormations, setAllFormations] = useState<Formation[]>([])
     const [loading,       setLoading]       = useState(true)
     const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
 
@@ -3041,8 +3114,8 @@ export default function Projects() {
 
 
     useEffect(() => {
-        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers()])
-            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm]) => {
+        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations()])
+            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm, formations]) => {
                 const axisMap = new Map((axs as Axis[]).map(a => [a.id, a]))
 
                 const fullCalls: ProjectCallFull[] = (pcs as ProjectCall[]).map(pc => ({
@@ -3065,6 +3138,7 @@ export default function Projects() {
                 setMembers(m)
                 setTimeEntries(te)
                 setAllProjectMembers(pm)
+                setAllFormations(formations as Formation[])
             })
             .finally(() => setLoading(false))
     }, [])
@@ -3777,6 +3851,7 @@ export default function Projects() {
                 onTimeEntryAdded={e => setTimeEntries(prev => [...prev, e])}
                 onTimeEntryUpdated={e => setTimeEntries(prev => prev.map(x => x.id === e.id ? e : x))}
                 onTimeEntryDeleted={id => setTimeEntries(prev => prev.filter(e => e.id !== id))}
+                allFormations={allFormations}
             />
         </div>
     )

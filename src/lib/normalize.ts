@@ -17,6 +17,8 @@ import type {
     ProjectPartner,
     ProjectMilestone,
     TimeEntry,
+    Formation,
+    ProjectFormation,
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -463,5 +465,31 @@ export function normalizeLabCardsFull(
         ...lab,
         partners: partnersByLab.get(lab.id) ?? [],
         members: membersByLab.get(lab.id) ?? [],
+    }))
+}
+
+export function normalizeFormations(rows: Record<string, unknown>[]): Formation[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        code: str(r.code),
+        type: str(r.type),
+        title: str(r.title),
+        institution: str(r.institution),
+        level: str(r.level),
+        degree_type: str(r.degree_type),
+        formacode: str(r.formacode),
+        rome: str(r.rome),
+        nsf: str(r.nsf),
+        status: str(r.status),
+        expiry_date: str(r.expiry_date),
+        is_national: Boolean(r.is_national),
+    }))
+}
+
+export function normalizeProjectFormations(rows: Record<string, unknown>[]): ProjectFormation[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        project_id: num(r.project_id),
+        formation_id: num(r.formation_id),
     }))
 }

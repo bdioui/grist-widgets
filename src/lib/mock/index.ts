@@ -13,6 +13,8 @@ import type {
     ProjectPartner,
     ProjectMilestone,
     TimeEntry,
+    Formation,
+    ProjectFormation,
 } from '@/lib/types'
 
 export const mockUser: User = {
@@ -534,4 +536,18 @@ export const mockTimeEntry: TimeEntry[] = [
     { id: 11, project_id: 4, member_id: 2, days: 20, start_date: '2025-03-01', end_date: '2025-09-30' }, // Thomas Martin
     { id: 12, project_id: 4, member_id: 6, days: 18, start_date: '2025-03-01', end_date: '2025-09-30' }, // Julien Moreau
     { id: 13, project_id: 4, member_id: 7, days: 10, start_date: '2025-06-01', end_date: '2025-12-31' }, // Isabelle Petit
+]
+
+export const mockFormations: Formation[] = [
+    { id: 1, code: 'RNCP42270', type: 'RNCP', title: 'Licence Professionnelle - Domotique', institution: 'Université de Rennes', level: 'Niveau 6', degree_type: 'Licence Professionnelle', formacode: '201 : Technologies de commandes, 255 : Electricite, électronique', rome: 'H1208 : Automatisme, I1302 : Maintenance automatismes', nsf: '22499 : Immotique', status: 'Active', expiry_date: '2031-08-31', is_national: true },
+    { id: 2, code: 'RNCP38654', type: 'RNCP', title: 'Master Informatique - Intelligence Artificielle', institution: 'Université de Rennes', level: 'Niveau 7', degree_type: 'Master', formacode: '326 : Informatique, traitement de l\'information', rome: 'M1805 : Études et développement informatique', nsf: '326 : Informatique', status: 'Active', expiry_date: '2029-12-31', is_national: false },
+    { id: 3, code: 'RNCP35587', type: 'RNCP', title: 'BUT Réseaux et Télécommunications', institution: 'IUT de Rennes', level: 'Niveau 5', degree_type: 'BUT', formacode: '255 : Electricite, électronique, 326 : Informatique', rome: 'I1302 : Maintenance télécoms, I1307 : Courants faibles', nsf: '255 : Electronique', status: 'Active', expiry_date: '2028-06-30', is_national: true },
+    { id: 4, code: 'RNCP40123', type: 'RNCP', title: 'Licence Sciences de l\'Éducation', institution: 'Université de Rennes', level: 'Niveau 6', degree_type: 'Licence', formacode: '333 : Enseignement, formation pédagogique', rome: 'K2104 : Éducation et surveillance', nsf: '333 : Enseignement', status: 'Active', expiry_date: '2030-06-30', is_national: false },
+]
+
+export const mockProjectFormations: ProjectFormation[] = [
+    { id: 1, project_id: 1, formation_id: 1 },
+    { id: 2, project_id: 1, formation_id: 4 },
+    { id: 3, project_id: 2, formation_id: 2 },
+    { id: 4, project_id: 3, formation_id: 3 },
 ]

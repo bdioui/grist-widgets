@@ -306,3 +306,25 @@ export type LabCardFull = Lab & {
     members: Member[]
 }
 
+export type Formation = {
+    id: number
+    code: string
+    type: string
+    title: string
+    institution: string
+    level: string
+    degree_type: string
+    formacode: string
+    rome: string
+    nsf: string
+    status: string
+    expiry_date: string
+    is_national: boolean
+}
+
+export type ProjectFormation = {
+    id: number
+    project_id: number
+    formation_id: number
+}
+
