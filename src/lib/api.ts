@@ -9,7 +9,7 @@ import {
     mockProjectMembers, mockAgreementMembers,
     mockProjectPartners, mockProjectMilestones,
     mockTimeEntry,
-    mockFormations, mockProjectFormations,
+    mockFormations, mockProjectFormations, mockProjectAttachments,
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -23,7 +23,7 @@ import {
     normalizeGroup, normalizeGroupMember, normalizeComments, normalizeCommentsFull, normalizeProjectMembers, normalizeAgreementMembers,
     normalizeKpiEntries, normalizeProjectPartners, normalizeProjectMilestones,
     normalizeTimeEntry,
-    normalizeFormations, normalizeProjectFormations,
+    normalizeFormations, normalizeProjectFormations, normalizeProjectAttachments,
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -33,7 +33,7 @@ import type {
     ToDoList, ToDoItem, MemberActionCard, AxisActionCard, ProjectActionCard, AgreementActionCard, MemberFull,
     Group, GroupMember, Comment, CommentFull, ProjectMember, AgreementMember,
     KpiEntry, ProjectPartner, ProjectMilestone,
-    TimeEntry, Formation, ProjectFormation,
+    TimeEntry, Formation, ProjectFormation, ProjectAttachment,
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -74,6 +74,7 @@ const T = {
     time_entry: 'Time_entry',
     formation: 'Formation',
     project_formation: 'Project_formation',
+    project_attachment: 'Project_attachment',
 }
 
 // --- Tables de référence ---
@@ -1285,4 +1286,31 @@ export async function removeProjectFormation(linkId: number): Promise<void> {
         return
     }
     await deleteRecord(T.project_formation, linkId)
+}
+
+// --- Pièces jointes ---
+
+export async function getProjectAttachments(projectId: number): Promise<ProjectAttachment[]> {
+    if (USE_MOCK) return mockProjectAttachments.filter(a => a.project_id === projectId)
+    return normalizeProjectAttachments(await fetchTable(T.project_attachment)).filter(a => a.project_id === projectId)
+}
+
+export async function addProjectAttachment(projectId: number, label: string, url: string): Promise<ProjectAttachment> {
+    if (USE_MOCK) {
+        const newId = Math.max(0, ...mockProjectAttachments.map(a => a.id)) + 1
+        const attachment: ProjectAttachment = { id: newId, project_id: projectId, label, url }
+        mockProjectAttachments.push(attachment)
+        return attachment
+    }
+    const id = await addRecord(T.project_attachment, { project_id: projectId, label, url })
+    return { id, project_id: projectId, label, url }
+}
+
+export async function deleteProjectAttachment(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockProjectAttachments.findIndex(a => a.id === id)
+        if (i !== -1) mockProjectAttachments.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.project_attachment, id)
 }

@@ -14,7 +14,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Eye, EyeClosed, Maximize2, Minimize2, Users } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Eye, EyeClosed, Maximize2, Minimize2, Users, ExternalLink } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { ActionCardDetailSheet } from '@/views/dashboard/ActionCard'
@@ -38,8 +38,9 @@ import {
     getTimeEntries, addTimeEntry, removeTimeEntry, updateTimeEntry,
     getAllProjectMembers,
     getFormations, getFormationsByProject, getProjectFormationLinks, addProjectFormation, removeProjectFormation,
+    getProjectAttachments, addProjectAttachment, deleteProjectAttachment,
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
@@ -1491,6 +1492,11 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
     const [formations,     setFormations]     = useState<Formation[]>([])
     const [formationLinks, setFormationLinks] = useState<ProjectFormation[]>([])
     const [showFormations, setShowFormations] = useState(true)
+    const [attachments,    setAttachments]    = useState<ProjectAttachment[]>([])
+    const [showAttachments, setShowAttachments] = useState(true)
+    const [newAttachLabel, setNewAttachLabel] = useState('')
+    const [newAttachUrl,   setNewAttachUrl]   = useState('')
+    const [showAttachForm, setShowAttachForm] = useState(false)
 
     useEffect(() => {
         if (!open || !project) return
@@ -1521,8 +1527,9 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
             getActionCardsByProject(project.id),
             getFormationsByProject(project.id),
             getProjectFormationLinks(project.id),
+            getProjectAttachments(project.id),
         ])
-            .then(([agreements, members, kpis, kpiEntries, pp, ms, acs, formations, formationLinks]) => {
+            .then(([agreements, members, kpis, kpiEntries, pp, ms, acs, formations, formationLinks, attachments]) => {
                 setAgreements(agreements as AgreementFull[])
                 setProjectMembers(members)
                 setKpis(kpis)
@@ -1536,6 +1543,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                 setActionCards(acs as (ActionCardFull & { linkId: number })[])
                 setFormations(formations as Formation[])
                 setFormationLinks(formationLinks as ProjectFormation[])
+                setAttachments(attachments as ProjectAttachment[])
             })
             .finally(() => setLoading(false))
     }, [open, project?.id ?? 0])
@@ -2200,6 +2208,85 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                     </div>
                                     )
                                 })}
+                            </div>
+                        )}
+                    </section>
+
+                    {!expanded && <Separator />}
+
+                    {/* Pièces jointes */}
+                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pièces jointes</p>
+                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowAttachments(v => !v)}>
+                                    {showAttachments ? <Eye size={12} /> : <EyeClosed size={12} />}
+                                </Button>
+                            </div>
+                            {showAttachments && (
+                                <Button variant="outline" size="xs" className="rounded-md gap-1" onClick={() => setShowAttachForm(v => !v)}>
+                                    <Plus size={11} /> Ajouter
+                                </Button>
+                            )}
+                        </div>
+
+                        {showAttachments && (
+                            <div className="flex flex-col gap-2">
+                                {showAttachForm && (
+                                    <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-muted/30">
+                                        <Input
+                                            value={newAttachLabel}
+                                            onChange={e => setNewAttachLabel(e.target.value)}
+                                            placeholder="Libellé (ex. Convention signée)"
+                                            className="h-8 text-xs"
+                                        />
+                                        <Input
+                                            value={newAttachUrl}
+                                            onChange={e => setNewAttachUrl(e.target.value)}
+                                            placeholder="URL (https://...)"
+                                            className="h-8 text-xs"
+                                        />
+                                        <div className="flex gap-2 justify-end">
+                                            <Button variant="outline" size="sm" className="rounded-md" onClick={() => { setShowAttachForm(false); setNewAttachLabel(''); setNewAttachUrl('') }}>Annuler</Button>
+                                            <Button size="sm" className="rounded-md" disabled={!newAttachLabel.trim() || !newAttachUrl.trim()} onClick={async () => {
+                                                const a = await addProjectAttachment(project!.id, newAttachLabel.trim(), newAttachUrl.trim())
+                                                setAttachments(prev => [...prev, a])
+                                                setNewAttachLabel('')
+                                                setNewAttachUrl('')
+                                                setShowAttachForm(false)
+                                            }}>
+                                                <Check size={12} className="mr-1" /> Ajouter
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {attachments.length === 0 && !showAttachForm && (
+                                    <p className="text-xs text-muted-foreground italic">Aucune pièce jointe</p>
+                                )}
+
+                                {attachments.map(a => (
+                                    <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 group">
+                                        <a
+                                            href={a.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 min-w-0 text-xs hover:underline"
+                                        >
+                                            <ExternalLink size={12} className="shrink-0 text-muted-foreground" />
+                                            <span className="truncate">{a.label}</span>
+                                        </a>
+                                        <Button
+                                            variant="ghost" size="icon" className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={async () => {
+                                                await deleteProjectAttachment(a.id)
+                                                setAttachments(prev => prev.filter(x => x.id !== a.id))
+                                            }}
+                                        >
+                                            <X size={12} />
+                                        </Button>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </section>

@@ -19,6 +19,7 @@ import type {
     TimeEntry,
     Formation,
     ProjectFormation,
+    ProjectAttachment,
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -491,5 +492,14 @@ export function normalizeProjectFormations(rows: Record<string, unknown>[]): Pro
         id: num(r.id),
         project_id: num(r.project_id),
         formation_id: num(r.formation_id),
+    }))
+}
+
+export function normalizeProjectAttachments(rows: Record<string, unknown>[]): ProjectAttachment[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        project_id: num(r.project_id),
+        label: str(r.label),
+        url: str(r.url),
     }))
 }

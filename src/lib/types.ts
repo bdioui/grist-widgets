@@ -328,3 +328,10 @@ export type ProjectFormation = {
     formation_id: number
 }
 
+export type ProjectAttachment = {
+    id: number
+    project_id: number
+    label: string
+    url: string
+}
+
