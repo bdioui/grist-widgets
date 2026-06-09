@@ -2139,6 +2139,14 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                         const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
                                         return `${f.code} ${f.title} ${partner?.name ?? ''}`.toLowerCase().includes(q.toLowerCase())
                                     }}
+                                    groupBy={f => {
+                                        const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
+                                        return {
+                                            primary: partner?.name ?? 'Sans partenaire',
+                                            secondary: f.level,
+                                            primaryStyle: partner?.color ? { backgroundColor: partner.color } : undefined,
+                                        }
+                                    }}
                                     renderItem={f => {
                                         const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
                                         return (
