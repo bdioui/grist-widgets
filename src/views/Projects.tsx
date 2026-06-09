@@ -2135,6 +2135,24 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                         setFormationLinks(prev => [...prev, link])
                                     }}
                                     getLabel={f => `${f.code} — ${f.title}`}
+                                    filterFn={(f, q) => {
+                                        const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
+                                        return `${f.code} ${f.title} ${partner?.name ?? ''}`.toLowerCase().includes(q.toLowerCase())
+                                    }}
+                                    renderItem={f => {
+                                        const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
+                                        return (
+                                            <div className="flex flex-col gap-0.5 min-w-0">
+                                                <span className="text-xs font-medium truncate">{f.title}</span>
+                                                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                                    <span>{f.code}</span>
+                                                    <span>·</span>
+                                                    <span>{f.degree_type}</span>
+                                                    {partner && <><span>·</span><span className="truncate">{partner.name}</span></>}
+                                                </div>
+                                            </div>
+                                        )
+                                    }}
                                     placeholder="Rechercher une formation..."
                                 />
 
@@ -2142,13 +2160,15 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                     <p className="text-xs text-muted-foreground italic">Aucune formation rattachée</p>
                                 )}
 
-                                {formations.map(f => (
+                                {formations.map(f => {
+                                    const fPartner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
+                                    return (
                                     <div key={f.id} className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2.5">
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="flex flex-col gap-0.5 min-w-0">
                                                 <span className="text-xs font-medium truncate">{f.title}</span>
                                                 <span className="text-xs text-muted-foreground">{f.code} · {f.degree_type} · {f.level}</span>
-                                                <span className="text-xs text-muted-foreground truncate">{f.institution}</span>
+                                                {fPartner && <span className="text-xs text-muted-foreground truncate">{fPartner.name}</span>}
                                             </div>
                                             <Button
                                                 variant="ghost" size="icon" className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:text-destructive"
@@ -2170,7 +2190,8 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                             </div>
                                         )}
                                     </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         )}
                     </section>

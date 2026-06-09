@@ -311,7 +311,7 @@ export type Formation = {
     code: string
     type: string
     title: string
-    institution: string
+    partner_id: number | null
     level: string
     degree_type: string
     formacode: string

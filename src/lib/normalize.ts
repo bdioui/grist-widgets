@@ -474,7 +474,7 @@ export function normalizeFormations(rows: Record<string, unknown>[]): Formation[
         code: str(r.code),
         type: str(r.type),
         title: str(r.title),
-        institution: str(r.institution),
+        partner_id: r.partner_id ? num(r.partner_id) : null,
         level: str(r.level),
         degree_type: str(r.degree_type),
         formacode: str(r.formacode),
