@@ -252,8 +252,8 @@ export function normalizeProjectMembers(rows: Record<string, unknown>[]): Projec
 export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): FinancialAgreement[] {
     return rows.map(r => ({
         id: num(r.id),
-        project_id: num(r.project__id ?? r.project_id),
-        partner_id: num(r.partner_id),
+        project_id: num(r.project__id ?? r.project_id ?? r.Project),
+        partner_id: num(r.partner_id ?? r.Partner),
         axis_id: r.axis_id ? num(r.axis_id) : null,
         status_id: num(r.status_id),
         title: str(r.title),

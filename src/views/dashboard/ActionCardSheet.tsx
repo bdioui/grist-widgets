@@ -115,11 +115,12 @@ function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputPro
 type MemberQuickCreateFormProps = {
     partners: Partner[]
     role: string
+    existingEmails?: string[]
     onSaved: (member: Member) => void
     onCancel: () => void
 }
 
-function MemberQuickCreateForm({ partners, role, onSaved, onCancel }: MemberQuickCreateFormProps) {
+function MemberQuickCreateForm({ partners, role, existingEmails = [], onSaved, onCancel }: MemberQuickCreateFormProps) {
     const [firstName,  setFirstName]  = useState('')
     const [lastName,   setLastName]   = useState('')
     const [email,      setEmail]      = useState('')
@@ -127,9 +128,14 @@ function MemberQuickCreateForm({ partners, role, onSaved, onCancel }: MemberQuic
     const [statusVal,  setStatusVal]  = useState(MEMBER_STATUSES[0])
     const [partnerId,  setPartnerId]  = useState<number>(partners[0]?.id ?? 0)
     const [submitting, setSubmitting] = useState(false)
+    const [emailError, setEmailError] = useState<string | null>(null)
 
     async function handleSubmit() {
         if (!firstName.trim() || !lastName.trim()) return
+        if (email.trim() && existingEmails.map(e => e.toLowerCase()).includes(email.trim().toLowerCase())) {
+            setEmailError('Un membre avec cet email existe déjà.')
+            return
+        }
         setSubmitting(true)
         try {
             const member = await addMember({
@@ -155,11 +161,14 @@ function MemberQuickCreateForm({ partners, role, onSaved, onCancel }: MemberQuic
                 <Input value={lastName} onChange={e => setLastName(e.target.value)}
                     placeholder="Nom *" className="h-8 text-xs flex-1" />
             </div>
-            <div className="flex gap-2">
-                <Input value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="Email" className="h-8 text-xs flex-1" type="email" />
-                <Input value={position} onChange={e => setPosition(e.target.value)}
-                    placeholder="Fonction" className="h-8 text-xs flex-1" />
+            <div className="flex flex-col gap-1">
+                <div className="flex gap-2">
+                    <Input value={email} onChange={e => { setEmail(e.target.value); setEmailError(null) }}
+                        placeholder="Email" className={`h-8 text-xs flex-1 ${emailError ? 'border-destructive' : ''}`} type="email" />
+                    <Input value={position} onChange={e => setPosition(e.target.value)}
+                        placeholder="Fonction" className="h-8 text-xs flex-1" />
+                </div>
+                {emailError && <p className="text-xs text-destructive">{emailError}</p>}
             </div>
             <div className="flex gap-2">
                 <Select value={statusVal} onValueChange={setStatusVal}>
@@ -481,6 +490,7 @@ export default function ActionCardSheet({ open, onClose, onCreated, editCard, on
                             <MemberQuickCreateForm
                                 partners={partners}
                                 role={roleToAdd}
+                                existingEmails={members.map(m => m.email)}
                                 onSaved={member => {
                                     setMembers(prev => [...prev, member])
                                     set('members', [...form.members, { member_id: member.id, role: roleToAdd }])

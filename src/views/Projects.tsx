@@ -68,50 +68,27 @@ const ROLES = [
     'Equipe - Contributeur',
     'Equipe - Consultant',
     'Equipe - Observateur',
+    'Porteur'
 
 ]
 
-const ROLE_ORDER = ['Equipe - Lead', 'Equipe - Contributeur', 'Equipe - Consultant', 'Equipe - Observateur', 'Participant', 'Intervenant']
+const ROLE_ORDER = ['Equipe - Lead', 'Equipe - Contributeur', 'Equipe - Consultant', 'Equipe - Observateur', 'Participant', 'Intervenant', 'Porteur']
 
 const PARTNER_ROLES = ['Associé', 'Bénéficiaire', 'Cofinanceur', 'Sous-traitant']
 
-const PARTNER_TYPES = [
-    'Université et grandes écoles', 'Entreprise privée', 'Association',
-    'Établissement public', 'Administration', 'Collectivité', 'Fondation', 'Autre',
-]
+import { PARTNER_TYPES, PALETTE } from '@/lib/constants'
 
 const MEMBER_STATUSES = [
     'Enseignant-chercheur', 'Chercheur', 'Ingénieur', 'Doctorant',
     'Post-doc', 'BIATSS', 'Autre',
 ]
 
-const PALETTE = [
-    { label: 'Lavande',     hexa: '#D8CFEE' },
-    { label: 'Rose',        hexa: '#EEC5EF' },
-    { label: 'Fuchsia',     hexa: '#F4B8D1' },
-    { label: 'Corail',      hexa: '#F4C5B8' },
-    { label: 'Pêche',       hexa: '#F9DEC9' },
-    { label: 'Jaune',       hexa: '#EDD803' },
-    { label: 'Jaune pâle',  hexa: '#F7F0A0' },
-    { label: 'Vert tendre', hexa: '#C8EABF' },
-    { label: 'Vert sauge',  hexa: '#B8D9C5' },
-    { label: 'Menthe',      hexa: '#B8EAE0' },
-    { label: 'Bleu ciel',   hexa: '#BFD9F4' },
-    { label: 'Bleu',        hexa: '#C5D2EF' },
-    { label: 'Bleu nuit',   hexa: '#B8C8E8' },
-    { label: 'Gris',        hexa: '#E7E8E2' },
-    { label: 'Gris chaud',  hexa: '#E2DDD8' },
-    { label: 'Beige',       hexa: '#EDE5D0' },
-    { label: 'Sable',       hexa: '#E8DFC0' },
-    { label: 'Terracotta',  hexa: '#E8C4A8' },
-]
-
 
 // --- Types enrichis ---
 
-type ProjectCallFull    = ProjectCall & { axis: Axis }
-type ProjectFull        = Project     & { projectCall: ProjectCallFull }
-type AgreementFull      = FinancialAgreement & { partner: Partner }
+export type ProjectCallFull    = ProjectCall & { axis: Axis }
+export type ProjectFull        = Project     & { projectCall: ProjectCallFull }
+export type AgreementFull      = FinancialAgreement & { partner: Partner }
 type ProjectPartnerFull = ProjectPartner & { partner: Partner }
 
 // --- Helpers ---
@@ -1288,11 +1265,12 @@ function ActionCardQuickCreateForm({ projectId, statuses, members, partners, onS
 type MemberQuickCreateFormProps = {
     partners: Partner[]
     projectRole: string
+    existingEmails?: string[]
     onSaved: (member: Member) => void
     onCancel: () => void
 }
 
-function MemberQuickCreateForm({ partners, projectRole, onSaved, onCancel }: MemberQuickCreateFormProps) {
+function MemberQuickCreateForm({ partners, projectRole, existingEmails = [], onSaved, onCancel }: MemberQuickCreateFormProps) {
     const [firstName,  setFirstName]  = useState('')
     const [lastName,   setLastName]   = useState('')
     const [email,      setEmail]      = useState('')
@@ -1300,9 +1278,14 @@ function MemberQuickCreateForm({ partners, projectRole, onSaved, onCancel }: Mem
     const [statusVal,  setStatusVal]  = useState(MEMBER_STATUSES[0])
     const [partnerId,  setPartnerId]  = useState<number>(partners[0]?.id ?? 0)
     const [submitting, setSubmitting] = useState(false)
+    const [emailError, setEmailError] = useState<string | null>(null)
 
     async function handleSubmit() {
         if (!firstName.trim() || !lastName.trim()) return
+        if (email.trim() && existingEmails.map(e => e.toLowerCase()).includes(email.trim().toLowerCase())) {
+            setEmailError('Un membre avec cet email existe déjà.')
+            return
+        }
         setSubmitting(true)
         try {
             const member = await addMember({
@@ -1325,11 +1308,14 @@ function MemberQuickCreateForm({ partners, projectRole, onSaved, onCancel }: Mem
                 <Input value={lastName} onChange={e => setLastName(e.target.value)}
                     placeholder="Nom *" className="h-8 text-xs flex-1" />
             </div>
-            <div className="flex gap-2">
-                <Input value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="Email" className="h-8 text-xs flex-1" type="email" />
-                <Input value={position} onChange={e => setPosition(e.target.value)}
-                    placeholder="Fonction" className="h-8 text-xs flex-1" />
+            <div className="flex flex-col gap-1">
+                <div className="flex gap-2">
+                    <Input value={email} onChange={e => { setEmail(e.target.value); setEmailError(null) }}
+                        placeholder="Email" className={`h-8 text-xs flex-1 ${emailError ? 'border-destructive' : ''}`} type="email" />
+                    <Input value={position} onChange={e => setPosition(e.target.value)}
+                        placeholder="Fonction" className="h-8 text-xs flex-1" />
+                </div>
+                {emailError && <p className="text-xs text-destructive">{emailError}</p>}
             </div>
             <div className="flex gap-2">
                 <Select value={statusVal} onValueChange={setStatusVal}>
@@ -1420,7 +1406,7 @@ function PartnerQuickCreateForm({ projectRole: _projectRole, onSaved, onCancel }
 
 // --- Sheet détail projet ---
 
-type ProjectDetailSheetProps = {
+export type ProjectDetailSheetProps = {
     project: ProjectFull | null
     open: boolean
     onClose: () => void
@@ -1446,7 +1432,7 @@ type ProjectDetailSheetProps = {
     allFormations: Formation[]
 }
 
-function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses, members, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations }: ProjectDetailSheetProps) {
+export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses, members, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -2021,6 +2007,7 @@ function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAg
                                     <MemberQuickCreateForm
                                         partners={partners}
                                         projectRole={roleToAdd}
+                                        existingEmails={members.map(m => m.email)}
                                         onSaved={async member => {
                                             onMemberCreated?.(member)
                                             await handleAddMember(member.id)
@@ -3572,7 +3559,7 @@ export default function Projects() {
 
                                             {/* Colonnes AAP */}
                                             <div className="flex flex-row h-full overflow-x-auto">
-                                                {calls.sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date)).map(pc => {
+                                                {calls.sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date)).sort((a,b) => (a.title).localeCompare(b.title)).map(pc => {
                                                     console.log("Calls :", calls)
                                                     const pcProjects = filteredProjects.filter(p => p.project_call_id === pc.id)
                                                     const pcStatus = statuses.find(s => s.id === pc.status_id)

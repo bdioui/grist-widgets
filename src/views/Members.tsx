@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { getMembersFull, getPartners, getLabs, addMember, updateMember, deleteMember, getGroups, getGroupMembers, removeMemberFromGroup, addMemberToGroup, addGroup, deleteGroup } from '@/lib/api'
+import { useEffect, useState, lazy, Suspense } from 'react'
+import { getMembersFull, getPartners, getLabs, addMember, updateMember, deleteMember, addPartner, getGroups, getGroupMembers, removeMemberFromGroup, addMemberToGroup, addGroup, deleteGroup, getAllMemberActionCards, getAllProjectMembers, getActionCardsFull, getProjects, addMemberToCard, removeMemberFromCard, addProjectMember, removeProjectMember, createActionCardFull, addProject } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,16 +9,26 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { type MemberFull, type Partner, type Lab, type Group, type GroupMember } from '@/lib/types'
+import { type MemberFull, type Partner, type Lab, type Group, type GroupMember, type ActionCardFull, type MemberActionCard, type ProjectMember, type Project, type ProjectCall, type Axis, type Status, type Formation, type TimeEntry } from '@/lib/types'
+import type { ProjectFull, ProjectCallFull } from './Projects'
+import type { ActionCardData } from './dashboard/ActionCard'
+import { PARTNER_TYPES, PALETTE } from '@/lib/constants'
 import { exportToCsv } from '@/lib/utils'
 import {ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger,}  from '@/components/ui/context-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import SearchInput from '@/components/SearchInput'
 import { useCurrentUser } from '@/lib/userContext'
 
+// Lazy imports pour éviter les dépendances circulaires
+const ProjectDetailSheetLazy = lazy(() =>
+    import('./Projects').then(m => ({ default: m.ProjectDetailSheet }))
+)
+const ActionCardDetailSheetLazy = lazy(() =>
+    import('./dashboard/ActionCard').then(m => ({ default: m.ActionCardDetailSheet }))
+)
 
 // --- Constantes ---
 
@@ -64,11 +74,59 @@ const EMPTY_FORM: MemberForm = {
     is_staff:      false,
 }
 
+// --- Quick-create partenaire ---
+
+function PartnerQuickCreate({ onSaved, onCancel }: { onSaved: (p: Partner) => void; onCancel: () => void }) {
+    const [name,       setName]       = useState('')
+    const [type,       setType]       = useState(PARTNER_TYPES[0])
+    const [color,      setColor]      = useState('#E7E8E2')
+    const [submitting, setSubmitting] = useState(false)
+
+    async function handleSubmit() {
+        if (!name.trim()) return
+        setSubmitting(true)
+        try {
+            const partner = await addPartner({ name, type, color, description: '', logo: '', status_id: 0, consortium: false })
+            onSaved(partner)
+        } finally {
+            setSubmitting(false)
+        }
+    }
+
+    return (
+        <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Nom du partenaire *" className="h-8 text-xs flex-1" autoFocus />
+                <Select value={type} onValueChange={setType}>
+                    <SelectTrigger className="h-8 text-xs w-44 shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent position="popper">
+                        {PARTNER_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+                {PALETTE.map(c => (
+                    <button key={c.hexa} title={c.label} type="button" onClick={() => setColor(c.hexa)}
+                        className="w-4 h-7 rounded-full border-2 transition-all"
+                        style={{ backgroundColor: c.hexa, borderColor: color === c.hexa ? '#000' : 'transparent' }}
+                    />
+                ))}
+            </div>
+            <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" className="rounded-md" onClick={onCancel}>Annuler</Button>
+                <Button size="sm" className="rounded-md" disabled={!name.trim() || submitting} onClick={handleSubmit}>
+                    <Check size={12} className="mr-1" />{submitting ? '...' : 'Créer'}
+                </Button>
+            </div>
+        </div>
+    )
+}
+
 // --- Formulaire création / édition ---
 
 type MemberFormSheetProps =
-    | { mode: 'create'; partners: Partner[]; labs: Lab[]; onCreated: (m: MemberFull) => void; onClose: () => void }
-    | { mode: 'edit';   partners: Partner[]; labs: Lab[]; member: MemberFull; onUpdated: (m: MemberFull) => void; onClose: () => void }
+    | { mode: 'create'; partners: Partner[]; labs: Lab[]; existingEmails?: string[]; onCreated: (m: MemberFull) => void; onClose: () => void }
+    | { mode: 'edit';   partners: Partner[]; labs: Lab[]; existingEmails?: string[]; member: MemberFull; onUpdated: (m: MemberFull) => void; onClose: () => void }
 
 function MemberFormSheet(props: MemberFormSheetProps) {
     const isEdit = props.mode === 'edit'
@@ -90,16 +148,27 @@ function MemberFormSheet(props: MemberFormSheetProps) {
             : EMPTY_FORM
     )
     const [saving, setSaving] = useState(false)
+    const [localPartners, setLocalPartners] = useState<Partner[]>(props.partners)
+    const [showCreatePartner, setShowCreatePartner] = useState(false)
+    const [emailError, setEmailError] = useState<string | null>(null)
 
     function setField<K extends keyof MemberForm>(key: K, value: MemberForm[K]) {
+        if (key === 'email') setEmailError(null)
         setForm(prev => ({ ...prev, [key]: value }))
     }
 
     async function handleSave() {
         if (!form.first_name.trim() || !form.last_name.trim()) return
+        const emailLower = form.email.trim().toLowerCase()
+        const existingEmails = props.existingEmails ?? []
+        const currentEmail = isEdit ? props.member.email.toLowerCase() : null
+        if (emailLower && existingEmails.map(e => e.toLowerCase()).includes(emailLower) && emailLower !== currentEmail) {
+            setEmailError('Un membre avec cet email existe déjà.')
+            return
+        }
         setSaving(true)
         try {
-            const partner = props.partners.find(p => p.id === form.partner_id) ?? null
+            const partner = localPartners.find(p => p.id === form.partner_id) ?? null
             const lab     = props.labs.find(l => l.id === form.lab_id) ?? null
             if (isEdit) {
                 await updateMember(props.member.id, form)
@@ -154,15 +223,34 @@ function MemberFormSheet(props: MemberFormSheetProps) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-                <Label>Partenaire*</Label>
-
-                <SearchInput
-                    data={props.partners}
-                    onSelect={p => setField('partner_id', p.id)}
-                    getLabel={p => p.name}
-                    placeholder="Rechercher un partenaire..."
-                    value={props.partners.find(p => p.id === form.partner_id)?.name}
-                />
+                <div className="flex items-center justify-between">
+                    <Label>Partenaire*</Label>
+                    {!showCreatePartner && (
+                        <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md text-muted-foreground" onClick={() => setShowCreatePartner(true)}>
+                            <Plus size={11} /> Nouveau
+                        </Button>
+                    )}
+                </div>
+                {showCreatePartner ? (
+                    <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-muted/30">
+                        <PartnerQuickCreate
+                            onSaved={p => {
+                                setLocalPartners(prev => [...prev, p])
+                                setField('partner_id', p.id)
+                                setShowCreatePartner(false)
+                            }}
+                            onCancel={() => setShowCreatePartner(false)}
+                        />
+                    </div>
+                ) : (
+                    <SearchInput
+                        data={localPartners}
+                        onSelect={p => setField('partner_id', p.id)}
+                        getLabel={p => p.name}
+                        placeholder="Rechercher un partenaire..."
+                        value={localPartners.find(p => p.id === form.partner_id)?.name}
+                    />
+                )}
             </div>
 
 
@@ -180,7 +268,14 @@ function MemberFormSheet(props: MemberFormSheetProps) {
 
             <div className="flex flex-col gap-1.5">
                 <Label>Email</Label>
-                <Input type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="email@exemple.fr" />
+                <Input
+                    type="email"
+                    value={form.email}
+                    onChange={e => setField('email', e.target.value)}
+                    placeholder="email@exemple.fr"
+                    className={emailError ? 'border-destructive focus-visible:ring-destructive' : ''}
+                />
+                {emailError && <p className="text-xs text-destructive">{emailError}</p>}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -230,22 +325,192 @@ function MemberFormSheet(props: MemberFormSheetProps) {
     )
 }
 
+// --- ProjectViewerSheet (ouvre ProjectDetailSheet depuis un objet Project) ---
+
+type ProjectRefData = {
+    projectFull:  ProjectFull
+    projectCalls: ProjectCallFull[]
+    axes:         Axis[]
+    statuses:     Status[]
+    partners:     Partner[]
+    members:      MemberFull[]
+    formations:   Formation[]
+    times:        TimeEntry[]
+}
+
+function ProjectViewerSheet({ project, open, onClose }: { project: Project; open: boolean; onClose: () => void }) {
+    const [refData, setRefData] = useState<ProjectRefData | null>(null)
+
+    useEffect(() => {
+        if (!open) return
+        setRefData(null)
+        Promise.all([
+            import('@/lib/api').then(m => m.getProjectCalls()),
+            import('@/lib/api').then(m => m.getAxes()),
+            import('@/lib/api').then(m => m.getStatuses()),
+            import('@/lib/api').then(m => m.getPartners()),
+            import('@/lib/api').then(m => m.getMembersFull()),
+            import('@/lib/api').then(m => m.getFormations()),
+            import('@/lib/api').then(m => m.getTimeEntries()),
+        ]).then(([calls, axes, statuses, partners, members, formations, times]) => {
+            const axisMap = new Map((axes as Axis[]).map(a => [a.id, a]))
+            const fullCalls: ProjectCallFull[] = (calls as ProjectCall[]).map(c => ({
+                ...c,
+                axis: axisMap.get(c.axis_id) ?? { id: 0, name: 'Inconnu', description: '' },
+            }))
+            const callMap = new Map(fullCalls.map(c => [c.id, c]))
+            const projectFull: ProjectFull = {
+                ...project,
+                projectCall: callMap.get(project.project_call_id) ?? {
+                    id: 0, axis_id: 0, title: 'Inconnu', description: '',
+                    start_date: '', end_date: '', status_id: 0, budget: 0,
+                    axis: { id: 0, name: 'Inconnu', description: '' },
+                },
+            }
+            setRefData({
+                projectFull,
+                projectCalls: fullCalls,
+                axes: axes as Axis[],
+                statuses: statuses as Status[],
+                partners: partners as Partner[],
+                members: members as MemberFull[],
+                formations: formations as Formation[],
+                times: times as TimeEntry[],
+            })
+        })
+    }, [open, project.id])
+
+    if (!refData) return null
+
+    return (
+        <Suspense fallback={null}>
+            <ProjectDetailSheetLazy
+                open={open}
+                project={refData.projectFull}
+                onClose={onClose}
+                onUpdated={() => {}}
+                onDeleted={() => {}}
+                onAgreementAdded={() => {}}
+                onAgreementDeleted={() => {}}
+                partners={refData.partners}
+                projectCalls={refData.projectCalls}
+                axes={refData.axes}
+                statuses={refData.statuses}
+                members={refData.members}
+                projectTimes={refData.times.filter(t => t.project_id === project.id)}
+                axis={refData.axes}
+                allFormations={refData.formations}
+            />
+        </Suspense>
+    )
+}
+
+// --- ActionCardViewerSheet ---
+
+function toActionCardData(card: ActionCardFull): ActionCardData {
+    return {
+        id: card.id,
+        title: card.title,
+        description: card.description,
+        status: card.status,
+        category: {
+            id: card.category.id,
+            title: card.category.title,
+            color: card.category.color,
+            parent: card.category.parent
+                ? { id: card.category.parent.id, title: card.category.parent.title, color: card.category.parent.color }
+                : undefined,
+        },
+        owner: card.owner
+            ? { id: card.owner.id, first_name: card.owner.first_name, last_name: card.owner.last_name, position: card.owner.position }
+            : undefined,
+        start_date: card.start_date,
+        end_date: card.end_date,
+    }
+}
+
+function ActionCardViewerSheet({ card, open, onClose }: { card: ActionCardFull; open: boolean; onClose: () => void }) {
+    return (
+        <Suspense fallback={null}>
+            <ActionCardDetailSheetLazy
+                card={toActionCardData(card)}
+                open={open}
+                onClose={onClose}
+                onUpdated={() => {}}
+                onDeleted={() => {}}
+            />
+        </Suspense>
+    )
+}
+
 // --- Sheet de consultation ---
 
 type MemberDetailSheetProps = {
-    member:    MemberFull
-    partners:  Partner[]
-    labs:      Lab[]
-    open:      boolean
-    onClose:   () => void
-    onUpdated: (m: MemberFull) => void
-    onDeleted: (id: number) => void
+    member:         MemberFull
+    partners:       Partner[]
+    labs:           Lab[]
+    existingEmails: string[]
+    open:           boolean
+    onClose:        () => void
+    onUpdated:      (m: MemberFull) => void
+    onDeleted:      (id: number) => void
 }
 
-function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, onDeleted }: MemberDetailSheetProps) {
+function MemberDetailSheet({ member, partners, labs, existingEmails, open, onClose, onUpdated, onDeleted }: MemberDetailSheetProps) {
+    const currentUser = useCurrentUser()
     const [editing,    setEditing]    = useState(false)
     const [confirming, setConfirming] = useState(false)
     const [deleting,   setDeleting]   = useState(false)
+    const [saving,     setSaving]     = useState(false)
+
+    // ActionCards liées
+    const [cardLinks,    setCardLinks]    = useState<(MemberActionCard & { card: ActionCardFull })[]>([])
+    const [allCards,     setAllCards]     = useState<ActionCardFull[]>([])
+    const [openCard,     setOpenCard]     = useState<ActionCardFull | null>(null)
+
+    // Projets liés
+    const [projectLinks, setProjectLinks] = useState<(ProjectMember & { project: Project })[]>([])
+    const [allProjects,  setAllProjects]  = useState<Project[]>([])
+    const [openProject,  setOpenProject]  = useState<Project | null>(null)
+
+    // Quick-add ActionCard
+    const [showCardCreate,  setShowCardCreate]  = useState(false)
+    const [qCardTitle,      setQCardTitle]      = useState('')
+
+    // Quick-add Projet
+    const [showProjectCreate, setShowProjectCreate] = useState(false)
+    const [qProjectTitle,     setQProjectTitle]     = useState('')
+    const [qProjectBudget,    setQProjectBudget]    = useState('')
+
+    useEffect(() => {
+        if (!open) return
+        setShowCardCreate(false)
+        setShowProjectCreate(false)
+        Promise.all([
+            getAllMemberActionCards(),
+            getActionCardsFull(),
+            getAllProjectMembers(),
+            getProjects(),
+        ]).then(([memberCards, cards, projectMembers, projects]) => {
+            const cardMap = new Map((cards as ActionCardFull[]).map(c => [c.id, c]))
+            setCardLinks(
+                (memberCards as MemberActionCard[])
+                    .filter(l => l.member_id === member.id)
+                    .map(l => ({ ...l, card: cardMap.get(l.action_card_id)! }))
+                    .filter(l => l.card)
+            )
+            setAllCards(cards as ActionCardFull[])
+
+            const projectMap = new Map((projects as Project[]).map(p => [p.id, p]))
+            setProjectLinks(
+                (projectMembers as ProjectMember[])
+                    .filter(l => l.member_id === member.id)
+                    .map(l => ({ ...l, project: projectMap.get(l.project_id)! }))
+                    .filter(l => l.project)
+            )
+            setAllProjects(projects as Project[])
+        })
+    }, [open, member.id])
 
     async function handleDelete() {
         setDeleting(true)
@@ -259,9 +524,88 @@ function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, o
         }
     }
 
+    async function handleLinkCard(card: ActionCardFull) {
+        setSaving(true)
+        try {
+            const link = await addMemberToCard(card.id, member.id, 'Contributeur')
+            setCardLinks(prev => [...prev, { ...link, card }])
+        } finally { setSaving(false) }
+    }
+
+    async function handleUnlinkCard(linkId: number) {
+        await removeMemberFromCard(linkId)
+        setCardLinks(prev => prev.filter(l => l.id !== linkId))
+    }
+
+    async function handleCardQuickAdd() {
+        if (!qCardTitle.trim()) return
+        setSaving(true)
+        try {
+            const newCard = await createActionCardFull({
+                title: qCardTitle.trim(),
+                description: '',
+                start_date: '',
+                end_date: '',
+                status_id: 1,
+                category_id: 1,
+                axis_id: null,
+                owner_id: currentUser?.id ?? member.id,
+                members: [{ member_id: member.id, role: 'Responsable' }],
+                project_id: null,
+                todo_title: '',
+                todo_items: [],
+            })
+            setCardLinks(prev => [...prev, { id: 0, member_id: member.id, action_card_id: newCard.id, role: 'Responsable', card: newCard }])
+            setAllCards(prev => [...prev, newCard])
+            setQCardTitle('')
+            setShowCardCreate(false)
+        } finally { setSaving(false) }
+    }
+
+    async function handleLinkProject(p: Project) {
+        setSaving(true)
+        try {
+            const link = await addProjectMember(p.id, member.id, 'Contributeur')
+            setProjectLinks(prev => [...prev, { ...link, project: p }])
+        } finally { setSaving(false) }
+    }
+
+    async function handleUnlinkProject(linkId: number) {
+        await removeProjectMember(linkId)
+        setProjectLinks(prev => prev.filter(l => l.id !== linkId))
+    }
+
+    async function handleProjectQuickAdd() {
+        if (!qProjectTitle.trim()) return
+        setSaving(true)
+        try {
+            const newProject = await addProject({
+                title: qProjectTitle.trim(),
+                description: '',
+                budget: Number(qProjectBudget) || 0,
+                project_call_id: 0,
+                status_id: 1,
+                start_date: '',
+                end_date: '',
+            })
+            const link = await addProjectMember(newProject.id, member.id, 'Responsable')
+            setProjectLinks(prev => [...prev, { ...link, project: newProject }])
+            setAllProjects(prev => [...prev, newProject])
+            setQProjectTitle('')
+            setQProjectBudget('')
+            setShowProjectCreate(false)
+        } finally { setSaving(false) }
+    }
+
+    const linkedCardIds    = cardLinks.map(l => l.action_card_id)
+    const linkedProjectIds = projectLinks.map(l => l.project_id)
+    const availableCards    = allCards.filter(c => !linkedCardIds.includes(c.id))
+    const availableProjects = allProjects.filter(p => !linkedProjectIds.includes(p.id))
+
     return (
+    <>
         <Sheet open={open} onOpenChange={v => { if (!v) { setEditing(false); setConfirming(false); onClose() } }}>
-            <SheetContent side="right" showCloseButton={false} className="!w-[520px] flex flex-col gap-0 p-0">
+            <SheetContent side="right" showCloseButton={false} className="!w-[560px] flex flex-col gap-0 p-0">
 
                 {/* Header */}
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
@@ -306,87 +650,255 @@ function MemberDetailSheet({ member, partners, labs, open, onClose, onUpdated, o
                     </div>
                 </SheetHeader>
 
-                {/* Formulaire édition */}
-                {editing && (
-                    <>
-                        <MemberFormSheet
-                            mode="edit"
-                            partners={partners}
-                            labs={labs}
-                            member={member}
-                            onUpdated={m => { onUpdated(m); setEditing(false) }}
-                            onClose={() => setEditing(false)}
-                        />
+                <div className="flex-1 overflow-y-auto">
+                    {/* Formulaire édition */}
+                    {editing && (
+                        <>
+                            <MemberFormSheet
+                                mode="edit"
+                                partners={partners}
+                                labs={labs}
+                                existingEmails={existingEmails}
+                                member={member}
+                                onUpdated={m => { onUpdated(m); setEditing(false) }}
+                                onClose={() => setEditing(false)}
+                            />
+                            <Separator />
+                        </>
+                    )}
+
+                    <div className="flex flex-col gap-5 px-6 py-5">
+
+                        {/* ── INFORMATIONS ── */}
+                        <section className="flex flex-col gap-2 text-sm">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Informations</p>
+                            <div className="flex flex-col gap-2 mt-1">
+                                <div className="flex items-center gap-3">
+                                    <span className="w-24 shrink-0 text-xs text-muted-foreground">Statut</span>
+                                    <Badge variant="outline" className="text-xs">{member.status}</Badge>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="w-24 shrink-0 text-xs text-muted-foreground">Genre</span>
+                                    <span>{member.genre}</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="w-24 shrink-0 text-xs text-muted-foreground">Partenaire</span>
+                                    {member.partner ? (
+                                        <span className="text-xs px-2 py-0.5 rounded-full border border-border" style={{ backgroundColor: member.partner.color }}>
+                                            {member.partner.name}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-muted-foreground italic">Aucun</span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="w-24 shrink-0 text-xs text-muted-foreground">Laboratoire</span>
+                                    {member.lab ? (
+                                        <Badge variant="secondary" className="text-xs">{member.lab.name}</Badge>
+                                    ) : (
+                                        <span className="text-xs text-muted-foreground italic">Aucun</span>
+                                    )}
+                                </div>
+                            </div>
+                        </section>
+
                         <Separator />
-                    </>
-                )}
 
-                {/* Contenu */}
-                <div className="flex flex-col gap-5 px-6 py-5">
-
-                    <section className="flex flex-col gap-2 text-sm">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Informations</p>
-                        <div className="flex flex-col gap-2 mt-1">
-                            <div className="flex items-center gap-3">
-                                <span className="w-24 shrink-0 text-xs text-muted-foreground">Statut</span>
-                                <Badge variant="outline" className="text-xs">{member.status}</Badge>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <span className="w-24 shrink-0 text-xs text-muted-foreground">Genre</span>
-                                <span>{member.genre}</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <span className="w-24 shrink-0 text-xs text-muted-foreground">Partenaire</span>
-                                {member.partner ? (
-                                    <span className="text-xs px-2 py-0.5 rounded-full border border-border" style={{ backgroundColor: member.partner.color }}>
-                                        {member.partner.name}
-                                    </span>
+                        {/* ── CONTACT ── */}
+                        <section className="flex flex-col gap-2">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Contact</p>
+                            <div className="flex flex-col gap-1 mt-1">
+                                {member.email ? (
+                                    <a href={`mailto:${member.email}`} className="flex items-center gap-3 px-2 py-2 rounded hover:bg-muted group">
+                                        <Mail size={14} className="text-muted-foreground shrink-0" />
+                                        <span className="text-sm text-blue-600 group-hover:underline">{member.email}</span>
+                                    </a>
                                 ) : (
-                                    <span className="text-xs text-muted-foreground italic">Aucun</span>
+                                    <p className="text-xs text-muted-foreground italic px-2">Aucun email renseigné</p>
+                                )}
+                                {member.tel && (
+                                    <a href={`tel:${member.tel}`} className="flex items-center gap-3 px-2 py-2 rounded hover:bg-muted group">
+                                        <Phone size={14} className="text-muted-foreground shrink-0" />
+                                        <span className="text-sm group-hover:underline">{member.tel}</span>
+                                    </a>
                                 )}
                             </div>
-                            <div className="flex items-center gap-3">
-                                <span className="w-24 shrink-0 text-xs text-muted-foreground">Laboratoire</span>
-                                {member.lab ? (
-                                    <Badge variant="secondary" className="text-xs">{member.lab.name}</Badge>
-                                ) : (
-                                    <span className="text-xs text-muted-foreground italic">Aucun</span>
-                                )}
-                            </div>
-                        </div>
-                    </section>
+                        </section>
 
-                    <Separator />
+                        <Separator />
 
-                    <section className="flex flex-col gap-2">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Contact</p>
-                        <div className="flex flex-col gap-1 mt-1">
-                            {member.email ? (
-                                <a
-                                    href={`mailto:${member.email}`}
-                                    className="flex items-center gap-3 px-2 py-2 rounded hover:bg-muted group"
-                                >
-                                    <Mail size={14} className="text-muted-foreground shrink-0" />
-                                    <span className="text-sm text-blue-600 group-hover:underline">{member.email}</span>
-                                </a>
-                            ) : (
-                                <p className="text-xs text-muted-foreground italic px-2">Aucun email renseigné</p>
+                        {/* ── ACTION CARDS ── */}
+                        <section className="flex flex-col gap-3">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Fiches actions ({cardLinks.length})
+                            </p>
+                            {cardLinks.length === 0 && !showCardCreate && (
+                                <p className="text-xs text-muted-foreground italic">Aucune action liée</p>
                             )}
-                            {member.tel && (
-                                <a
-                                    href={`tel:${member.tel}`}
-                                    className="flex items-center gap-3 px-2 py-2 rounded hover:bg-muted group"
-                                >
-                                    <Phone size={14} className="text-muted-foreground shrink-0" />
-                                    <span className="text-sm group-hover:underline">{member.tel}</span>
-                                </a>
+                            {cardLinks.length > 0 && (
+                                <div className="flex flex-col gap-1">
+                                    {cardLinks.map(l => (
+                                        <div key={l.id} className="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer" onClick={() => setOpenCard(l.card)}>
+                                            <div
+                                                className="w-2 h-2 rounded-full shrink-0"
+                                                style={{ backgroundColor: l.card.category?.color ?? '#E7E8E2' }}
+                                            />
+                                            <div className="flex flex-col min-w-0 flex-1">
+                                                <span className="text-sm truncate">{l.card.title}</span>
+                                                <span className="text-xs text-muted-foreground">{l.card.status?.label}</span>
+                                            </div>
+                                            <Badge variant="outline" className="text-[10px] shrink-0">{l.role}</Badge>
+                                            <Button
+                                                variant="ghost" size="icon"
+                                                className="h-5 w-5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive rounded-md"
+                                                onClick={e => { e.stopPropagation(); handleUnlinkCard(l.id) }}
+                                            >
+                                                <X size={11} />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
-                        </div>
-                    </section>
 
+                            {/* Lier une action existante */}
+                            {!showCardCreate && (
+                                <div className="mt-1">
+                                    <SearchInput
+                                        data={availableCards}
+                                        onSelect={handleLinkCard}
+                                        getLabel={c => c.title}
+                                        filterFn={(c, q) => c.title.toLowerCase().includes(q.toLowerCase())}
+                                        renderItem={c => (
+                                            <div className="flex items-center gap-2 w-full min-w-0">
+                                                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.category?.color ?? '#E7E8E2' }} />
+                                                <span className="text-xs truncate flex-1">{c.title}</span>
+                                                <span className="text-xs text-muted-foreground shrink-0">{c.status?.label}</span>
+                                            </div>
+                                        )}
+                                        placeholder="Rechercher une action à lier…"
+                                    />
+                                    {availableCards.length === 0 && allCards.length > 0 && (
+                                        <p className="text-xs text-muted-foreground italic mt-1.5 px-1">
+                                            Toutes les actions existantes sont déjà liées.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Bouton créer */}
+                            {!showCardCreate && (
+                                <button onClick={() => setShowCardCreate(true)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-0.5 w-fit">
+                                    <Plus size={12} /> Créer une action
+                                </button>
+                            )}
+
+                            {/* Quick-add ActionCard */}
+                            {showCardCreate && (
+                                <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30 mt-1">
+                                    <Input placeholder="Titre de l'action *" value={qCardTitle} onChange={e => setQCardTitle(e.target.value)} className="h-7 text-xs" />
+                                    <div className="flex gap-2">
+                                        <Button variant="outline" size="sm" className="flex-1 h-7 text-xs rounded-md" onClick={() => { setShowCardCreate(false); setQCardTitle('') }}>Annuler</Button>
+                                        <Button size="sm" className="flex-1 h-7 text-xs rounded-md" disabled={!qCardTitle.trim() || saving} onClick={handleCardQuickAdd}>
+                                            {saving ? '…' : 'Créer'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </section>
+
+                        <Separator />
+
+                        {/* ── PROJETS ── */}
+                        <section className="flex flex-col gap-3">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Projets ({projectLinks.length})
+                            </p>
+                            {projectLinks.length === 0 && !showProjectCreate && (
+                                <p className="text-xs text-muted-foreground italic">Aucun projet lié</p>
+                            )}
+                            {projectLinks.length > 0 && (
+                                <div className="flex flex-col gap-1">
+                                    {projectLinks.map(l => (
+                                        <div key={l.id} className="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer" onClick={() => setOpenProject(l.project)}>
+                                            <div className="flex flex-col min-w-0 flex-1">
+                                                <span className="text-sm truncate">{l.project.title}</span>
+                                                {l.project.budget > 0 && (
+                                                    <span className="text-xs text-muted-foreground">{l.project.budget.toLocaleString('fr-FR')} €</span>
+                                                )}
+                                            </div>
+                                            <Badge variant="outline" className="text-[10px] shrink-0">{l.role}</Badge>
+                                            <Button
+                                                variant="ghost" size="icon"
+                                                className="h-5 w-5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive rounded-md"
+                                                onClick={e => { e.stopPropagation(); handleUnlinkProject(l.id) }}
+                                            >
+                                                <X size={11} />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Lier un projet existant */}
+                            {!showProjectCreate && (
+                                <div className="mt-1">
+                                    <SearchInput
+                                        data={availableProjects}
+                                        onSelect={handleLinkProject}
+                                        getLabel={p => p.title}
+                                        filterFn={(p, q) => p.title.toLowerCase().includes(q.toLowerCase())}
+                                        placeholder="Rechercher un projet à lier…"
+                                    />
+                                    {availableProjects.length === 0 && allProjects.length > 0 && (
+                                        <p className="text-xs text-muted-foreground italic mt-1.5 px-1">
+                                            Tous les projets existants sont déjà liés.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Bouton créer */}
+                            {!showProjectCreate && (
+                                <button onClick={() => setShowProjectCreate(true)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground w-fit">
+                                    <Plus size={12} /> Créer un projet
+                                </button>
+                            )}
+
+                            {/* Quick-add Projet */}
+                            {showProjectCreate && (
+                                <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
+                                    <Input placeholder="Titre du projet *" value={qProjectTitle} onChange={e => setQProjectTitle(e.target.value)} className="h-7 text-xs" />
+                                    <Input type="number" placeholder="Budget (€)" value={qProjectBudget} onChange={e => setQProjectBudget(e.target.value)} className="h-7 text-xs" />
+                                    <div className="flex gap-2">
+                                        <Button variant="outline" size="sm" className="flex-1 h-7 text-xs rounded-md" onClick={() => { setShowProjectCreate(false); setQProjectTitle(''); setQProjectBudget('') }}>Annuler</Button>
+                                        <Button size="sm" className="flex-1 h-7 text-xs rounded-md" disabled={!qProjectTitle.trim() || saving} onClick={handleProjectQuickAdd}>
+                                            {saving ? '…' : 'Créer'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </section>
+
+                    </div>
                 </div>
             </SheetContent>
         </Sheet>
+
+        {openCard && (
+            <ActionCardViewerSheet
+                card={openCard}
+                open={!!openCard}
+                onClose={() => setOpenCard(null)}
+            />
+        )}
+        {openProject && (
+            <ProjectViewerSheet
+                project={openProject}
+                open={!!openProject}
+                onClose={() => setOpenProject(null)}
+            />
+        )}
+    </>
     )
 }
 
@@ -1152,6 +1664,7 @@ export default function Members() {
                     member={selected}
                     partners={partners}
                     labs={labs}
+                    existingEmails={members.map(m => m.email)}
                     open={!!selected}
                     onClose={() => setSelected(null)}
                     onUpdated={handleUpdated}
@@ -1173,6 +1686,7 @@ export default function Members() {
                             mode="create"
                             partners={partners}
                             labs={labs}
+                            existingEmails={members.map(m => m.email)}
                             onCreated={handleCreated}
                             onClose={() => setShowCreate(false)}
                         />

@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import {
     getPartnerCardsFull, addPartner, updatePartner, deletePartner,
     getLabCardsFull, addLab, updateLab, deleteLab,
     getPartners, getMembers,
     addPartnerToLab, removePartnerFromLab,
     attachMemberToLab, detachMemberFromLab,
+    getProjectCalls, getAxes, getStatuses, getFinancialAgreements, getFormations, getTimeEntries,
+    getProjects, addMember, addProject, addProjectPartner, updateMember,
 } from '@/lib/api'
 import { motion } from "framer-motion"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -24,7 +26,14 @@ import { exportToCsv } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator } from '@/components/ui/context-menu'
-import type { PartnerCardFull, Partner, Lab, LabCardFull, Member } from '@/lib/types'
+import SearchInput from '@/components/SearchInput'
+import type { PartnerCardFull, Partner, Lab, LabCardFull, Member, Project, ProjectCall, Axis, Status, Formation, TimeEntry } from '@/lib/types'
+import type { ProjectFull, ProjectCallFull } from './Projects'
+
+// Lazy import pour briser la dépendance circulaire Partners ↔ Projects
+const ProjectDetailSheetLazy = lazy(() =>
+    import('./Projects').then(m => ({ default: m.ProjectDetailSheet }))
+)
 
 // --- Constantes ---
 
@@ -189,6 +198,97 @@ function PartnerFormSheet(props: PartnerSheetProps) {
     )
 }
 
+// =============================================================================
+// PROJECT VIEWER SHEET (opens a ProjectDetailSheet from a Project object)
+// =============================================================================
+
+type RefData = {
+    projectFull:  ProjectFull
+    projectCalls: ProjectCallFull[]
+    axes:         Axis[]
+    statuses:     Status[]
+    partners:     Partner[]
+    members:      Member[]
+    formations:   Formation[]
+    times:        TimeEntry[]
+}
+
+function ProjectViewerSheet({ project, open, onClose }: { project: Project; open: boolean; onClose: () => void }) {
+    const [refData, setRefData] = useState<RefData | null>(null)
+
+    useEffect(() => {
+        if (!open) return
+        setRefData(null)
+        Promise.all([
+            getProjectCalls(),
+            getAxes(),
+            getStatuses(),
+            getPartners(),
+            getMembers(),
+            getFormations(),
+            getTimeEntries(),
+        ]).then(([calls, axes, statuses, partners, members, formations, times]) => {
+            const axisMap = new Map((axes as Axis[]).map(a => [a.id, a]))
+            const fullCalls: ProjectCallFull[] = (calls as ProjectCall[]).map(c => ({
+                ...c,
+                axis: axisMap.get(c.axis_id) ?? { id: 0, name: 'Inconnu', description: '' },
+            }))
+            const callMap = new Map(fullCalls.map(c => [c.id, c]))
+            const projectFull: ProjectFull = {
+                ...project,
+                projectCall: callMap.get(project.project_call_id) ?? {
+                    id: 0, axis_id: 0, title: 'Inconnu', description: '',
+                    start_date: '', end_date: '', status_id: 0, budget: 0,
+                    axis: { id: 0, name: 'Inconnu', description: '' },
+                },
+            }
+            setRefData({
+                projectFull,
+                projectCalls: fullCalls,
+                axes: axes as Axis[],
+                statuses: statuses as Status[],
+                partners: partners as Partner[],
+                members: members as Member[],
+                formations: formations as Formation[],
+                times: times as TimeEntry[],
+            })
+        })
+    }, [open, project.id])
+
+    if (!refData) return null
+
+    return (
+        <Suspense fallback={null}>
+            <ProjectDetailSheetLazy
+                open={open}
+                project={refData.projectFull}
+                onClose={onClose}
+                onUpdated={() => {}}
+                onDeleted={() => {}}
+                onAgreementAdded={() => {}}
+                onAgreementDeleted={() => {}}
+                partners={refData.partners}
+                projectCalls={refData.projectCalls}
+                axes={refData.axes}
+                statuses={refData.statuses}
+                members={refData.members}
+                projectTimes={refData.times.filter(t => t.project_id === project.id)}
+                axis={refData.axes}
+                allFormations={refData.formations}
+            />
+        </Suspense>
+    )
+}
+
+// =============================================================================
+// PARTNER FORMS & SHEETS
+// =============================================================================
+
+function formatDate(d?: string) {
+    if (!d) return null
+    return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 type PartnerDetailSheetProps = {
     partner:   PartnerCardFull
     open:      boolean
@@ -201,6 +301,45 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
     const [editing,    setEditing]    = useState(false)
     const [confirming, setConfirming] = useState(false)
     const [deleting,   setDeleting]   = useState(false)
+    const [openProject, setOpenProject] = useState<Project | null>(null)
+
+    // Copie locale mise à jour lors des ajouts de membres / projets
+    const [localPartner, setLocalPartner] = useState<PartnerCardFull>(partner)
+    const [allMembers,   setAllMembers]   = useState<Member[]>([])
+    const [allProjects,  setAllProjects]  = useState<Project[]>([])
+    const [saving,       setSaving]       = useState(false)
+
+    // Quick-add membre
+    const [showMemberCreate, setShowMemberCreate] = useState(false)
+    const [qFirstName,  setQFirstName]  = useState('')
+    const [qLastName,   setQLastName]   = useState('')
+    const [qEmail,      setQEmail]      = useState('')
+    const [qPosition,   setQPosition]   = useState('')
+    const [qEmailError, setQEmailError] = useState('')
+
+    // Quick-add projet
+    const [showProjectCreate, setShowProjectCreate] = useState(false)
+    const [qProjectTitle,  setQProjectTitle]  = useState('')
+    const [qProjectBudget, setQProjectBudget] = useState('')
+
+    useEffect(() => {
+        if (!open) return
+        setLocalPartner(partner)
+        setShowMemberCreate(false)
+        setShowProjectCreate(false)
+        Promise.all([getMembers(), getProjects()]).then(([members, projects]) => {
+            setAllMembers(members as Member[])
+            setAllProjects(projects as Project[])
+        })
+    }, [open, partner.id])
+
+    // Sync quand le prop change (ex. après edit)
+    useEffect(() => { setLocalPartner(partner) }, [partner])
+
+    function pushPartner(updated: PartnerCardFull) {
+        setLocalPartner(updated)
+        onUpdated(updated)
+    }
 
     async function handleDelete() {
         setDeleting(true)
@@ -214,7 +353,75 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
         }
     }
 
+    async function handleLinkMember(m: Member) {
+        setSaving(true)
+        try {
+            await updateMember(m.id, { partner_id: partner.id })
+            pushPartner({ ...localPartner, members: [...localPartner.members, m] })
+        } finally { setSaving(false) }
+    }
+
+    async function handleRemoveMember(memberId: number) {
+        await updateMember(memberId, { partner_id: 0 })
+        pushPartner({ ...localPartner, members: localPartner.members.filter(m => m.id !== memberId) })
+    }
+
+    async function handleMemberQuickAdd() {
+        if (!qFirstName.trim() || !qLastName.trim()) return
+        const emailLower = qEmail.trim().toLowerCase()
+        if (emailLower) {
+            const exists = allMembers.some(m => m.email.toLowerCase() === emailLower)
+            if (exists) { setQEmailError('Un contact avec cet email existe déjà.'); return }
+        }
+        setSaving(true)
+        try {
+            const newMember = await addMember({
+                first_name: qFirstName.trim(), last_name: qLastName.trim(),
+                email: qEmail.trim(), position: qPosition.trim(),
+                partner_id: partner.id, status: 'Salarié',
+                profile_image: '', lab_id: 0, is_staff: false,
+            })
+            pushPartner({ ...localPartner, members: [...localPartner.members, newMember] })
+            setAllMembers(prev => [...prev, newMember])
+            setQFirstName(''); setQLastName(''); setQEmail(''); setQPosition(''); setQEmailError('')
+            setShowMemberCreate(false)
+        } finally { setSaving(false) }
+    }
+
+    async function handleLinkProject(p: Project) {
+        setSaving(true)
+        try {
+            await addProjectPartner(p.id, partner.id, 'Partenaire', null, null)
+            pushPartner({ ...localPartner, projects: [...localPartner.projects, p] })
+        } finally { setSaving(false) }
+    }
+
+    async function handleProjectQuickAdd() {
+        if (!qProjectTitle.trim()) return
+        setSaving(true)
+        try {
+            const newProject = await addProject({
+                title: qProjectTitle.trim(), description: '',
+                budget: Number(qProjectBudget) || 0,
+                project_call_id: 0, status_id: 1,
+                start_date: '', end_date: '',
+            })
+            await addProjectPartner(newProject.id, partner.id, 'Partenaire', null, null)
+            pushPartner({ ...localPartner, projects: [...localPartner.projects, newProject] })
+            setAllProjects(prev => [...prev, newProject])
+            setQProjectTitle(''); setQProjectBudget('')
+            setShowProjectCreate(false)
+        } finally { setSaving(false) }
+    }
+
+    const linkedMemberIds  = localPartner.members.map(m => m.id)
+    const linkedProjectIds = localPartner.projects.map(p => p.id)
+    const availableMembers  = allMembers.filter(m => !linkedMemberIds.includes(m.id) && (m.partner_id === 0 || m.partner_id === partner.id))
+    const availableProjects = allProjects.filter(p => !linkedProjectIds.includes(p.id))
+    const allExistingEmails = allMembers.map(m => m.email).filter(Boolean)
+
     return (
+    <>
         <Sheet open={open} onOpenChange={v => { if (!v) { setEditing(false); setConfirming(false); onClose() } }}>
             <SheetContent side="right" showCloseButton={false} className="!w-[560px] flex flex-col gap-0 p-0">
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
@@ -244,6 +451,7 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                         )}
                     </div>
                 </SheetHeader>
+                <div className="flex-1 overflow-y-auto">
                 {editing && (
                     <>
                         <PartnerFormSheet mode="edit" partner={partner} onUpdated={p => { onUpdated(p); setEditing(false) }} onClose={() => setEditing(false)} />
@@ -251,52 +459,131 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                     </>
                 )}
                 <div className="flex flex-col gap-5 px-6 py-5">
-                    {partner.description && <p className="text-sm text-muted-foreground leading-relaxed">{partner.description}</p>}
+                    {localPartner.description && <p className="text-sm text-muted-foreground leading-relaxed">{localPartner.description}</p>}
                     <Separator />
+
+                    {/* ── MEMBRES ── */}
                     <section className="flex flex-col gap-3">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Membres — {partner.members.length}</p>
-                        {partner.members.length === 0 ? (
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Membres ({localPartner.members.length})</p>
+                        {localPartner.members.length === 0 && !showMemberCreate && (
                             <p className="text-xs text-muted-foreground italic">Aucun membre</p>
-                        ) : (
+                        )}
+                        {localPartner.members.length > 0 && (
                             <div className="flex flex-col gap-1">
-                                {partner.members.map(m => (
-                                    <div key={m.id} className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-muted">
+                                {localPartner.members.map(m => (
+                                    <div key={m.id} className="group flex items-center gap-3 px-2 py-1.5 rounded hover:bg-muted">
                                         <Avatar className="h-7 w-7 shrink-0 border border-border">
                                             <AvatarImage src={m.profile_image} />
                                             <AvatarFallback className="text-xs bg-muted">
                                                 {m.first_name[0]}{m.last_name[0]}
                                             </AvatarFallback>
                                         </Avatar>
-                                        <div className="flex flex-col min-w-0">
+                                        <div className="flex flex-col min-w-0 flex-1">
                                             <span className="text-sm">{m.first_name} {m.last_name}</span>
                                             <span className="text-xs text-muted-foreground truncate">{m.position}</span>
                                         </div>
-                                        <div className="ml-auto flex items-center gap-2 shrink-0">
+                                        <div className="flex items-center gap-2 shrink-0">
                                             <span className="text-xs text-muted-foreground">{m.status}</span>
                                             {m.email && <a href={`mailto:${m.email}`} className="text-xs text-blue-600 hover:underline truncate max-w-32">{m.email}</a>}
+                                            <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveMember(m.id)}>
+                                                <X size={11} />
+                                            </Button>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         )}
+
+                        {/* Lier un membre existant */}
+                        {!showMemberCreate && (
+                            <div className="mt-1">
+                                <SearchInput
+                                    data={availableMembers}
+                                    onSelect={handleLinkMember}
+                                    getLabel={m => `${m.first_name} ${m.last_name}`}
+                                    filterFn={(m, q) => `${m.first_name} ${m.last_name} ${m.email} ${m.position}`.toLowerCase().includes(q.toLowerCase())}
+                                    renderItem={m => (
+                                        <div className="flex items-center gap-2 w-full min-w-0">
+                                            <Avatar className="h-5 w-5 shrink-0 border border-border">
+                                                <AvatarImage src={m.profile_image} />
+                                                <AvatarFallback className="text-[10px] bg-muted">{m.first_name[0]}{m.last_name[0]}</AvatarFallback>
+                                            </Avatar>
+                                            <span className="text-xs">{m.first_name} {m.last_name}</span>
+                                            {m.email && <span className="text-xs text-muted-foreground ml-auto truncate">{m.email}</span>}
+                                        </div>
+                                    )}
+                                    placeholder="Rechercher un membre à lier…"
+                                />
+                                {availableMembers.length === 0 && allMembers.length > 0 && (
+                                    <p className="text-xs text-muted-foreground italic mt-1.5 px-1">
+                                        Tous les membres existants sont déjà rattachés à un partenaire. Utilisez "Créer un contact" pour en ajouter un nouveau.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Bouton créer un contact */}
+                        {!showMemberCreate && (
+                            <button onClick={() => setShowMemberCreate(true)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mt-0.5 w-fit">
+                                <Plus size={12} /> Créer un contact
+                            </button>
+                        )}
+
+                        {/* Formulaire quick-add membre */}
+                        {showMemberCreate && (
+                            <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30 mt-1">
+                                <div className="flex gap-2">
+                                    <Input placeholder="Prénom *" value={qFirstName} onChange={e => setQFirstName(e.target.value)} className="h-7 text-xs" />
+                                    <Input placeholder="Nom *" value={qLastName} onChange={e => setQLastName(e.target.value)} className="h-7 text-xs" />
+                                </div>
+                                <Input placeholder="Poste" value={qPosition} onChange={e => setQPosition(e.target.value)} className="h-7 text-xs" />
+                                <div>
+                                    <Input
+                                        placeholder="Email *"
+                                        value={qEmail}
+                                        onChange={e => { setQEmail(e.target.value); setQEmailError('') }}
+                                        className={`h-7 text-xs ${qEmailError ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
+                                    />
+                                    {qEmailError && <p className="text-xs text-red-500 mt-1">{qEmailError}</p>}
+                                    {qEmail && !qEmailError && allExistingEmails.some(e => e.toLowerCase() === qEmail.toLowerCase()) && (
+                                        <p className="text-xs text-red-500 mt-1">Un contact avec cet email existe déjà.</p>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" size="sm" className="flex-1 h-7 text-xs rounded-md" onClick={() => { setShowMemberCreate(false); setQFirstName(''); setQLastName(''); setQEmail(''); setQPosition(''); setQEmailError('') }}>Annuler</Button>
+                                    <Button size="sm" className="flex-1 h-7 text-xs rounded-md" disabled={!qFirstName.trim() || !qLastName.trim() || saving || !!allExistingEmails.find(e => e.toLowerCase() === qEmail.toLowerCase())} onClick={handleMemberQuickAdd}>
+                                        {saving ? '…' : 'Créer'}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                     </section>
+
                     <Separator />
+
+                    {/* ── PROJETS & CONVENTIONS ── */}
                     <section className="flex flex-col gap-4">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Projets & conventions — {partner.projects.length} projet{partner.projects.length > 1 ? 's' : ''}, {partner.agreements.length} convention{partner.agreements.length > 1 ? 's' : ''}
+                            Projets & conventions ({localPartner.projects.length} projet{localPartner.projects.length > 1 ? 's' : ''}, {localPartner.agreements.length} convention{localPartner.agreements.length > 1 ? 's' : ''})
                         </p>
-                        {partner.projects.length === 0 ? (
+                        {localPartner.agreements.length === 0 && localPartner.projects.length === 0 && !showProjectCreate ? (
                             <p className="text-xs text-muted-foreground italic">Aucun projet lié</p>
                         ) : (
                             <div className="flex flex-col gap-4">
-                                {partner.projects.map(p => {
-                                    const projectAgreements = partner.agreements.filter(a => a.project_id === p.id)
+                                {localPartner.projects.map(p => {
+                                    const projectAgreements = localPartner.agreements.filter(a => a.project_id === p.id)
+                                    const projectGrant = projectAgreements.reduce((s, a) => s + a.grant, 0)
                                     return (
-                                        <div key={p.id} className="flex flex-col gap-1">
-                                            <div className="flex items-center justify-between px-2 py-1.5 rounded bg-muted/50">
+                                        <div key={p.id} className="flex flex-col p-3 rounded-md border border-border cursor-pointer" onClick={() => setOpenProject(p)}>
+                                            <div className="flex items-top justify-between">
                                                 <span className="text-sm font-medium">{p.title}</span>
-                                                <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-                                                    {p.budget > 0 && <span>{p.budget.toLocaleString('fr-FR')} €</span>}
+                                                <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0">
+                                                    {p.budget > 0 && (
+                                                        <span>Budget : <span className="font-medium text-foreground">{p.budget.toLocaleString('fr-FR')} €</span></span>
+                                                    )}
+                                                    {projectGrant > 0 && (
+                                                        <span>Subvention : <span className="font-medium text-foreground">{projectGrant.toLocaleString('fr-FR')} €</span></span>
+                                                    )}
                                                 </div>
                                             </div>
                                             {projectAgreements.length === 0 ? (
@@ -304,13 +591,13 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                                             ) : (
                                                 <div className="flex flex-col gap-0.5 pl-4 border-l-2 ml-3" style={{ borderColor: 'hsl(var(--border))' }}>
                                                     {projectAgreements.map(a => (
-                                                        <div key={a.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted">
+                                                        <div key={a.id} className="flex items-center justify-between px-2 py-1.5 rounded">
                                                             <div className="flex flex-col min-w-0">
                                                                 <span className="text-sm">{a.title}</span>
-                                                                {a.signed_date && <span className="text-xs text-muted-foreground">Signé le {a.signed_date}</span>}
+                                                                {a.signed_date && <span className="text-xs text-muted-foreground">Signé le {formatDate(a.signed_date)}</span>}
                                                             </div>
-                                                            <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-4">
-                                                                {a.budget > 0 && <span>{a.budget.toLocaleString('fr-FR')} €</span>}
+                                                            <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0 ml-4">
+                                                                {a.grant > 0 && <span className="font-medium text-foreground">{a.grant.toLocaleString('fr-FR')} €</span>}
                                                                 {a.budget > 0 && a.grant > 0 && <span className="text-green-600">{Math.round((a.grant / a.budget) * 100)} %</span>}
                                                             </div>
                                                         </div>
@@ -320,12 +607,70 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                                         </div>
                                     )
                                 })}
+                                {/* Conventions sans projet trouvé */}
+                                {localPartner.agreements
+                                    .filter(a => !localPartner.projects.find(p => p.id === a.project_id))
+                                    .map(a => (
+                                        <div key={a.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted">
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="text-sm">{a.title}</span>
+                                                {a.signed_date && <span className="text-xs text-muted-foreground">Signé le {a.signed_date}</span>}
+                                            </div>
+                                            <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0 ml-4">
+                                                {a.grant > 0 && <span className="font-medium text-foreground">{a.grant.toLocaleString('fr-FR')} €</span>}
+                                                {a.budget > 0 && a.grant > 0 && <span className="text-green-600">{Math.round((a.grant / a.budget) * 100)} %</span>}
+                                            </div>
+                                        </div>
+                                    ))
+                                }
+                            </div>
+                        )}
+
+                        {/* Lier un projet existant */}
+                        {!showProjectCreate && availableProjects.length > 0 && (
+                            <SearchInput
+                                data={availableProjects}
+                                onSelect={handleLinkProject}
+                                getLabel={p => p.title}
+                                filterFn={(p, q) => p.title.toLowerCase().includes(q.toLowerCase())}
+                                placeholder="Rechercher un projet à lier…"
+                            />
+                        )}
+
+                        {/* Bouton créer un projet */}
+                        {!showProjectCreate && (
+                            <button onClick={() => setShowProjectCreate(true)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground w-fit">
+                                <Plus size={12} /> Créer un projet
+                            </button>
+                        )}
+
+                        {/* Formulaire quick-add projet */}
+                        {showProjectCreate && (
+                            <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
+                                <Input placeholder="Titre du projet *" value={qProjectTitle} onChange={e => setQProjectTitle(e.target.value)} className="h-7 text-xs" />
+                                <Input type="number" placeholder="Budget (€)" value={qProjectBudget} onChange={e => setQProjectBudget(e.target.value)} className="h-7 text-xs" />
+                                <div className="flex gap-2">
+                                    <Button variant="outline" size="sm" className="flex-1 h-7 text-xs" onClick={() => { setShowProjectCreate(false); setQProjectTitle(''); setQProjectBudget('') }}>Annuler</Button>
+                                    <Button size="sm" className="flex-1 h-7 text-xs" disabled={!qProjectTitle.trim() || saving} onClick={handleProjectQuickAdd}>
+                                        {saving ? '…' : 'Créer'}
+                                    </Button>
+                                </div>
                             </div>
                         )}
                     </section>
                 </div>
+                </div>
             </SheetContent>
         </Sheet>
+
+        {openProject && (
+            <ProjectViewerSheet
+                project={openProject}
+                open={!!openProject}
+                onClose={() => setOpenProject(null)}
+            />
+        )}
+    </>
     )
 }
 
@@ -614,7 +959,7 @@ function LabDetailSheet({ lab, open, onClose, onUpdated, onDeleted }: LabDetailS
 
                     {/* Membres */}
                     <section className="flex flex-col gap-3">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Membres — {labState.members.length}</p>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Membres ({labState.members.length})</p>
                         {labState.members.length === 0 && <p className="text-xs text-muted-foreground italic">Aucun membre rattaché</p>}
                         {labState.members.map(m => (
                             <div key={m.id} className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-muted group">
