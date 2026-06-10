@@ -5,7 +5,7 @@ import {
     getPartners, getMembers,
     addPartnerToLab, removePartnerFromLab,
     attachMemberToLab, detachMemberFromLab,
-    getProjectCalls, getAxes, getStatuses, getFinancialAgreements, getFormations, getTimeEntries,
+    getProjectCalls, getAxes, getStatuses, getFormations, getTimeEntries,
     getProjects, addMember, addProject, addProjectPartner, updateMember,
 } from '@/lib/api'
 import { motion } from "framer-motion"
@@ -379,7 +379,7 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                 first_name: qFirstName.trim(), last_name: qLastName.trim(),
                 email: qEmail.trim(), position: qPosition.trim(),
                 partner_id: partner.id, status: 'Salarié',
-                profile_image: '', lab_id: 0, is_staff: false,
+                profile_image: '', lab_id: 0, is_staff: false, tel: '', genre: 'F',
             })
             pushPartner({ ...localPartner, members: [...localPartner.members, newMember] })
             setAllMembers(prev => [...prev, newMember])
