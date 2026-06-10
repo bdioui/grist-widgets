@@ -751,7 +751,7 @@ function AgreementRow({ agreement: a, statuses, axe, onEdit, onDelete, onOpen }:
                                     <p>{a.partner.name}</p>
                                 </TooltipContent>
                             </Tooltip>
-                            {a.budget > 0 && <span className="font-medium text-foreground">{fmt(a.grant)}</span>}
+                            {a.grant > 0 && <span className="font-medium text-foreground">{fmt(a.grant)}</span>}
                             {rate !== null && <span>{rate} %</span>}
                             {a.signed_date && <span>{formatDate(a.signed_date)}</span>}
                         </div>

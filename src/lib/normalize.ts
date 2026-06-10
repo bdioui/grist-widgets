@@ -258,8 +258,8 @@ export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): F
         status_id: num(r.status_id),
         title: str(r.title),
         description: str(r.description),
-        budget: num(r.budget),
-        grant: num(r.grant),
+        budget: num(r.budget ?? r.Budget),
+        grant: num(r.grant ?? r.Grant ?? r.Subvention ?? r.subvention),
         signed_date: str(r.signed_date),
     }))
 }
