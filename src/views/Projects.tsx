@@ -3648,7 +3648,7 @@ export default function Projects() {
                                                             {/* Cartes projets */}
                                                             <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
                                                                 {pcProjects.slice().sort((a, b) => {
-                                                                            const byStatus = STATUS_ORDER.indexOf(statuses.find(s => s.id === a.status_id).label) - STATUS_ORDER.indexOf(statuses.find(s => s.id === b.status_id).label)
+                                                                            const byStatus = STATUS_ORDER.indexOf(statuses.find(s => s.id === a.status_id)?.label ?? '') - STATUS_ORDER.indexOf(statuses.find(s => s.id === b.status_id)?.label ?? '')
                                                                             if (byStatus !== 0) return byStatus
 
                                                                             const byDate = (b.start_date ?? '').localeCompare(a.start_date ?? '')

@@ -146,15 +146,6 @@ export default function Dashboard() {
         .sort((a, b) => b.count - a.count)
     const maxStatusCount = Math.max(...statusGroups.map(g => g.count), 1)
 
-    // Répartition par axe
-    const axisMap = new Map(axes.map(a => [a.id, a]))
-    const axisGroups = axes.map(ax => ({
-        name: ax.name,
-        count: projects.filter(p => {
-            // Les projets n'ont pas d'axis_id direct — on remonte via les conventions
-            return agreements.some(a => a.project_id === p.id && a.axis_id === ax.id)
-        }).length,
-    })).filter(g => g.count > 0).sort((a, b) => b.count - a.count)
 
     // Top partenaires par subvention
     const grantByPartner = new Map<number, number>()
@@ -176,7 +167,6 @@ export default function Dashboard() {
 
     // ── Alertes ──
 
-    const today = new Date()
 
     // Projets se terminant dans < 60 jours
     const endingSoon = projects.filter(p => {
