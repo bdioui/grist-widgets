@@ -16,6 +16,7 @@ import type {
     Formation,
     ProjectFormation,
     ProjectAttachment,
+    Program
 } from '@/lib/types'
 
 export const mockUser: User = {
@@ -557,4 +558,8 @@ export const mockProjectAttachments: ProjectAttachment[] = [
     { id: 1, project_id: 1, label: 'Convention signée', url: 'https://drive.google.com/file/example1' },
     { id: 2, project_id: 1, label: 'Rapport intermédiaire T1', url: 'https://drive.google.com/file/example2' },
     { id: 3, project_id: 2, label: 'Cahier des charges', url: 'https://drive.google.com/file/example3' },
+]
+
+export const mockProgram: Program[] = [
+    { id: 1, name: "Iris-E", budget: 20000000, start_date: "2023-01-01", end_date: "2032-12-31", description: "", logo: "" }
 ]

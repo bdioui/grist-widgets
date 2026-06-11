@@ -10,6 +10,7 @@ import {
     mockProjectPartners, mockProjectMilestones,
     mockTimeEntry,
     mockFormations, mockProjectFormations, mockProjectAttachments,
+    mockProgram
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -24,6 +25,7 @@ import {
     normalizeKpiEntries, normalizeProjectPartners, normalizeProjectMilestones,
     normalizeTimeEntry,
     normalizeFormations, normalizeProjectFormations, normalizeProjectAttachments,
+    normalizeProgram
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -34,6 +36,7 @@ import type {
     Group, GroupMember, Comment, CommentFull, ProjectMember, AgreementMember,
     KpiEntry, ProjectPartner, ProjectMilestone,
     TimeEntry, Formation, ProjectFormation, ProjectAttachment,
+    Program
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -75,9 +78,11 @@ const T = {
     formation: 'Formation',
     project_formation: 'Project_formation',
     project_attachment: 'Project_attachment',
+    program: 'Program'
 }
 
 // --- Tables de référence ---
+export async function getProgram(): Promise<Program[]> { return USE_MOCK ? mockProgram : normalizeProgram(await fetchTable(T.program)) }
 export async function getStatuses(): Promise<Status[]> { return USE_MOCK ? mockStatuses : normalizeStatuses(await fetchTable(T.status)) }
 export async function getCategories(): Promise<Category[]> { return USE_MOCK ? mockCategories : normalizeCategories(await fetchTable(T.category)) }
 export async function getMembers(): Promise<Member[]> { return USE_MOCK ? mockMembers : normalizeMembers(await fetchTable(T.member)) }

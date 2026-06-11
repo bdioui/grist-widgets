@@ -17,8 +17,8 @@ import {
 import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Eye, EyeClosed, Maximize2, Minimize2, Users, ExternalLink } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
-import { ActionCardDetailSheet } from '@/views/dashboard/ActionCard'
-import type { ActionCardData } from '@/views/dashboard/ActionCard'
+import { ActionCardDetailSheet } from '@/views/actions/ActionCard'
+import type { ActionCardData } from '@/views/actions/ActionCard'
 import { PartnerDetailSheet } from '@/views/Partners'
 import type { PartnerCardFull } from '@/lib/types'
 import { motion } from "framer-motion"
@@ -62,17 +62,20 @@ const AGREEMENT_STATUS_COLORS: Record<string, string> = {
 }
 
 const ROLES = [
-    'Participant',
+    'Porteur',
     'Intervenant',
+    'Participant',
     'Equipe - Lead',
     'Equipe - Contributeur',
     'Equipe - Consultant',
     'Equipe - Observateur',
-    'Porteur'
+    
 
 ]
 
-const ROLE_ORDER = ['Equipe - Lead', 'Equipe - Contributeur', 'Equipe - Consultant', 'Equipe - Observateur', 'Participant', 'Intervenant', 'Porteur']
+const ROLE_ORDER = ['Porteur', 'Intervenant', , 'Participant', 'Equipe - Lead', 'Equipe - Contributeur', 'Equipe - Consultant', 'Equipe - Observateur']
+
+const STATUS_ORDER = ["En cours", "Suspendu", "En attente", "Terminé",]
 
 const PARTNER_ROLES = ['Associé', 'Bénéficiaire', 'Cofinanceur', 'Sous-traitant']
 
@@ -1925,7 +1928,15 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {projectMembers.slice().sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role)).map(pm => {
+                                    {projectMembers.slice().sort((a, b) => {
+                                            const roleOrder = ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role)
+                                            if (roleOrder !== 0) return roleOrder
+                                            const ma = members.find(m => m.id === a.member_id)
+                                            const mb = members.find(m => m.id === b.member_id)
+                                            const nameA = `${ma?.last_name ?? ''} ${ma?.first_name ?? ''}`.toLowerCase()
+                                            const nameB = `${mb?.last_name ?? ''} ${mb?.first_name ?? ''}`.toLowerCase()
+                                            return nameA.localeCompare(nameB, 'fr')
+                                        }).map(pm => {
                                         const member = members.find(m => m.id === pm.member_id)
                                         if (!member) return null
                                         const partner = partners.find(p => p.id === member.partner_id)
@@ -3636,7 +3647,15 @@ export default function Projects() {
 
                                                             {/* Cartes projets */}
                                                             <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-                                                                {pcProjects.slice().sort((a, b) => (b.start_date ?? '').localeCompare(a.start_date ?? '')).map(p => (
+                                                                {pcProjects.slice().sort((a, b) => {
+                                                                            const byStatus = STATUS_ORDER.indexOf(statuses.find(s => s.id === a.status_id).label) - STATUS_ORDER.indexOf(statuses.find(s => s.id === b.status_id).label)
+                                                                            if (byStatus !== 0) return byStatus
+
+                                                                            const byDate = (b.start_date ?? '').localeCompare(a.start_date ?? '')
+                                                                            if (byDate !== 0) return byDate
+
+                                                                            return (a.title ?? '').localeCompare(b.title ?? '', 'fr')
+                                                                        }).map(p => (
                                                                     <ProjectCard
                                                                         key={p.id}
                                                                         project={p}

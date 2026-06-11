@@ -9,25 +9,27 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Copy, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check, Tag } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { type MemberFull, type Partner, type Lab, type Group, type GroupMember, type ActionCardFull, type MemberActionCard, type ProjectMember, type Project, type ProjectCall, type Axis, type Status, type Formation, type TimeEntry } from '@/lib/types'
 import type { ProjectFull, ProjectCallFull } from './Projects'
-import type { ActionCardData } from './dashboard/ActionCard'
+import type { ActionCardData } from './actions/ActionCard'
 import { PARTNER_TYPES, PALETTE } from '@/lib/constants'
 import { exportToCsv } from '@/lib/utils'
 import {ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger,}  from '@/components/ui/context-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import SearchInput from '@/components/SearchInput'
 import { useCurrentUser } from '@/lib/userContext'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { motion } from "framer-motion"
 
 // Lazy imports pour éviter les dépendances circulaires
 const ProjectDetailSheetLazy = lazy(() =>
     import('./Projects').then(m => ({ default: m.ProjectDetailSheet }))
 )
 const ActionCardDetailSheetLazy = lazy(() =>
-    import('./dashboard/ActionCard').then(m => ({ default: m.ActionCardDetailSheet }))
+    import('./actions/ActionCard').then(m => ({ default: m.ActionCardDetailSheet }))
 )
 
 // --- Constantes ---
@@ -263,6 +265,7 @@ function MemberFormSheet(props: MemberFormSheetProps) {
                     getLabel={l => l.name}
                     placeholder="Rechercher un partenaire..."
                     value={props.labs.find(l => l.id === form.lab_id)?.name}
+                    orderBy='name'
                 />
             </div>
 
@@ -1250,6 +1253,22 @@ export default function Members() {
     const [confirmingDelete, setConfirmingDelete] = useState(false)
     const [confirmDeleteGroupId, setConfirmDeleteGroupId] = useState<number | null>(null)
     const [myGroupsOnly, setMyGroupsOnly] = useState(false)
+    type ViewMode = 'cards' | 'table'
+    type MemberSortKey = 'name' | 'position' | 'status' | 'partner' | 'lab' | 'email'
+
+    const [viewMode,   setViewMode]   = useState<ViewMode>('cards')
+    const [sortKey,    setSortKey]    = useState<MemberSortKey>('name')
+    const [sortDir,    setSortDir]    = useState<'asc' | 'desc'>('asc')
+
+    function handleSort(col: MemberSortKey) {
+        if (sortKey === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+        else { setSortKey(col); setSortDir('asc') }
+    }
+
+    function handleViewMode(mode: ViewMode) {
+        setViewMode(mode)
+        setMultipleSelect(false)
+    }
 
     const currentUser = useCurrentUser()
 
@@ -1384,6 +1403,27 @@ export default function Members() {
 
             {/* Barre + filtres + bouton */}
             <div className="flex items-center gap-3 flex-wrap">
+                <div className="bg-gray-200 rounded-full border p-1 flex relative">
+                    {(['cards', 'table'] as ViewMode[]).map(mode => (
+                        <button
+                            key={mode}
+                            onClick={() => handleViewMode(mode)}
+                            className={`relative px-4 py-1 rounded-full text-sm z-10 transition-colors duration-300 ${viewMode === mode ? 'text-white' : 'text-black'}`}
+                        >
+                            <span className="relative z-20">
+                                {mode === 'cards' ? 'Cartes' : 'Tableau'}
+                            </span>
+                            {viewMode === mode && (
+                                <motion.div 
+                                layoutId="activeMemberTab"
+                                className="absolute inset-0 bg-black rounded-full z-10" 
+                                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                />
+                            )}
+                        </button>
+                    ))}
+                </div>
+
                 <Input
                     placeholder="Rechercher un contact..."
                     value={query}
@@ -1612,51 +1652,205 @@ export default function Members() {
                     {filtered.length} contact{filtered.length > 1 ? 's' : ''}
                 </span>
 
-            {multipleSelect ? (
-                <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedMembers([]) }}>
-                    <X size={14} /> Terminer
-                </Button>
-            ) : (
-                <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
-                    <ListChecks size={14} /> Sélection multiple
-                </Button>
-            )}
+                {viewMode === 'cards' && (multipleSelect ? (
+                    <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedMembers([]) }}>
+                        <X size={14} /> Terminer
+                    </Button>
+                ) : (
+                    <Button size="sm" className="gap-1.5 rounded-md bg-transparent border border-border text-foreground hover:bg-muted" onClick={() => setMultipleSelect(true)}>
+                        <ListChecks size={14} /> Sélection multiple
+                    </Button>
+                ))}
 
                 <Button size="sm" className="gap-1.5 rounded-md" onClick={() => setShowCreate(true)}>
                     <Plus size={14} /> Nouveau contact
                 </Button>
             </div>
 
+            
+
             {error && <p className="text-sm text-destructive">Erreur : {error}</p>}
 
+
             {/* Grille */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {loading
-                    ? [...Array(6)].map((_, i) => <MemberCardSkeleton key={i} />)
-                    : filtered.map(member => (
-                        <MemberCard
-                            key={member.id}
-                            member={member}
-                            onClick={() => setSelected(member)}
-                            selectOn= {multipleSelect}
-                            selected={!!selectedMembers.find(m => m.id === member.id)}
-                            onToggle={() => toggleMember(member)}
-                            onDelete={handleDeleted}
-                            selectedMembers={selectedMembers}
-                            groups={groups}
-                            groupLinks={groupLinks}
-                            onToggleGroup={handleToggleGroup}
-                            onToggleMultipleGroup={(groupId) => handleToggleMultipleGroup(groupId)}
-                            onSelectAll={selectAll}
-                        />
-                    ))
+            { viewMode === "cards" && (
+                <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {loading
+                        ? [...Array(6)].map((_, i) => <MemberCardSkeleton key={i} />)
+                        : filtered.map(member => (
+                            <MemberCard
+                                key={member.id}
+                                member={member}
+                                onClick={() => setSelected(member)}
+                                selectOn= {multipleSelect}
+                                selected={!!selectedMembers.find(m => m.id === member.id)}
+                                onToggle={() => toggleMember(member)}
+                                onDelete={handleDeleted}
+                                selectedMembers={selectedMembers}
+                                groups={groups}
+                                groupLinks={groupLinks}
+                                onToggleGroup={handleToggleGroup}
+                                onToggleMultipleGroup={(groupId) => handleToggleMultipleGroup(groupId)}
+                                onSelectAll={selectAll}
+                            />
+                        ))
+                    }
+                    {!loading && filtered.length === 0 && (
+                        <p className="text-sm text-muted-foreground col-span-full text-center py-8">
+                            Aucun contact ne correspond à la recherche.
+                        </p>
+                    )}
+                </div>
+                </>
+            )}
+
+            {/* Vue tableau */}
+            {viewMode === 'table' && (() => {
+                const sorted = [...filtered].sort((a, b) => {
+                    let va = ''
+                    let vb = ''
+                    if (sortKey === 'name')     { va = `${a.first_name} ${a.last_name}`;  vb = `${b.first_name} ${b.last_name}` }
+                    if (sortKey === 'position') { va = a.position;                         vb = b.position }
+                    if (sortKey === 'status')   { va = a.status;                           vb = b.status }
+                    if (sortKey === 'partner')  { va = a.partner?.name ?? '';              vb = b.partner?.name ?? '' }
+                    if (sortKey === 'lab')      { va = a.lab?.name ?? '';                  vb = b.lab?.name ?? '' }
+                    if (sortKey === 'email')    { va = a.email;                            vb = b.email }
+                    if (va < vb) return sortDir === 'asc' ? -1 : 1
+                    if (va > vb) return sortDir === 'asc' ? 1 : -1
+                    return 0
+                })
+
+                const allSelected = sorted.length > 0 && sorted.every(m => !!selectedMembers.find(sm => sm.id === m.id))
+
+                function SortIcon({ col }: { col: MemberSortKey }) {
+                    if (sortKey !== col) return <span className="ml-1 text-muted-foreground/40">↕</span>
+                    return <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
                 }
-                {!loading && filtered.length === 0 && (
-                    <p className="text-sm text-muted-foreground col-span-full text-center py-8">
-                        Aucun contact ne correspond à la recherche.
-                    </p>
-                )}
-            </div>
+
+                return (
+                    <div className="flex-1 overflow-auto">
+                        {loading ? (
+                            <div className="flex flex-col gap-2 p-6">
+                                {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader className="sticky top-0 bg-background z-10 border-b">
+                                    <TableRow className="hover:bg-transparent">
+                                        <TableHead className="w-10 px-4">
+                                            <Checkbox
+                                                checked={allSelected}
+                                                onCheckedChange={checked => {
+                                                    setMultipleSelect(true)
+                                                    setSelectedMembers(checked ? sorted : [])
+                                                }}
+                                            />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none min-w-48" onClick={() => handleSort('name')}>
+                                            Nom <SortIcon col="name" />
+                                            <span className="text-xs ml-3 text-gray-500">({sorted.length})</span>
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('position')}>
+                                            Poste <SortIcon col="position" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('status')}>
+                                            Statut <SortIcon col="status" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('partner')}>
+                                            Partenaire <SortIcon col="partner" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('lab')}>
+                                            Laboratoire <SortIcon col="lab" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('email')}>
+                                            Email <SortIcon col="email" />
+                                        </TableHead>
+                                        <TableHead>Téléphone</TableHead>
+                                        <TableHead className="w-16" />
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {sorted.length === 0 && (
+                                        
+                                            <TableRow>
+                                                <TableCell colSpan={9} className="text-center text-muted-foreground py-12 italic">
+                                                    Aucun contact correspondant aux filtres
+                                                </TableCell>
+                                            </TableRow>
+                                            
+                                        
+                                    )}
+                                    {sorted.map(m => {
+                                        const isSelected = !!selectedMembers.find(sm => sm.id === m.id)
+                                        return (
+                                            <TableRow
+                                                key={m.id}
+                                                data-state={isSelected ? 'selected' : undefined}
+                                                className="cursor-pointer group"
+                                                onClick={() => setSelected(m)}
+                                            >
+                                                <TableCell className="px-4" onClick={e => e.stopPropagation()}>
+                                                    <Checkbox
+                                                        checked={isSelected}
+                                                        onCheckedChange={() => { setMultipleSelect(true); toggleMember(m) }}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <Avatar className="h-6 w-6 shrink-0">
+                                                            <AvatarImage src={m.profile_image} />
+                                                            <AvatarFallback className="text-[10px]" style={{ backgroundColor: m.partner?.color ?? '#E7E8E2' }}>
+                                                                {m.first_name[0]}{m.last_name[0]}
+                                                            </AvatarFallback>
+                                                        </Avatar>
+                                                        <span className="font-medium">{m.first_name} {m.last_name}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground max-w-48">
+                                                    <span className="truncate block">{m.position || '—'}</span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="text-xs whitespace-nowrap">{m.status}</Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {m.partner
+                                                        ? <span className="text-xs px-2 py-0.5 rounded-full border border-border whitespace-nowrap" style={{ backgroundColor: m.partner.color }}>{m.partner.name}</span>
+                                                        : <span className="text-muted-foreground">—</span>}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {m.lab
+                                                        ? <Badge variant="secondary" className="text-xs whitespace-nowrap">{m.lab.name}</Badge>
+                                                        : <span className="text-muted-foreground">—</span>}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {m.email
+                                                        ? <a href={`mailto:${m.email}`} className="text-xs text-blue-600 hover:underline" onClick={e => e.stopPropagation()}>{m.email}</a>
+                                                        : <span className="text-muted-foreground">—</span>}
+                                                </TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">{m.tel || '—'}</TableCell>
+                                                <TableCell onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => setSelected(m)}>
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive rounded-md"
+                                                            onClick={async () => { await deleteMember(m.id); handleDeleted(m.id) }}>
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        )}
+
+                    </div>
+                )
+            })()}
+            
 
             {/* Sheet consultation */}
             {selected && (
@@ -1724,6 +1918,35 @@ export default function Members() {
                             )}>
                                 <FileDown size={13} /> Exporter en CSV
                             </Button>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10">
+                                        <Tag size={13} /> Groupes
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-52 p-1" side="top" align="center">
+                                    {groups.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground px-2 py-1.5">Aucun groupe</p>
+                                    ) : groups.map(g => {
+                                        const memberIdsInGroup = groupLinks.filter(l => l.group_id === g.id).map(l => l.member_id)
+                                        const allIn  = selectedMembers.length > 0 && selectedMembers.every(m => memberIdsInGroup.includes(m.id))
+                                        const someIn = !allIn && selectedMembers.some(m => memberIdsInGroup.includes(m.id))
+                                        return (
+                                            <button
+                                                key={g.id}
+                                                onClick={() => handleToggleMultipleGroup(g.id)}
+                                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent text-left"
+                                            >
+                                                <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${allIn ? 'bg-primary border-primary text-primary-foreground' : someIn ? 'bg-primary/30 border-primary/50' : 'border-input'}`}>
+                                                    {allIn && <Check size={10} />}
+                                                    {someIn && <span className="w-2 h-0.5 bg-primary block" />}
+                                                </span>
+                                                <span className="truncate">{g.name}</span>
+                                            </button>
+                                        )
+                                    })}
+                                </PopoverContent>
+                            </Popover>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDelete(true)}>
                                 <Trash size={13} /> Supprimer
                             </Button>

@@ -20,6 +20,7 @@ import type {
     Formation,
     ProjectFormation,
     ProjectAttachment,
+    Program,
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -501,5 +502,17 @@ export function normalizeProjectAttachments(rows: Record<string, unknown>[]): Pr
         project_id: num(r.project_id),
         label: str(r.label),
         url: str(r.url),
+    }))
+}
+
+export function normalizeProgram(rows: Record<string, unknown>[]): Program[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        name: str(r.name),
+        description: str(r.description),
+        budget: num(r.bdget),
+        start_date: str(r.start_date),
+        end_date: str(r.end_date),
+        logo: str(r.logo)
     }))
 }

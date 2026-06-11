@@ -3,6 +3,7 @@ import Dashboard from './views/Dashboard'
 import Partners from './views/Partners'
 import Members from './views/Members'
 import Projects from './views/Projects'
+import Actions from './views/Actions'
 import { motion } from "framer-motion"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Button } from "@/components/ui/button"
@@ -147,7 +148,7 @@ export default function App() {
         </div>
 
         <div className="bg-gray-200 rounded-full border p-1 flex relative">
-          {['dashboard', 'projets', 'partenaires', 'contacts'].map((view) => (
+          {['dashboard', 'actions', 'projets', 'partenaires', 'contacts'].map((view) => (
             <button
               key={view}
               onClick={() => setCurrentView(view)}
@@ -170,6 +171,7 @@ export default function App() {
 
       <main>
         {currentView === "dashboard" && <Dashboard key={refreshKey} />}
+        {currentView === "actions" && <Actions key={refreshKey} />}
         {currentView === "projets" && <Projects key={refreshKey} />}
         {currentView === "partenaires" && <Partners key={refreshKey} />}
         {currentView === "contacts" && <Members key={refreshKey} />}

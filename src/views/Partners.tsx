@@ -49,6 +49,7 @@ const PARTNER_TYPES = [
 ]
 
 const LAB_TYPES = [
+    "Unité de recherche",
     "Unité d'appui à la recherche",
     'Chaire de recherche',
     'Unité mixte de recherche',

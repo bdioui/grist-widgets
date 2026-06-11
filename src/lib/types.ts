@@ -335,3 +335,13 @@ export type ProjectAttachment = {
     url: string
 }
 
+export type Program = {
+    id: number
+    name: string
+    description: string
+    budget: number
+    start_date: string
+    end_date: string
+    logo: string
+}
+

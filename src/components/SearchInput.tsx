@@ -17,6 +17,7 @@ type SearchInputProps<T extends { id: number }> = {
     groupBy?: (item: T) => GroupMeta
     placeholder?: string
     value?: string
+    orderBy?: string
 }
 
 export default function SearchInput<T extends { id: number }>({
@@ -28,6 +29,7 @@ export default function SearchInput<T extends { id: number }>({
     groupBy,
     placeholder = 'Rechercher...',
     value,
+    orderBy,
 }: SearchInputProps<T>) {
     const [query,   setQuery]   = useState('')
     const [open,    setOpen]    = useState(false)
@@ -47,6 +49,12 @@ export default function SearchInput<T extends { id: number }>({
             const primary = ga.primary.localeCompare(gb.primary)
             if (primary !== 0) return primary
             return (ga.secondary ?? '').localeCompare(gb.secondary ?? '')
+        })
+        : orderBy
+        ? [...filtered].sort((a, b) => {
+            const va = String((a as Record<string, unknown>)[orderBy] ?? '')
+            const vb = String((b as Record<string, unknown>)[orderBy] ?? '')
+            return va.localeCompare(vb, 'fr', { sensitivity: 'base' })
         })
         : filtered
 
