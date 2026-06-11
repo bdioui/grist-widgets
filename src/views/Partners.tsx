@@ -1,11 +1,10 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useState } from 'react'
 import {
     getPartnerCardsFull, addPartner, updatePartner, deletePartner,
     getLabCardsFull, addLab, updateLab, deleteLab,
     getPartners, getMembers,
     addPartnerToLab, removePartnerFromLab,
     attachMemberToLab, detachMemberFromLab,
-    getProjectCalls, getAxes, getStatuses, getFormations, getTimeEntries,
     getProjects, addMember, addProject, addProjectPartner, updateMember,
 } from '@/lib/api'
 import { motion } from "framer-motion"
@@ -27,13 +26,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator } from '@/components/ui/context-menu'
 import SearchInput from '@/components/SearchInput'
-import type { PartnerCardFull, Partner, Lab, LabCardFull, Member, Project, ProjectCall, Axis, Status, Formation, TimeEntry } from '@/lib/types'
-import type { ProjectFull, ProjectCallFull } from './Projects'
-
-// Lazy import pour briser la dépendance circulaire Partners ↔ Projects
-const ProjectDetailSheetLazy = lazy(() =>
-    import('./Projects').then(m => ({ default: m.ProjectDetailSheet }))
-)
+import type { PartnerCardFull, Partner, Lab, LabCardFull, Member, Project } from '@/lib/types'
+import { ProjectViewerSheet } from '@/components/viewers'
 
 // --- Constantes ---
 
@@ -203,83 +197,6 @@ function PartnerFormSheet(props: PartnerSheetProps) {
 // PROJECT VIEWER SHEET (opens a ProjectDetailSheet from a Project object)
 // =============================================================================
 
-type RefData = {
-    projectFull:  ProjectFull
-    projectCalls: ProjectCallFull[]
-    axes:         Axis[]
-    statuses:     Status[]
-    partners:     Partner[]
-    members:      Member[]
-    formations:   Formation[]
-    times:        TimeEntry[]
-}
-
-function ProjectViewerSheet({ project, open, onClose }: { project: Project; open: boolean; onClose: () => void }) {
-    const [refData, setRefData] = useState<RefData | null>(null)
-
-    useEffect(() => {
-        if (!open) return
-        setRefData(null)
-        Promise.all([
-            getProjectCalls(),
-            getAxes(),
-            getStatuses(),
-            getPartners(),
-            getMembers(),
-            getFormations(),
-            getTimeEntries(),
-        ]).then(([calls, axes, statuses, partners, members, formations, times]) => {
-            const axisMap = new Map((axes as Axis[]).map(a => [a.id, a]))
-            const fullCalls: ProjectCallFull[] = (calls as ProjectCall[]).map(c => ({
-                ...c,
-                axis: axisMap.get(c.axis_id) ?? { id: 0, name: 'Inconnu', description: '' },
-            }))
-            const callMap = new Map(fullCalls.map(c => [c.id, c]))
-            const projectFull: ProjectFull = {
-                ...project,
-                projectCall: callMap.get(project.project_call_id) ?? {
-                    id: 0, axis_id: 0, title: 'Inconnu', description: '',
-                    start_date: '', end_date: '', status_id: 0, budget: 0,
-                    axis: { id: 0, name: 'Inconnu', description: '' },
-                },
-            }
-            setRefData({
-                projectFull,
-                projectCalls: fullCalls,
-                axes: axes as Axis[],
-                statuses: statuses as Status[],
-                partners: partners as Partner[],
-                members: members as Member[],
-                formations: formations as Formation[],
-                times: times as TimeEntry[],
-            })
-        })
-    }, [open, project.id])
-
-    if (!refData) return null
-
-    return (
-        <Suspense fallback={null}>
-            <ProjectDetailSheetLazy
-                open={open}
-                project={refData.projectFull}
-                onClose={onClose}
-                onUpdated={() => {}}
-                onDeleted={() => {}}
-                onAgreementAdded={() => {}}
-                onAgreementDeleted={() => {}}
-                partners={refData.partners}
-                projectCalls={refData.projectCalls}
-                axes={refData.axes}
-                statuses={refData.statuses}
-                members={refData.members}
-                projectTimes={refData.times.filter(t => t.project_id === project.id)}
-                axis={refData.axes}
-                allFormations={refData.formations}
-            />
-        </Suspense>
-    )
-}
 
 // =============================================================================
 // PARTNER FORMS & SHEETS

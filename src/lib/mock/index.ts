@@ -227,6 +227,18 @@ export const mockProjects: Project[] = [
     { id: 2, project_call_id: 2, status_id: 10, title: 'Projet Recherche IA', description: 'Programme de recherche appliquée sur l\'utilisation de l\'IA dans l\'analyse de données scientifiques.', budget: 200000, start_date: '2024-06-01', end_date: '2026-05-31' },
     { id: 3, project_call_id: 3, status_id: 10, title: 'Projet Mobilités Europe', description: 'Financement de mobilités sortantes et accueil de chercheurs européens dans le cadre du programme Erasmus+.', budget: 85000, start_date: '2025-01-01', end_date: '2026-12-31' },
     { id: 4, project_call_id: 4, status_id: 10, title: 'Projet Transfert Technologique', description: 'Valorisation et transfert de brevets issus des travaux de recherche vers le secteur industriel partenaire.', budget: 160000, start_date: '2025-03-01', end_date: '2027-02-28' },
+    // Projets se terminant bientôt (< 60 jours)
+    { id: 5, project_call_id: 2, status_id: 10, title: 'Projet Data Science Territoires', description: 'Analyse des données territoriales pour améliorer les politiques publiques locales.', budget: 95000, start_date: '2025-06-01', end_date: '2026-07-15' },
+    { id: 6, project_call_id: 1, status_id: 13, title: 'Projet Open Badges', description: 'Développement d\'un système de certification numérique par badges ouverts pour les formations.', budget: 40000, start_date: '2025-09-01', end_date: '2026-06-30' },
+    // Projets en retard (date dépassée + statut actif)
+    { id: 7, project_call_id: 2, status_id: 10, title: 'Projet Biodiversité Urbaine', description: 'Étude et cartographie de la biodiversité en milieu urbain en partenariat avec la collectivité.', budget: 72000, start_date: '2024-03-01', end_date: '2025-12-31' },
+    { id: 8, project_call_id: 3, status_id: 13, title: 'Projet Coopération Sud', description: 'Programme de coopération universitaire avec des établissements d\'Afrique subsaharienne.', budget: 55000, start_date: '2024-01-01', end_date: '2025-09-30' },
+    // Projets actifs sans membres (alerte)
+    { id: 9, project_call_id: 4, status_id: 10, title: 'Projet Hydrogène Vert', description: 'Recherche sur les usages de l\'hydrogène vert comme vecteur énergétique dans l\'industrie.', budget: 280000, start_date: '2026-01-01', end_date: '2028-12-31' },
+    // Autres projets pour enrichir les stats
+    { id: 10, project_call_id: 4, status_id: 12, title: 'Projet Smart Campus', description: 'Déploiement de capteurs IoT et tableaux de bord énergétiques sur le campus universitaire.', budget: 130000, start_date: '2024-09-01', end_date: '2026-08-31' },
+    { id: 11, project_call_id: 1, status_id: 11, title: 'Projet Inclusion Numérique', description: 'Formation aux compétences numériques de base pour les publics éloignés de l\'emploi.', budget: 48000, start_date: '2024-02-01', end_date: '2025-06-30' },
+    { id: 12, project_call_id: 3, status_id: 10, title: 'Projet European Grant HorizonX', description: 'Coordination d\'un projet Horizon Europe multi-partenaires sur la transition écologique.', budget: 450000, start_date: '2025-09-01', end_date: '2028-08-31' },
 ]
 
 export const mockFinancialAgreements: FinancialAgreement[] = [
@@ -235,6 +247,16 @@ export const mockFinancialAgreements: FinancialAgreement[] = [
     { id: 3, project_id: 3, partner_id: 4, axis_id: 3, status_id: 15, title: 'Convention Institut Recherche', description: 'Accord de coopération internationale', budget: 30000, grant: 25000, signed_date: '2025-02-01' },
     { id: 4, project_id: 4, partner_id: 6, axis_id: null, status_id: 14, title: 'Convention Fondation E', description: 'Subvention innovation et transfert', budget: 80000, grant: 70000, signed_date: '2025-07-01' },
     { id: 5, project_id: 2, partner_id: 5, axis_id: 2, status_id: 15, title: 'Convention Collectivité D', description: 'Cofinancement recherche territoriale', budget: 20000, grant: 15000, signed_date: '2025-03-15' },
+    // Nouveaux projets
+    { id: 6, project_id: 5, partner_id: 1, axis_id: 2, status_id: 15, title: 'Convention Université X – Data Science', description: 'Financement recherche data science territoriale', budget: 50000, grant: 40000, signed_date: '2025-06-01' },
+    { id: 7, project_id: 5, partner_id: 5, axis_id: 2, status_id: 15, title: 'Convention Collectivité D – Data', description: 'Cofinancement analyse territoriale', budget: 30000, grant: 20000, signed_date: '2025-07-15' },
+    { id: 8, project_id: 6, partner_id: 3, axis_id: 1, status_id: 14, title: 'Convention Association B – Badges', description: 'Partenariat certification open badges', budget: 20000, grant: 15000, signed_date: '' },
+    { id: 9, project_id: 7, partner_id: 4, axis_id: 2, status_id: 15, title: 'Convention Institut – Biodiversité', description: 'Financement étude biodiversité urbaine', budget: 35000, grant: 28000, signed_date: '2024-04-01' },
+    { id: 10, project_id: 7, partner_id: 5, axis_id: 2, status_id: 15, title: 'Convention Collectivité D – Biodiversité', description: 'Apport collectivité pour cartographie', budget: 22000, grant: 18000, signed_date: '2024-05-01' },
+    { id: 11, project_id: 8, partner_id: 4, axis_id: 3, status_id: 14, title: 'Convention Institut – Coopération Sud', description: 'Convention coopération internationale non signée', budget: 30000, grant: 22000, signed_date: '' },
+    { id: 12, project_id: 10, partner_id: 2, axis_id: 4, status_id: 15, title: 'Convention Entreprise A – Smart Campus', description: 'Partenariat déploiement IoT campus', budget: 60000, grant: 45000, signed_date: '2024-10-01' },
+    { id: 13, project_id: 12, partner_id: 1, axis_id: 3, status_id: 15, title: 'Convention Université X – HorizonX', description: 'Subvention Horizon Europe', budget: 200000, grant: 180000, signed_date: '2025-09-15' },
+    { id: 14, project_id: 12, partner_id: 6, axis_id: 3, status_id: 14, title: 'Convention Fondation E – HorizonX', description: 'Cofinancement fondation non finalisé', budget: 80000, grant: 60000, signed_date: '' },
 ]
 
 export const mockPhds: Phd[] = [
@@ -445,21 +467,48 @@ export const mockComments: Comment[] = [
 
 export const mockProjectMembers: ProjectMember[] = [
     // Projet 1 — Formation Numérique
-    { id: 1, project_id: 1, member_id: 1, role: 'Lead' },      // Marie Dupont (coordinatrice)
-    { id: 2, project_id: 1, member_id: 3, role: 'Equipe' },    // Claire Bernard (gestionnaire)
-    { id: 3, project_id: 1, member_id: 7, role: 'Partenaire' },// Isabelle Petit
+    { id: 1, project_id: 1, member_id: 1, role: 'Lead' },
+    { id: 2, project_id: 1, member_id: 3, role: 'Equipe' },
+    { id: 3, project_id: 1, member_id: 7, role: 'Partenaire' },
     // Projet 2 — Recherche IA
-    { id: 4, project_id: 2, member_id: 2, role: 'Lead' },      // Thomas Martin
-    { id: 5, project_id: 2, member_id: 5, role: 'Equipe' },    // Sophie Girard
-    { id: 6, project_id: 2, member_id: 6, role: 'Partenaire' },// Julien Moreau (R&D)
-    { id: 7, project_id: 2, member_id: 4, role: 'Observateur' },// Antoine Leroy (doctorant)
+    { id: 4, project_id: 2, member_id: 2, role: 'Lead' },
+    { id: 5, project_id: 2, member_id: 5, role: 'Equipe' },
+    { id: 6, project_id: 2, member_id: 6, role: 'Partenaire' },
+    { id: 7, project_id: 2, member_id: 4, role: 'Observateur' },
     // Projet 3 — Mobilités Europe
-    { id: 8, project_id: 3, member_id: 1, role: 'Lead' },      // Marie Dupont
-    { id: 9, project_id: 3, member_id: 5, role: 'Equipe' },    // Sophie Girard
+    { id: 8, project_id: 3, member_id: 1, role: 'Lead' },
+    { id: 9, project_id: 3, member_id: 5, role: 'Equipe' },
     // Projet 4 — Transfert Technologique
-    { id: 10, project_id: 4, member_id: 2, role: 'Lead' },      // Thomas Martin
-    { id: 11, project_id: 4, member_id: 6, role: 'Partenaire' },// Julien Moreau
-    { id: 12, project_id: 4, member_id: 7, role: 'Equipe' },    // Isabelle Petit
+    { id: 10, project_id: 4, member_id: 2, role: 'Lead' },
+    { id: 11, project_id: 4, member_id: 6, role: 'Partenaire' },
+    { id: 12, project_id: 4, member_id: 7, role: 'Equipe' },
+    // Projet 5 — Data Science Territoires
+    { id: 13, project_id: 5, member_id: 12, role: 'Lead' },
+    { id: 14, project_id: 5, member_id: 13, role: 'Equipe' },
+    { id: 15, project_id: 5, member_id: 16, role: 'Partenaire' },
+    // Projet 6 — Open Badges (sans lead pour test)
+    { id: 16, project_id: 6, member_id: 9, role: 'Equipe' },
+    // Projet 7 — Biodiversité Urbaine
+    { id: 17, project_id: 7, member_id: 12, role: 'Lead' },
+    { id: 18, project_id: 7, member_id: 15, role: 'Partenaire' },
+    { id: 19, project_id: 7, member_id: 14, role: 'Equipe' },
+    // Projet 8 — Coopération Sud
+    { id: 20, project_id: 8, member_id: 1, role: 'Lead' },
+    { id: 21, project_id: 8, member_id: 17, role: 'Partenaire' },
+    // Projet 9 — Hydrogène Vert : aucun membre → alerte
+    // Projet 10 — Smart Campus
+    { id: 22, project_id: 10, member_id: 6, role: 'Lead' },
+    { id: 23, project_id: 10, member_id: 8, role: 'Equipe' },
+    { id: 24, project_id: 10, member_id: 2, role: 'Observateur' },
+    // Projet 11 — Inclusion Numérique
+    { id: 25, project_id: 11, member_id: 9, role: 'Lead' },
+    { id: 26, project_id: 11, member_id: 10, role: 'Equipe' },
+    // Projet 12 — HorizonX
+    { id: 27, project_id: 12, member_id: 1, role: 'Lead' },
+    { id: 28, project_id: 12, member_id: 2, role: 'Equipe' },
+    { id: 29, project_id: 12, member_id: 5, role: 'Equipe' },
+    { id: 30, project_id: 12, member_id: 12, role: 'Partenaire' },
+    { id: 31, project_id: 12, member_id: 17, role: 'Partenaire' },
 ]
 
 export const mockAgreementMembers: AgreementMember[] = [

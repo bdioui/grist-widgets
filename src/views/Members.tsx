@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useState } from 'react'
 import { getMembersFull, getPartners, getLabs, addMember, updateMember, deleteMember, addPartner, getGroups, getGroupMembers, removeMemberFromGroup, addMemberToGroup, addGroup, deleteGroup, getAllMemberActionCards, getAllProjectMembers, getActionCardsFull, getProjects, addMemberToCard, removeMemberFromCard, addProjectMember, removeProjectMember, createActionCardFull, addProject } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -12,9 +12,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check, Tag } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { type MemberFull, type Partner, type Lab, type Group, type GroupMember, type ActionCardFull, type MemberActionCard, type ProjectMember, type Project, type ProjectCall, type Axis, type Status, type Formation, type TimeEntry } from '@/lib/types'
-import type { ProjectFull, ProjectCallFull } from './Projects'
-import type { ActionCardData } from './actions/ActionCard'
+import { type MemberFull, type Partner, type Lab, type Group, type GroupMember, type ActionCardFull, type MemberActionCard, type ProjectMember, type Project } from '@/lib/types'
+import { ProjectViewerSheet, ActionCardViewerSheet } from '@/components/viewers'
 import { PARTNER_TYPES, PALETTE } from '@/lib/constants'
 import { exportToCsv } from '@/lib/utils'
 import {ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger,}  from '@/components/ui/context-menu'
@@ -23,14 +22,6 @@ import SearchInput from '@/components/SearchInput'
 import { useCurrentUser } from '@/lib/userContext'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { motion } from "framer-motion"
-
-// Lazy imports pour éviter les dépendances circulaires
-const ProjectDetailSheetLazy = lazy(() =>
-    import('./Projects').then(m => ({ default: m.ProjectDetailSheet }))
-)
-const ActionCardDetailSheetLazy = lazy(() =>
-    import('./actions/ActionCard').then(m => ({ default: m.ActionCardDetailSheet }))
-)
 
 // --- Constantes ---
 
@@ -328,123 +319,6 @@ function MemberFormSheet(props: MemberFormSheetProps) {
     )
 }
 
-// --- ProjectViewerSheet (ouvre ProjectDetailSheet depuis un objet Project) ---
-
-type ProjectRefData = {
-    projectFull:  ProjectFull
-    projectCalls: ProjectCallFull[]
-    axes:         Axis[]
-    statuses:     Status[]
-    partners:     Partner[]
-    members:      MemberFull[]
-    formations:   Formation[]
-    times:        TimeEntry[]
-}
-
-function ProjectViewerSheet({ project, open, onClose }: { project: Project; open: boolean; onClose: () => void }) {
-    const [refData, setRefData] = useState<ProjectRefData | null>(null)
-
-    useEffect(() => {
-        if (!open) return
-        setRefData(null)
-        Promise.all([
-            import('@/lib/api').then(m => m.getProjectCalls()),
-            import('@/lib/api').then(m => m.getAxes()),
-            import('@/lib/api').then(m => m.getStatuses()),
-            import('@/lib/api').then(m => m.getPartners()),
-            import('@/lib/api').then(m => m.getMembersFull()),
-            import('@/lib/api').then(m => m.getFormations()),
-            import('@/lib/api').then(m => m.getTimeEntries()),
-        ]).then(([calls, axes, statuses, partners, members, formations, times]) => {
-            const axisMap = new Map((axes as Axis[]).map(a => [a.id, a]))
-            const fullCalls: ProjectCallFull[] = (calls as ProjectCall[]).map(c => ({
-                ...c,
-                axis: axisMap.get(c.axis_id) ?? { id: 0, name: 'Inconnu', description: '' },
-            }))
-            const callMap = new Map(fullCalls.map(c => [c.id, c]))
-            const projectFull: ProjectFull = {
-                ...project,
-                projectCall: callMap.get(project.project_call_id) ?? {
-                    id: 0, axis_id: 0, title: 'Inconnu', description: '',
-                    start_date: '', end_date: '', status_id: 0, budget: 0,
-                    axis: { id: 0, name: 'Inconnu', description: '' },
-                },
-            }
-            setRefData({
-                projectFull,
-                projectCalls: fullCalls,
-                axes: axes as Axis[],
-                statuses: statuses as Status[],
-                partners: partners as Partner[],
-                members: members as MemberFull[],
-                formations: formations as Formation[],
-                times: times as TimeEntry[],
-            })
-        })
-    }, [open, project.id])
-
-    if (!refData) return null
-
-    return (
-        <Suspense fallback={null}>
-            <ProjectDetailSheetLazy
-                open={open}
-                project={refData.projectFull}
-                onClose={onClose}
-                onUpdated={() => {}}
-                onDeleted={() => {}}
-                onAgreementAdded={() => {}}
-                onAgreementDeleted={() => {}}
-                partners={refData.partners}
-                projectCalls={refData.projectCalls}
-                axes={refData.axes}
-                statuses={refData.statuses}
-                members={refData.members}
-                projectTimes={refData.times.filter(t => t.project_id === project.id)}
-                axis={refData.axes}
-                allFormations={refData.formations}
-            />
-        </Suspense>
-    )
-}
-
-// --- ActionCardViewerSheet ---
-
-function toActionCardData(card: ActionCardFull): ActionCardData {
-    return {
-        id: card.id,
-        title: card.title,
-        description: card.description,
-        status: card.status,
-        category: {
-            id: card.category.id,
-            title: card.category.title,
-            color: card.category.color,
-            parent: card.category.parent
-                ? { id: card.category.parent.id, title: card.category.parent.title, color: card.category.parent.color }
-                : undefined,
-        },
-        owner: card.owner
-            ? { id: card.owner.id, first_name: card.owner.first_name, last_name: card.owner.last_name, position: card.owner.position }
-            : undefined,
-        start_date: card.start_date,
-        end_date: card.end_date,
-    }
-}
-
-function ActionCardViewerSheet({ card, open, onClose }: { card: ActionCardFull; open: boolean; onClose: () => void }) {
-    return (
-        <Suspense fallback={null}>
-            <ActionCardDetailSheetLazy
-                card={toActionCardData(card)}
-                open={open}
-                onClose={onClose}
-                onUpdated={() => {}}
-                onDeleted={() => {}}
-            />
-        </Suspense>
-    )
-}
 
 // --- Sheet de consultation ---
 

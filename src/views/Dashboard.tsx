@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import {
     getProgram, getProjects, getStatuses, getPartners, getMembers,
-    getFinancialAgreements, getAllProjectMembers,
+    getFinancialAgreements, getAllProjectMembers, getActionCardsFull
 } from '@/lib/api'
-import type { Program, Project, Status, Partner, Member, FinancialAgreement, ProjectMember } from '@/lib/types'
+import { type Program, type Project, type Status, type Partner, type Member, type FinancialAgreement, type ProjectMember, type ActionCardFull } from '@/lib/types'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, CalendarClock, Users, Briefcase, Building2, TrendingUp, Clock } from 'lucide-react'
+import { AlertTriangle, Users, Briefcase, Building2, TrendingUp, Clock } from 'lucide-react'
+import {ProjectViewerSheet, ActionCardViewerSheet} from '../components/viewers'
+import { Separator } from '@/components/ui/separator'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 // --- Helpers ---
 
@@ -59,23 +62,72 @@ function ProgressBar({ value, color = '#6366f1', bg = '#e5e7eb' }: { value: numb
     )
 }
 
-function AlertBadge({ items, label, icon }: { items: string[]; label: string; icon: React.ReactNode }) {
-    if (items.length === 0) return null
+function AlertCard({ project, statusLabel, daysLeft, memberCount, grant, onOpen }: {
+    project:     Project
+    statusLabel: string
+    daysLeft:    number
+    memberCount: number
+    grant:       number
+    onOpen:      (p: Project) => void
+}) {
+    const overdue = daysLeft < 0
     return (
-        <div className="flex flex-col gap-2 p-4 rounded-xl border border-amber-200 bg-amber-50">
-            <div className="flex items-center gap-2 text-amber-700 font-medium text-sm">
-                {icon}
-                <span>{label} ({items.length})</span>
+        <div
+            onClick={() => onOpen(project)}
+            className="cursor-pointer rounded-xl border bg-card p-4 flex flex-col gap-2 hover:shadow-md transition-shadow mt-2"
+        >
+            <div className="flex items-start justify-between gap-2">
+                <span className="font-medium text-sm leading-tight">{project.title}</span>
+                <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${overdue ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {overdue ? `${Math.abs(daysLeft)}j de retard` : `dans ${daysLeft}j`}
+                </span>
             </div>
-            <ul className="flex flex-col gap-1">
-                {items.slice(0, 5).map((item, i) => (
-                    <li key={i} className="text-xs text-amber-800 flex items-start gap-1.5">
-                        <span className="mt-0.5 shrink-0">•</span>
-                        <span>{item}</span>
-                    </li>
-                ))}
-                {items.length > 5 && <li className="text-xs text-amber-600 italic">...et {items.length - 5} autre{items.length - 5 > 1 ? 's' : ''}</li>}
-            </ul>
+            {project.description && (
+                <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
+            )}
+            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                <span className="px-1.5 py-0.5 rounded bg-muted">{statusLabel}</span>
+                <span className="flex items-center gap-1"><Users size={11} /> {memberCount}</span>
+                {grant > 0 && <span className="flex items-center gap-1"><TrendingUp size={11} /> {fmt(grant)}</span>}
+                {project.end_date && <span className="flex items-center gap-1 ml-auto"><Clock size={11} /> {new Date(project.end_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
+            </div>
+        </div>
+    )
+}
+
+function ActionAlert({ card, daysLeft, onOpen }: {
+    card:    ActionCardFull
+    daysLeft: number
+    onOpen:  (c: ActionCardFull) => void
+}) {
+    const overdue = daysLeft < 0
+    return (
+        <div
+            onClick={() => onOpen(card)}
+            className="cursor-pointer rounded-xl border bg-card p-4 flex flex-col gap-2 hover:shadow-md transition-shadow mt-2"
+        >
+            <div className="flex items-start justify-between gap-2">
+                <span className="font-medium text-sm leading-tight">{card.title}</span>
+                <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${overdue ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {overdue ? `${Math.abs(daysLeft)}j de retard` : `dans ${daysLeft}j`}
+                </span>
+            </div>
+            {card.description && (
+                <p className="text-xs text-muted-foreground line-clamp-2">{card.description}</p>
+            )}
+            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                <span className="px-1.5 py-0.5 rounded bg-muted">{card.status.label}</span>
+                {card.owner && (
+                    <span className="flex items-center gap-1">
+                        <Users size={11} /> {card.owner.first_name} {card.owner.last_name}
+                    </span>
+                )}
+                {card.end_date && (
+                    <span className="flex items-center gap-1 ml-auto">
+                        <Clock size={11} /> {new Date(card.end_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </span>
+                )}
+            </div>
         </div>
     )
 }
@@ -87,6 +139,10 @@ export default function Dashboard() {
 
     const [program,        setProgram]        = useState<Program | null>(null)
     const [projects,       setProjects]       = useState<Project[]>([])
+    const [actionCards,    setActionCards]    = useState<ActionCardFull[]>([])
+    const [openProject, setOpenProject]       = useState<Project | null>(null)
+    const [openCard, setOpenCard]         = useState<ActionCardFull | null>(null)
+    const [staffModal, setStaffModal]         = useState<{ member: import('@/lib/types').Member; assignments: { project: import('@/lib/types').Project; role: string }[] } | null>(null)
     const [statuses,       setStatuses]       = useState<Status[]>([])
     const [partners,       setPartners]       = useState<Partner[]>([])
     const [members,        setMembers]        = useState<Member[]>([])
@@ -102,7 +158,8 @@ export default function Dashboard() {
             getMembers(),
             getFinancialAgreements(),
             getAllProjectMembers(),
-        ]).then(([prog, proj, stat, part, memb, agr, pm]) => {
+            getActionCardsFull(),
+        ]).then(([prog, proj, stat, part, memb, agr, pm, ac]) => {
             setProgram((prog as Program[])[0] ?? null)
             setProjects(proj as Project[])
             setStatuses(stat as Status[])
@@ -110,6 +167,7 @@ export default function Dashboard() {
             setMembers(memb as Member[])
             setAgreements(agr as FinancialAgreement[])
             setProjectMembers(pm as ProjectMember[])
+            setActionCards(ac as ActionCardFull[])
         }).finally(() => setLoading(false))
     }, [])
 
@@ -154,8 +212,6 @@ export default function Dashboard() {
         .slice(0, 6)
         .map(([id, grant]) => ({ partner: partners.find(p => p.id === id), grant }))
         .filter(r => r.partner)
-    const maxPartnerGrant = Math.max(...topPartners.map(r => r.grant), 1)
-
     // Taux de financement moyen
     const ratedAgreements = agreements.filter(a => a.budget > 0 && a.grant > 0)
     const avgRate = ratedAgreements.length > 0
@@ -164,21 +220,40 @@ export default function Dashboard() {
 
     // ── Alertes ──
 
-
     // Projets se terminant dans < 60 jours
     const endingSoon = projects.filter(p => {
         if (!p.end_date) return false
         const d = daysFromNow(p.end_date)
         const label = projectStatusMap.get(p.status_id)?.label ?? ''
         return d >= 0 && d <= 60 && activeStatuses.includes(label)
-    }).map(p => `"${p.title}" — dans ${daysFromNow(p.end_date)} jour${daysFromNow(p.end_date) > 1 ? 's' : ''}`)
+    })
+
+    console.log(endingSoon)
+    console.log('statuses:', statuses.filter(s => s.context === 'project').map(s => s.label))
+    console.log('project end_dates:', projects.map(p => p.end_date))
+    console.log('endingSoon:', endingSoon)
 
     // Projets dont la date de fin est dépassée mais encore actifs
     const overdueProjects = projects.filter(p => {
         if (!p.end_date) return false
         const label = projectStatusMap.get(p.status_id)?.label ?? ''
         return daysFromNow(p.end_date) < 0 && activeStatuses.includes(label)
-    }).map(p => `"${p.title}" — dépassé de ${Math.abs(daysFromNow(p.end_date))} jours`)
+    })
+
+    const activeActionStatuses = ['En cours', 'Planifié', 'À traiter']
+
+    // Actions se terminant dans < 14 jours
+    const actionEndingSoon = actionCards.filter(ac => {
+        if (!ac.end_date) return false
+        const d = daysFromNow(ac.end_date)
+        return d >= 0 && d <= 14 && activeActionStatuses.includes(ac.status.label)
+    })
+
+    // Actions dont la date de fin est dépassée mais encore actives
+    const overdueActionCards = actionCards.filter(ac => {
+        if (!ac.end_date) return false
+        return daysFromNow(ac.end_date) < 0 && activeActionStatuses.includes(ac.status.label)
+    })
 
     // Conventions non signées
     const unsignedAgreements = agreements
@@ -196,7 +271,17 @@ export default function Dashboard() {
         })
         .map(p => `"${p.title}"`)
 
-    const hasAlerts = endingSoon.length + overdueProjects.length + unsignedAgreements.length + projectsWithoutMembers.length > 0
+    const hasAlerts = endingSoon.length + overdueProjects.length + actionEndingSoon.length + overdueActionCards.length + unsignedAgreements.length + projectsWithoutMembers.length > 0
+
+    // ── Membres staff & leurs projets ──
+    const staffMembers = members.filter(m => m.is_staff)
+    const staffWithProjects = staffMembers.map(m => {
+        const assignments = projectMembers
+            .filter(pm => pm.member_id === m.id)
+            .map(pm => ({ project: projects.find(p => p.id === pm.project_id)!, role: pm.role }))
+            .filter(a => a.project != null)
+        return { member: m, assignments }
+    })
 
     // ── Programme ──
     const progPercent = program ? progressPercent(program.start_date, program.end_date) : 0
@@ -212,6 +297,7 @@ export default function Dashboard() {
     }
 
     return (
+        <>
         <div className="m-5 flex flex-col gap-6 pb-10">
 
             {/* ── En-tête Programme ── */}
@@ -240,7 +326,7 @@ export default function Dashboard() {
                             )}
                         </div>
                     </div>
-                    <ProgressBar value={progPercent} color="#6366f1" />
+                    <ProgressBar value={progPercent} color="black" />
                     {program.budget > 0 && (
                         <div className="flex items-center gap-2 mt-1">
                             <span className="text-xs text-muted-foreground">Budget programme :</span>
@@ -249,7 +335,7 @@ export default function Dashboard() {
                                 <>
                                     <span className="text-xs text-muted-foreground">·</span>
                                     <span className="text-xs text-muted-foreground">Subventions engagées :</span>
-                                    <span className="text-xs font-semibold text-green-700">{fmt(totalGrant)}</span>
+                                    <span className="text-xs text-muted-foreground">{fmt(totalGrant)}</span>
                                     <span className="text-xs text-muted-foreground">({Math.round((totalGrant / program.budget) * 100)} %)</span>
                                 </>
                             )}
@@ -270,14 +356,13 @@ export default function Dashboard() {
                     icon={<Building2 size={16} />}
                     label="Partenaires"
                     value={partners.length}
-                    sub={`dont ${partners.filter(p => p.consortium).length} consortium`}
+                    sub={`dont ${partners.filter(p => p.consortium).length} faisant partie du consortium`}
                 />
                 <KpiCard
                     icon={<TrendingUp size={16} />}
                     label="Subventions engagées"
                     value={fmt(totalGrant)}
                     sub={program?.budget ? `${Math.round((totalGrant / program.budget) * 100)} % du budget programme` : `sur ${fmt(totalBudget)} projets`}
-                    accent="#15803d"
                 />
                 <KpiCard
                     icon={<Users size={16} />}
@@ -288,7 +373,7 @@ export default function Dashboard() {
             </div>
 
             {/* ── Graphiques ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
                 {/* Répartition par statut */}
                 <div className="flex flex-col gap-4 p-5 rounded-xl border bg-card">
@@ -321,36 +406,113 @@ export default function Dashboard() {
                     )}
                 </div>
 
-                {/* Top partenaires */}
+                {/* Top partenaires — camembert */}
                 <div className="flex flex-col gap-4 p-5 rounded-xl border bg-card">
                     <p className="text-sm font-medium">Top partenaires par subvention</p>
                     {topPartners.length === 0
                         ? <p className="text-xs text-muted-foreground italic">Aucune convention enregistrée</p>
-                        : (
-                            <div className="flex flex-col gap-3">
-                                {topPartners.map(({ partner, grant }) => (
-                                    <div key={partner!.id} className="flex items-center gap-3">
-                                        <div className="flex items-center gap-1.5 w-32 shrink-0 min-w-0">
-                                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: partner!.color || '#e5e7eb' }} />
-                                            <span className="text-xs text-muted-foreground truncate">{partner!.name}</span>
+                        : (() => {
+                            const total = topPartners.reduce((s, r) => s + r.grant, 0)
+                            const R = 54, C = 2 * Math.PI * R
+                            let offset = 0
+                            return (
+                                <div className="flex items-center gap-6">
+                                    <svg width="140" height="140" viewBox="0 0 140 140" className="shrink-0 -rotate-90">
+                                        {topPartners.map(({ partner, grant }) => {
+                                            const pct   = grant / total
+                                            const dash  = pct * C
+                                            const gap   = C - dash
+                                            const seg   = offset
+                                            offset += dash
+                                            return (
+                                                <circle
+                                                    key={partner!.id}
+                                                    cx="70" cy="70" r={R}
+                                                    fill="none"
+                                                    stroke={partner!.color || '#e5e7eb'}
+                                                    strokeWidth="22"
+                                                    strokeDasharray={`${dash} ${gap}`}
+                                                    strokeDashoffset={-seg}
+                                                />
+                                            )
+                                        })}
+                                    </svg>
+                                    <div className="flex flex-col gap-2 min-w-0">
+                                        {topPartners.map(({ partner, grant }) => (
+                                            <div key={partner!.id} className="flex items-center gap-2 min-w-0">
+                                                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: partner!.color || '#e5e7eb' }} />
+                                                <span className="text-xs text-muted-foreground truncate">{partner!.name}</span>
+                                                <span className="text-xs font-medium tabular-nums ml-auto pl-2 text-green-700 shrink-0">{fmt(grant)}</span>
+                                            </div>
+                                        ))}
+                                        <div className="pt-1 border-t mt-1 text-xs text-muted-foreground">
+                                            Total : <span className="font-semibold text-foreground">{fmt(total)}</span>
                                         </div>
-                                        <div className="flex-1 h-5 rounded-full overflow-hidden bg-muted">
-                                            <div
-                                                className="h-full rounded-full"
-                                                style={{
-                                                    width: `${Math.max(4, (grant / maxPartnerGrant) * 100)}%`,
-                                                    backgroundColor: partner!.color || '#e5e7eb',
-                                                }}
-                                            />
-                                        </div>
-                                        <span className="text-xs font-medium tabular-nums w-16 text-right text-green-700">{fmt(grant)}</span>
                                     </div>
-                                ))}
-                            </div>
-                        )
+                                </div>
+                            )
+                        })()
                     }
                 </div>
             </div>
+
+            {staffWithProjects.length > 0 && (
+                <div className="flex flex-col gap-3">
+                    <p className="text-sm font-medium flex items-center gap-2">
+                        <Users size={15} />
+                        Équipe
+                    </p>
+                    <div className="grid grid-cols-4 gap-2">
+                        {staffWithProjects.map(({ member, assignments }) => {
+                            const activeCount = assignments.filter(a => activeStatuses.includes(projectStatusMap.get(a.project.status_id)?.label ?? '')).length
+                            const roleBreakdown = ['Responsable', 'Co-responsable', 'Contributeur'].map(r => ({
+                                role: r,
+                                count: assignments.filter(a => a.role === r).length,
+                            })).filter(r => r.count > 0)
+                            return (
+                                <button
+                                    key={member.id}
+                                    onClick={() => setStaffModal({ member, assignments })}
+                                    className="flex flex-col gap-3 rounded-xl border bg-card p-4 text-left hover:shadow-md transition-shadow"
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        {member.profile_image
+                                            ? <img src={member.profile_image} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                                            : <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0 text-xs font-semibold text-muted-foreground">
+                                                {member.first_name[0]}{member.last_name[0]}
+                                              </div>
+                                        }
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium truncate">{member.first_name} {member.last_name}</p>
+                                            <p className="text-xs text-muted-foreground truncate">{member.position || member.status}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs">
+                                        <span className="flex items-center gap-1 text-muted-foreground">
+                                            <Briefcase size={11} />
+                                            <span className="font-medium text-foreground">{assignments.length}</span> projet{assignments.length > 1 ? 's' : ''}
+                                        </span>
+                                        {activeCount > 0 && (
+                                            <span className="px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
+                                                {activeCount} actif{activeCount > 1 ? 's' : ''}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {roleBreakdown.length > 0 && (
+                                        <div className="flex flex-wrap gap-1">
+                                            {roleBreakdown.map(({ role, count }) => (
+                                                <span key={role} className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                                    {role} ({count})
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* ── Alertes ── */}
             {hasAlerts && (
@@ -359,38 +521,157 @@ export default function Dashboard() {
                         <AlertTriangle size={15} className="text-amber-500" />
                         Points d'attention
                     </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <AlertBadge
-                            items={endingSoon}
-                            label="Projets se terminant bientôt"
-                            icon={<CalendarClock size={14} />}
-                        />
-                        <AlertBadge
-                            items={overdueProjects}
-                            label="Projets en retard"
-                            icon={<Clock size={14} />}
-                        />
-                        <AlertBadge
-                            items={unsignedAgreements}
-                            label="Conventions non signées"
-                            icon={<AlertTriangle size={14} />}
-                        />
-                        <AlertBadge
-                            items={projectsWithoutMembers}
-                            label="Projets sans membres assignés"
-                            icon={<Users size={14} />}
-                        />
+                    <div className="grid grid-cols-4 md:grid-cols-4 gap-3">
+                        {endingSoon.length > 0 && (
+                            <>  
+                            <div>
+                                 <p className='text-xs text-gray-500 mb-2'>Projets se terminant bientôt</p>
+                                 <Separator />
+                                    {endingSoon.map(p => (
+                                        <AlertCard
+                                            key={p.id}
+                                            project={p}
+                                            statusLabel={projectStatusMap.get(p.status_id)?.label ?? ''}
+                                            daysLeft={daysFromNow(p.end_date)}
+                                            memberCount={projectMembers.filter(pm => pm.project_id === p.id).length}
+                                            grant={agreements.filter(a => a.project_id === p.id).reduce((s, a) => s + a.grant, 0)}
+                                            onOpen={p => setOpenProject(p)}
+                                        />
+                                    ))}
+
+                            </div>
+                               
+                            </>
+                        )}
+
+                        {overdueProjects.length > 0 && (
+                            <>
+                            <div>
+                                <p className='text-xs text-gray-500 mb-2'>Projets en retard</p>
+                                 <Separator />
+                                {overdueProjects.map(p => (
+                                    <AlertCard
+                                        key={p.id}
+                                        project={p}
+                                        statusLabel={projectStatusMap.get(p.status_id)?.label ?? ''}
+                                        daysLeft={daysFromNow(p.end_date)}
+                                        memberCount={projectMembers.filter(pm => pm.project_id === p.id).length}
+                                        grant={agreements.filter(a => a.project_id === p.id).reduce((s, a) => s + a.grant, 0)}
+                                        onOpen={p => setOpenProject(p)}
+                                    />
+                                ))}
+                            </div>
+                            </>
+                        )}
+
+                        {actionEndingSoon.length > 0 && (
+                            <div>
+                                <p className='text-xs text-gray-500 mb-2'>Actions se terminant bientôt</p>
+                                <Separator />
+                                {actionEndingSoon.map(a => (
+                                    <ActionAlert
+                                        key={a.id}
+                                        card={a}
+                                        daysLeft={daysFromNow(a.end_date)}
+                                        onOpen={a => setOpenCard(a)}
+                                    />
+                                ))}
+                            </div>
+                        )}
+
+                        {overdueActionCards.length > 0 && (
+                            <div>
+                                <p className='text-xs text-gray-500 mb-2'>Actions en retard</p>
+                                <Separator />
+                                {overdueActionCards.map(a => (
+                                    <ActionAlert
+                                        key={a.id}
+                                        card={a}
+                                        daysLeft={daysFromNow(a.end_date)}
+                                        onOpen={a => setOpenCard(a)}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
+
 
             {!hasAlerts && (
                 <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-green-200 bg-green-50 text-green-700 text-sm">
                     <span>✓</span>
                     <span>Aucune alerte — tout est en ordre.</span>
                 </div>
-            )}
+            )}     
 
         </div>
+
+        {openProject && (
+            <ProjectViewerSheet
+                project={openProject}
+                open={!!openProject}
+                onClose={() => setOpenProject(null)}
+            />
+        )}
+
+        {openCard && (
+            <ActionCardViewerSheet
+                card={openCard}
+                open={!!openCard}
+                onClose={() => setOpenCard(null)}
+            />
+        )}
+
+        <Dialog open={!!staffModal} onOpenChange={open => { if (!open) setStaffModal(null) }}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        {staffModal && (
+                            <>
+                                {staffModal.member.profile_image
+                                    ? <img src={staffModal.member.profile_image} className="w-8 h-8 rounded-full object-cover" />
+                                    : <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-semibold text-muted-foreground">
+                                        {staffModal.member.first_name[0]}{staffModal.member.last_name[0]}
+                                      </div>
+                                }
+                                <span>{staffModal.member.first_name} {staffModal.member.last_name}</span>
+                            </>
+                        )}
+                    </DialogTitle>
+                </DialogHeader>
+                {staffModal && (
+                    <div className="flex flex-col gap-2 mt-1">
+                        {staffModal.assignments.length === 0 && (
+                            <p className="text-sm text-muted-foreground italic">Aucun projet assigné.</p>
+                        )}
+                        {staffModal.assignments.map(({ project, role }) => {
+                            const statusLabel = projectStatusMap.get(project.status_id)?.label ?? ''
+                            return (
+                                <button
+                                    key={project.id}
+                                    onClick={() => { setStaffModal(null); setOpenProject(project) }}
+                                    className="flex items-start gap-3 rounded-lg border bg-card p-3 text-left hover:shadow-sm transition-shadow"
+                                >
+                                    <span
+                                        className="mt-1 w-2 h-2 rounded-full shrink-0"
+                                        style={{ backgroundColor: STATUS_COLORS[statusLabel] ?? '#e5e7eb' }}
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-medium truncate">{project.title}</p>
+                                        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                                            <span className="px-1.5 py-0.5 rounded bg-muted">{statusLabel}</span>
+                                            <span>{role}</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            )
+                        })}
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
+
+        </>
     )
 }
