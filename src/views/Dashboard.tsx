@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import {
     getProgram, getProjects, getStatuses, getPartners, getMembers,
-    getFinancialAgreements, getAxes, getAllProjectMembers,
+    getFinancialAgreements, getAllProjectMembers,
 } from '@/lib/api'
-import type { Program, Project, Status, Partner, Member, FinancialAgreement, Axis, ProjectMember } from '@/lib/types'
+import type { Program, Project, Status, Partner, Member, FinancialAgreement, ProjectMember } from '@/lib/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertTriangle, CalendarClock, Users, Briefcase, Building2, TrendingUp, Clock } from 'lucide-react'
 
@@ -91,7 +91,6 @@ export default function Dashboard() {
     const [partners,       setPartners]       = useState<Partner[]>([])
     const [members,        setMembers]        = useState<Member[]>([])
     const [agreements,     setAgreements]     = useState<FinancialAgreement[]>([])
-    const [axes,           setAxes]           = useState<Axis[]>([])
     const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
 
     useEffect(() => {
@@ -102,16 +101,14 @@ export default function Dashboard() {
             getPartners(),
             getMembers(),
             getFinancialAgreements(),
-            getAxes(),
             getAllProjectMembers(),
-        ]).then(([prog, proj, stat, part, memb, agr, ax, pm]) => {
+        ]).then(([prog, proj, stat, part, memb, agr, pm]) => {
             setProgram((prog as Program[])[0] ?? null)
             setProjects(proj as Project[])
             setStatuses(stat as Status[])
             setPartners(part as Partner[])
             setMembers(memb as Member[])
             setAgreements(agr as FinancialAgreement[])
-            setAxes(ax as Axis[])
             setProjectMembers(pm as ProjectMember[])
         }).finally(() => setLoading(false))
     }, [])
