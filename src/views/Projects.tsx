@@ -1973,7 +1973,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
                         <div className="flex items-center justify-between group/header">
                             <div className="flex items-center gap-2">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants {projectMembers.length > 0 && ( <span>({projectMembers.length})</span>)}</p>
                                 <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowParticipants(v => !v)}>
                                     {showParticipants ? <Eye size={12} /> : <EyeClosed size={12} />}
                                 </Button>
@@ -2300,7 +2300,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     }}
                                     getLabel={e => e.title}
                                     placeholder="Rechercher une dépense…"
-                                    groupBy={e => ({ primary: e.type })}
+                                    groupBy={e => ({ primary: e.category })}
                                 />
                                 <div className="flex justify-end">
                                     <Button variant="outline" size="sm" className="h-6 text-xs rounded-md" onClick={() => setShowLinkExpanse(false)}>Annuler</Button>
@@ -2321,7 +2321,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         <TableHeader>
                                             <TableRow className="text-xs bg-muted/50">
                                                 <TableHead className="h-7 text-xs">Intitulé</TableHead>
-                                                <TableHead className="h-7 text-xs w-32">Type</TableHead>
+                                                <TableHead className="h-7 text-xs w-32">Catégorie</TableHead>
                                                 <TableHead className="h-7 text-xs w-28 text-right">Montant</TableHead>
                                                 <TableHead className="h-7 text-xs w-32">Fournisseur</TableHead>
                                                 <TableHead className="h-7 text-xs w-24">Statut</TableHead>
@@ -2331,10 +2331,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         <TableBody>
                                             {projectExpanses.map(e => {
                                                 const supplier = e.supplier_id ? expanseSuppliers.find(s => s.id === e.supplier_id) : null
-                                                const typeColors: Record<string, string> = {
-                                                    'Équipement': '#fef9c3', 'Personnel': '#dbeafe',
-                                                    'Mission/Déplacement': '#ffedd5', 'Autres dépenses externes': '#f3f4f6',
-                                                    'Prestation': '#ede9fe', 'Facturation interne': '#dcfce7',
+                                                const categoryColors: Record<string, string> = {
+                                                    'Fonctionnement': '#ffedd5', 'Investissement': '#fef9c3',
+                                                    'Personnel': '#dbeafe', 'Autre': '#f3f4f6',
                                                 }
                                                 const statusColors: Record<string, string> = {
                                                     'Engagé': '#dbeafe', 'Livré': '#fef9c3', 'Payé': '#dcfce7',
@@ -2352,9 +2351,14 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                                         </Tooltip>
                                                         
                                                         <TableCell>
-                                                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: typeColors[e.type] ?? '#f3f4f6' }}>
-                                                                {e.type}
-                                                            </span>
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: categoryColors[e.category] ?? '#f3f4f6' }}>
+                                                                    {e.category}
+                                                                </span>
+                                                                {e.label && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: '#f3f4f6' }}>
+                                                                    {e.label}
+                                                                </span>}
+                                                            </div>
                                                         </TableCell>
                                                         <TableCell className="text-right tabular-nums font-medium">{fmt(e.amount)}</TableCell>
                                                         <TableCell className="text-muted-foreground truncate">{supplier?.name ?? '—'}</TableCell>

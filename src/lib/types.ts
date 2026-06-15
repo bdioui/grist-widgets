@@ -364,7 +364,8 @@ export type Expanse = {
     title: string
     description: string
     amount: number
-    type: string
+    category: string
+    label: string
     budget_detail_id: number | null
     supplier_id: number | null
     project_id: number | null

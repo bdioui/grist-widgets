@@ -22,14 +22,22 @@ import {
 } from '@/lib/api'
 import type { Program, Expanse, BudgetCategory, BudgetDetail, Supplier, Project, FinancialAgreement, Partner, Status } from '@/lib/types'
 
-const TYPE_COLORS: Record<string, string> = {
-    'Équipement':               '#fef9c3',
-    'Personnel':                '#dbeafe',
-    'Mission/Déplacement':      '#ffedd5',
-    'Autres dépenses externes': '#f3f4f6',
-    'Prestation':               '#ede9fe',
-    'Facturation interne':      '#dcfce7',
+const EXPANSE_CATEGORIES = ['Fonctionnement', 'Investissement', 'Personnel', 'Autre'] as const
+
+const CATEGORY_COLORS: Record<string, string> = {
+    'Fonctionnement': '#ffedd5',
+    'Investissement': '#fef9c3',
+    'Personnel':      '#dbeafe',
+    'Autre':          '#f3f4f6',
 }
+
+const LABELS_BY_CATEGORY: Record<string, string[]> = {
+    'Fonctionnement': ['Formation', 'Mission', 'Prestation', 'Facturation interne'],
+    'Investissement': ['Immobilisation', 'Matériel', 'Logiciel'],
+    'Personnel':      ['Personnel'],
+    'Autre':          [],
+}
+const ALL_LABELS = Object.values(LABELS_BY_CATEGORY).flat()
 
 const EXPANSE_STATUS_COLORS: Record<string, string> = {
     'Engagé': '#dbeafe',
@@ -225,7 +233,8 @@ interface DepensesTabProps {
 
 function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, suppliers, setSuppliers, projects }: DepensesTabProps) {
     const [search, setSearch] = useState('')
-    const [typeFilter, setTypeFilter] = useState('all')
+    const [categoryFilter, setCategoryFilter] = useState('all')
+    const [labelFilter, setLabelFilter] = useState('all')
     const [statusFilter, setStatusFilter] = useState('all')
     const [detailFilter, setDetailFilter] = useState<number | null>(null)
     const [purchaseFrom, setPurchaseFrom] = useState('')
@@ -248,12 +257,13 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const supplierMap        = useMemo(() => new Map(suppliers.map(s => [s.id, s])), [suppliers])
     const projectMap         = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
 
-    const types = useMemo(() => [...new Set(expanses.map(e => e.type))].sort(), [expanses])
-    const statuses = useMemo(() => [...new Set(expanses.map(e => e.status))].sort(), [expanses])
+    const labels = useMemo(() => [...new Set(expanses.map(e => e.label))].filter(Boolean).sort(), [expanses])
+    const statuses = useMemo(() => [...new Set(expanses.map(e => e.status))].filter(Boolean).sort(), [expanses])
 
     const filtered = useMemo(() => expanses.filter(e => {
         if (search && !e.title.toLowerCase().includes(search.toLowerCase())) return false
-        if (typeFilter !== 'all' && e.type !== typeFilter) return false
+        if (categoryFilter !== 'all' && e.category !== categoryFilter) return false
+        if (labelFilter !== 'all' && e.label !== labelFilter) return false
         if (statusFilter !== 'all' && e.status !== statusFilter) return false
         if (detailFilter !== null && e.budget_detail_id !== detailFilter) return false
         if (purchaseFrom && (!e.purchase_date || e.purchase_date < purchaseFrom)) return false
@@ -261,14 +271,15 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         if (paymentFrom && (!e.payment_date || e.payment_date < paymentFrom)) return false
         if (paymentTo && (!e.payment_date || e.payment_date > paymentTo)) return false
         return true
-    }), [expanses, search, typeFilter, statusFilter, detailFilter, purchaseFrom, purchaseTo, paymentFrom, paymentTo])
+    }), [expanses, search, categoryFilter, labelFilter, statusFilter, detailFilter, purchaseFrom, purchaseTo, paymentFrom, paymentTo])
 
     const sorted = useMemo(() => {
         if (!sortKey) return filtered
         return [...filtered].sort((a, b) => {
             let va: string | number = '', vb: string | number = ''
             if (sortKey === 'title')         { va = a.title; vb = b.title }
-            else if (sortKey === 'type')     { va = a.type; vb = b.type }
+            else if (sortKey === 'category') { va = a.category; vb = b.category }
+            else if (sortKey === 'label')    { va = a.label; vb = b.label }
             else if (sortKey === 'detail')   { va = a.budget_detail_id ? (budgetDetailMap.get(a.budget_detail_id)?.title ?? '') : ''; vb = b.budget_detail_id ? (budgetDetailMap.get(b.budget_detail_id)?.title ?? '') : '' }
             else if (sortKey === 'amount')   { va = a.amount; vb = b.amount }
             else if (sortKey === 'supplier') { va = a.supplier_id ? (supplierMap.get(a.supplier_id)?.name ?? '') : ''; vb = b.supplier_id ? (supplierMap.get(b.supplier_id)?.name ?? '') : '' }
@@ -356,9 +367,10 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
 
     function handleExport() {
         const rows = filtered.filter(e => selected.has(e.id))
-        exportToCsv('depenses.csv', ['Intitulé', 'Type', 'Ligne budgétaire', 'Montant', 'Fournisseur', 'Projet', 'Statut', 'Date achat'], rows.map(e => [
+        exportToCsv('depenses.csv', ['Intitulé', 'Catégorie', 'Libellé', 'Ligne budgétaire', 'Montant', 'Fournisseur', 'Projet', 'Statut', 'Date achat'], rows.map(e => [
             e.title,
-            e.type,
+            e.category,
+            e.label,
             e.budget_detail_id ? (budgetDetailMap.get(e.budget_detail_id)?.title ?? '') : '',
             String(e.amount),
             e.supplier_id ? (supplierMap.get(e.supplier_id)?.name ?? '') : '',
@@ -401,11 +413,18 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                     <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input placeholder="Rechercher une dépense…" className="pl-8 h-8 text-sm" value={search} onChange={e => setSearch(e.target.value)} />
                 </div>
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="Catégorie" /></SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">Tous les types</SelectItem>
-                        {types.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        <SelectItem value="all">Toutes les catégories</SelectItem>
+                        {EXPANSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Select value={labelFilter} onValueChange={setLabelFilter}>
+                    <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="Libellé" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Tous les libellés</SelectItem>
+                        {labels.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                     </SelectContent>
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -441,8 +460,8 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                     from={paymentFrom} to={paymentTo}
                     onFromChange={setPaymentFrom} onToChange={setPaymentTo}
                 />
-                {(search || typeFilter !== 'all' || statusFilter !== 'all' || detailFilter !== null || purchaseFrom || purchaseTo || paymentFrom || paymentTo) && (
-                    <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setSearch(''); setTypeFilter('all'); setStatusFilter('all'); setDetailFilter(null); setPurchaseFrom(''); setPurchaseTo(''); setPaymentFrom(''); setPaymentTo('') }}>
+                {(search || categoryFilter !== 'all' || labelFilter !== 'all' || statusFilter !== 'all' || detailFilter !== null || purchaseFrom || purchaseTo || paymentFrom || paymentTo) && (
+                    <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setSearch(''); setCategoryFilter('all'); setLabelFilter('all'); setStatusFilter('all'); setDetailFilter(null); setPurchaseFrom(''); setPurchaseTo(''); setPaymentFrom(''); setPaymentTo('') }}>
                         Réinitialiser
                     </Button>
                 )}
@@ -464,7 +483,8 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                             </TableHead>
                             {([
                                 { key: 'title',    label: 'Intitulé',          className: 'h-8' },
-                                { key: 'type',     label: 'Type',              className: 'h-8 w-36' },
+                                { key: 'category', label: 'Catégorie',         className: 'h-8 w-36' },
+                                { key: 'label',    label: 'Libellé dépense',   className: 'h-8 w-36' },
                                 { key: 'detail',   label: 'Ligne budgétaire',  className: 'h-8 w-44' },
                                 { key: 'amount',   label: 'Montant',           className: 'h-8 w-28 text-right' },
                                 { key: 'supplier', label: 'Fournisseur', className: 'h-8 w-36' },
@@ -497,9 +517,15 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                     <Input autoFocus value={newDraft.title ?? ''} onChange={ev => setNewDraft(d => ({ ...d, title: ev.target.value }))} placeholder="Intitulé" className="h-7 text-xs" />
                                 </TableCell>
                                 <TableCell>
-                                    <Select value={newDraft.type ?? ''} onValueChange={v => setNewDraft(d => ({ ...d, type: v }))}>
-                                        <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{Object.keys(TYPE_COLORS).map(t => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}</SelectContent>
+                                    <Select value={newDraft.category ?? ''} onValueChange={v => setNewDraft(d => ({ ...d, category: v }))}>
+                                        <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="Catégorie" /></SelectTrigger>
+                                        <SelectContent>{EXPANSE_CATEGORIES.map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </TableCell>
+                                <TableCell>
+                                    <Select value={newDraft.label ?? ''} onValueChange={v => setNewDraft(d => ({ ...d, label: v }))}>
+                                        <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="Libellé" /></SelectTrigger>
+                                        <SelectContent>{(LABELS_BY_CATEGORY[newDraft.category ?? ''] ?? ALL_LABELS).map(l => <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>)}</SelectContent>
                                     </Select>
                                 </TableCell>
                                 <TableCell>
@@ -581,10 +607,18 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                         <Input value={draft.title ?? ''} onChange={ev => setDraft(d => ({ ...d, title: ev.target.value }))} className="h-7 text-xs" />
                                     </TableCell>
                                     <TableCell>
-                                        <Select value={draft.type ?? ''} onValueChange={v => setDraft(d => ({ ...d, type: v }))}>
+                                        <Select value={draft.category ?? ''} onValueChange={v => setDraft(d => ({ ...d, category: v }))}>
                                             <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
-                                                {Object.keys(TYPE_COLORS).map(t => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}
+                                                {EXPANSE_CATEGORIES.map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Select value={draft.label ?? ''} onValueChange={v => setDraft(d => ({ ...d, label: v }))}>
+                                            <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                {(LABELS_BY_CATEGORY[draft.category ?? ''] ?? ALL_LABELS).map(l => <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
@@ -666,9 +700,14 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                         </Tooltip>
                                     </TableCell>
                                     <TableCell>
-                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: TYPE_COLORS[e.type] ?? '#f3f4f6' }}>
-                                            {e.type}
-                                        </span>
+                                        {e.category && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
+                                            {e.category}
+                                        </span>}
+                                    </TableCell>
+                                    <TableCell>
+                                        {e.label && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
+                                            {e.label}
+                                        </span>}
                                     </TableCell>
                                     <TableCell className="truncate max-w-44">
                                         <span className="text-foreground">{detail?.title ?? '—'}</span>
@@ -895,7 +934,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                     <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Statut" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">Tous les statuts</SelectItem>
-                        {agreementStatuses.map(s => <SelectItem key={s.id} value={s.label}>{s.label}</SelectItem>)}
+                        {agreementStatuses.filter(s => s.label !== '').map(s => <SelectItem key={s.id} value={s.label}>{s.label}</SelectItem>)}
                     </SelectContent>
                 </Select>
                 <div className="flex items-center gap-1 w-44">
