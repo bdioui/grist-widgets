@@ -321,7 +321,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
 
     function startAdd() {
         setIsAdding(true)
-        setNewDraft({ title: '', type: 'Prestation', status: 'Engagé', amount: 0, purchase_date: '', payment_date: '', delivery_date: '', description: '', budget_detail_id: leafBudgetDetails[0]?.id ?? null, supplier_id: null, project_id: null })
+        setNewDraft({ title: '', category: 'Fonctionnement', label: '', status: 'Engagé', amount: 0, purchase_date: '', payment_date: '', delivery_date: '', description: '', budget_detail_id: leafBudgetDetails[0]?.id ?? null, supplier_id: null, project_id: null })
         setEditingId(null)
     }
 
