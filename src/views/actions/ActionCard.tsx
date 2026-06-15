@@ -7,6 +7,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -17,7 +19,7 @@ import {
     getMemberActionCardsByCard, getProjectActionCardsByCard, getToDoListsWithItemsByCard,
     getStatuses, getCategories, getMembers, getProjects, getPartners, getFinancialAgreements,
     updateActionCard, updateToDoItem, addToDoItemToList, addToDoListToCard, deleteToDoList,
-    addMemberToCard, removeMemberFromCard, addProjectToCard, removeProjectFromCard,
+    addMemberToCard, removeMemberFromCard, updateMemberRole, addProjectToCard, removeProjectFromCard,
     getAgreementActionCardsByCard, addAgreementToCard, removeAgreementFromCard,
     deleteActionCard,
     getCommentsFull, createComment, updateComment, deleteComment,
@@ -531,6 +533,8 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
 
     // Ajout membres
     const [roleToAdd, setRoleToAdd] = useState(ROLES[1])
+    const [selectedLinks, setSelectedLinks] = useState<MemberLink[]>([])
+    const [copiedEmails, setCopiedEmails] = useState(false)
 
     // Ajout projet
     const [projectToAdd, setProjectToAdd] = useState('')
@@ -748,6 +752,41 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     async function handleRemoveMember(linkId: number) {
         await removeMemberFromCard(linkId)
         setMemberLinks(prev => prev.filter(l => l.id !== linkId))
+    }
+
+    async function handleRoleChange(linkId: number, role: string) {
+        await updateMemberRole(linkId, role)
+        setMemberLinks(prev => prev.map(l => l.id === linkId ? { ...l, role } : l))
+    }
+
+    function toggleSelectLink(l: MemberLink) {
+        setSelectedLinks(prev => prev.some(s => s.id === l.id) ? prev.filter(s => s.id !== l.id) : [...prev, l])
+    }
+
+    function toggleSelectAllLinks() {
+        setSelectedLinks(prev => prev.length === memberLinks.length ? [] : [...memberLinks])
+    }
+
+    async function handleRemoveSelected() {
+        await Promise.all(selectedLinks.map(l => removeMemberFromCard(l.id)))
+        setMemberLinks(prev => prev.filter(l => !selectedLinks.some(s => s.id === l.id)))
+        setSelectedLinks([])
+    }
+
+    function copyMemberEmails() {
+        const emails = selectedLinks.map(l => l.member.email).filter(e => !!e).join(', ')
+        navigator.clipboard.writeText(emails)
+        setCopiedEmails(true)
+        setTimeout(() => setCopiedEmails(false), 2000)
+    }
+
+    function exportMembersCsv() {
+        const headers = ['Prénom', 'Nom', 'Rôle', 'Email', 'Téléphone', 'Partenaire']
+        const rows = selectedLinks.map(l => {
+            const partner = allPartners.find(p => p.id === l.member.partner_id)
+            return [l.member.first_name, l.member.last_name, l.role, l.member.email ?? '', l.member.tel ?? '', partner?.name ?? '']
+        })
+        exportToCsv(`participants_${card.title}.csv`, headers, rows)
     }
 
     // --- Projets ---
@@ -1094,102 +1133,166 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                             <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setMembersExtended(true)}><EyeClosed /></Button>
                                         )}
                                     </div>
-                                    {membersExtended && !showCreateMember && (
-                                        <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
-                                            onClick={() => setShowCreateMember(true)}>
-                                            <Plus size={11} />Nouveau contact
-                                        </Button>
-                                    )}
+                                    <div className="flex items-center gap-1">
+                                        {membersExtended && selectedLinks.length > 0 && (
+                                            <>
+                                                <span className="text-xs text-muted-foreground mr-1">{selectedLinks.length} sélectionné{selectedLinks.length > 1 ? 's' : ''}</span>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button variant="outline" className="rounded-md" size="sm" onClick={copyMemberEmails}>
+                                                            {copiedEmails ? <CheckIcon size={13} /> : <Copy size={13} />}
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent><p>Copier email{selectedLinks.length > 1 ? 's' : ''}</p></TooltipContent>
+                                                </Tooltip>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button variant="outline" className="rounded-md" size="sm" onClick={exportMembersCsv}>
+                                                            <FileDown size={13} />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent><p>Exporter en CSV</p></TooltipContent>
+                                                </Tooltip>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button variant="outline" className="rounded-md" size="sm" onClick={handleRemoveSelected}>
+                                                            <Trash size={13} />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent><p>Retirer</p></TooltipContent>
+                                                </Tooltip>
+                                            </>
+                                        )}
+                                        {membersExtended && !showCreateMember && (
+                                            <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
+                                                onClick={() => setShowCreateMember(true)}>
+                                                <Plus size={11} />Nouveau contact
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {membersExtended && memberLinks.length > 0 && (
-                                    <div className="flex flex-col gap-1">
-                                        {memberLinks.map(l => {
-                                            const partner = allPartners.find(p => p.id === l.member.partner_id)
-                                            return (
-                                                <Popover key={l.id}>
-                                                <PopoverTrigger asChild>
-                                                    <div className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted group">
-                                                        <div className="flex items-center gap-2 min-w-0">
-                                                            <div className="flex flex-col min-w-0">
-                                                                <span className="text-sm">{l.member.first_name} {l.member.last_name}</span>
-                                                                <span className="text-xs text-muted-foreground">{l.role}</span>
-                                                            </div>
-                                                            {partner && (
-                                                                <span
-                                                                    className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
-                                                                    style={partner.color ? { backgroundColor: partner.color } : {}}
-                                                                >
-                                                                    {partner.name}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <div
-                                                            onClick={e => { e.stopPropagation(); handleRemoveMember(l.id) }}
-                                                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive ml-2 cursor-pointer"
-                                                        >
-                                                            <X size={13} />
-                                                        </div>
-                                                    </div>
-                                                </PopoverTrigger>
-                                                <PopoverContent align="start" className="w-72 p-4 flex flex-col gap-3">
-                                                    {/* En-tête */}
-                                                    <div className="flex items-center gap-3">
-                                                        <Avatar className="h-9 w-9 shrink-0">
-                                                            <AvatarImage src={l.member.profile_image} />
-                                                            <AvatarFallback className="text-sm bg-muted">
-                                                                {l.member.first_name[0]}{l.member.last_name[0]}
-                                                            </AvatarFallback>
-                                                        </Avatar>
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="text-sm font-medium">{l.member.first_name} {l.member.last_name}</span>
-                                                            <span className="text-xs text-muted-foreground truncate">{l.member.position}</span>
-                                                        </div>
-                                                    </div>
-
-                                                    <Separator />
-
-                                                    {/* Détails */}
-                                                    <div className="flex flex-col gap-2 text-xs">
-                                                        {l.member.status && (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-20 shrink-0 text-muted-foreground">Statut</span>
-                                                                <span>{l.member.status}</span>
-                                                            </div>
-                                                        )}
-                                                        {l.member.email && (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-20 shrink-0 text-muted-foreground">Email</span>
-                                                                <a href={`mailto:${l.member.email}`} className="truncate text-blue-600 hover:underline">{l.member.email}</a>
-                                                            </div>
-                                                        )}
-                                                        {l.member.tel && (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-20 shrink-0 text-muted-foreground">Téléphone</span>
-                                                                <a href={`tel:${l.member.tel}`} className="hover:underline">{l.member.tel}</a>
-                                                            </div>
-                                                        )}
-                                                        {partner && (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-20 shrink-0 text-muted-foreground">Partenaire</span>
-                                                                <span
-                                                                    className="px-1.5 py-0.5 rounded-full border border-border"
-                                                                    style={partner.color ? { backgroundColor: partner.color } : {}}
-                                                                >
-                                                                    {partner.name}
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-20 shrink-0 text-muted-foreground">Rôle</span>
-                                                            <span>{l.role}</span>
-                                                        </div>
-                                                    </div>
-                                                </PopoverContent>
-                                                </Popover>
-                                                
-                                            )
-                                        })}
+                                    <div>
+                                        <Table className="text-xs">
+                                            <TableHeader>
+                                                <TableRow className="hover:bg-transparent">
+                                                    <TableHead className="h-7 w-6 px-2">
+                                                        <Checkbox
+                                                            checked={selectedLinks.length > 0 && selectedLinks.length < memberLinks.length ? 'indeterminate' : selectedLinks.length === memberLinks.length && memberLinks.length > 0}
+                                                            onCheckedChange={toggleSelectAllLinks}
+                                                            className="h-3.5 w-3.5"
+                                                        />
+                                                    </TableHead>
+                                                    <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Nom</TableHead>
+                                                    <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Rôle</TableHead>
+                                                    <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Partenaire</TableHead>
+                                                    <TableHead className="h-7 w-6 px-2" />
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {memberLinks.map(l => {
+                                                    const partner = allPartners.find(p => p.id === l.member.partner_id)
+                                                    const isSelected = selectedLinks.some(s => s.id === l.id)
+                                                    return (
+                                                        <Popover key={l.id}>
+                                                            <TableRow className={`group ${isSelected ? 'bg-muted' : ''}`}>
+                                                                <TableCell className="px-2 py-1.5">
+                                                                    <Checkbox
+                                                                        checked={isSelected}
+                                                                        onCheckedChange={() => toggleSelectLink(l)}
+                                                                        className="h-3.5 w-3.5"
+                                                                    />
+                                                                </TableCell>
+                                                                <TableCell className="px-2 py-1.5 whitespace-nowrap">
+                                                                    <PopoverTrigger asChild>
+                                                                        <button className="text-left hover:underline underline-offset-2">
+                                                                            {l.member.first_name} {l.member.last_name}
+                                                                        </button>
+                                                                    </PopoverTrigger>
+                                                                </TableCell>
+                                                                <TableCell className="px-0 py-1.5">
+                                                                    <Select value={l.role} onValueChange={role => handleRoleChange(l.id, role)}>
+                                                                        <SelectTrigger className="h-5 text-xs w-28 border-none p-0 shadow-none text-muted-foreground hover:text-foreground" onClick={e => e.stopPropagation()}>
+                                                                            <SelectValue />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                </TableCell>
+                                                                <TableCell className="px-2 py-1.5">
+                                                                    {partner && (
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <span
+                                                                                    className="text-xs px-2 py-0.5 rounded-full border border-border truncate inline-block max-w-[100px]"
+                                                                                    style={partner.color ? { backgroundColor: partner.color } : {}}
+                                                                                >
+                                                                                    {partner.name}
+                                                                                </span>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>{partner.name}</TooltipContent>
+                                                                        </Tooltip>
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell className="px-2 py-1.5">
+                                                                    <button
+                                                                        onClick={() => handleRemoveMember(l.id)}
+                                                                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                                                                    >
+                                                                        <X size={13} />
+                                                                    </button>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                            <PopoverContent align="start" className="w-72 p-4 flex flex-col gap-3">
+                                                                <div className="flex items-center gap-3">
+                                                                    <Avatar className="h-9 w-9 shrink-0">
+                                                                        <AvatarImage src={l.member.profile_image} />
+                                                                        <AvatarFallback className="text-sm bg-muted">
+                                                                            {l.member.first_name[0]}{l.member.last_name[0]}
+                                                                        </AvatarFallback>
+                                                                    </Avatar>
+                                                                    <div className="flex flex-col min-w-0">
+                                                                        <span className="text-sm font-medium">{l.member.first_name} {l.member.last_name}</span>
+                                                                        <span className="text-xs text-muted-foreground truncate">{l.member.position}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <Separator />
+                                                                <div className="flex flex-col gap-2 text-xs">
+                                                                    {l.member.status && (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="w-20 shrink-0 text-muted-foreground">Statut</span>
+                                                                            <span>{l.member.status}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {l.member.email && (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="w-20 shrink-0 text-muted-foreground">Email</span>
+                                                                            <a href={`mailto:${l.member.email}`} className="truncate text-blue-600 hover:underline">{l.member.email}</a>
+                                                                        </div>
+                                                                    )}
+                                                                    {l.member.tel && (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="w-20 shrink-0 text-muted-foreground">Téléphone</span>
+                                                                            <a href={`tel:${l.member.tel}`} className="hover:underline">{l.member.tel}</a>
+                                                                        </div>
+                                                                    )}
+                                                                    {partner && (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="w-20 shrink-0 text-muted-foreground">Partenaire</span>
+                                                                            <span className="px-1.5 py-0.5 rounded-full border border-border" style={partner.color ? { backgroundColor: partner.color } : {}}>
+                                                                                {partner.name}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                    )
+                                                })}
+                                            </TableBody>
+                                        </Table>
                                     </div>
                                 )}
 

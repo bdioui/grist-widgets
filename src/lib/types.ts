@@ -177,6 +177,7 @@ export type FinancialAgreement = {
     budget: number
     grant: number
     signed_date: string
+    budget_detail_id: number | null
 }
 
 export type Phd = {
@@ -232,9 +233,12 @@ export type BudgetCategory = {
 export type BudgetDetail = {
     id: number
     budget_category_id: number
+    parent_id: number | null
     title: string
     description: string
     budget: number
+    start_date: string | null
+    end_date: string | null
 }
 
 // --- Tables de jonction ---
@@ -343,5 +347,31 @@ export type Program = {
     start_date: string
     end_date: string
     logo: string
+    management_fee_rate: number | null
 }
+
+// Budget & expanses
+
+export type Supplier = {
+    id: number
+    name: string
+    description: string
+    siret: string
+}
+
+export type Expanse = {
+    id: number
+    title: string
+    description: string
+    amount: number
+    type: string
+    budget_detail_id: number | null
+    supplier_id: number | null
+    project_id: number | null
+    purchase_date: string
+    delivery_date: string
+    payment_date: string
+    status: string
+}
+
 

@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
     getProgram, getProjects, getStatuses, getPartners, getMembers,
-    getFinancialAgreements, getAllProjectMembers, getActionCardsFull
+    getFinancialAgreements, getAllProjectMembers, getActionCardsFull, getExpanses,
+    getBudgetCategories, getBudgetDetails, updateProgram,
 } from '@/lib/api'
-import { type Program, type Project, type Status, type Partner, type Member, type FinancialAgreement, type ProjectMember, type ActionCardFull } from '@/lib/types'
+import { type Program, type Project, type Status, type Partner, type Member, type FinancialAgreement, type ProjectMember, type ActionCardFull, type Expanse, type BudgetCategory, type BudgetDetail } from '@/lib/types'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, Users, Briefcase, Building2, TrendingUp, Clock } from 'lucide-react'
+import { AlertTriangle, Users, Briefcase, Building2, TrendingUp, Clock, Receipt, Pencil, Check, X } from 'lucide-react'
 import {ProjectViewerSheet, ActionCardViewerSheet} from '../components/viewers'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -148,6 +149,19 @@ export default function Dashboard() {
     const [members,        setMembers]        = useState<Member[]>([])
     const [agreements,     setAgreements]     = useState<FinancialAgreement[]>([])
     const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
+    const [expanses,          setExpanses]          = useState<Expanse[]>([])
+    const [budgetCategories,  setBudgetCategories]  = useState<BudgetCategory[]>([])
+    const [budgetDetails,     setBudgetDetails]     = useState<BudgetDetail[]>([])
+    const [editingFeeRate,    setEditingFeeRate]    = useState(false)
+    const [feeRateDraft,      setFeeRateDraft]      = useState('')
+
+    async function saveFeeRate() {
+        if (!program) return
+        const rate = feeRateDraft.trim() === '' ? null : parseFloat(feeRateDraft)
+        await updateProgram(program.id, { management_fee_rate: isNaN(rate as number) ? null : rate })
+        setProgram(p => p ? { ...p, management_fee_rate: isNaN(rate as number) ? null : rate } : p)
+        setEditingFeeRate(false)
+    }
 
     useEffect(() => {
         Promise.all([
@@ -159,7 +173,10 @@ export default function Dashboard() {
             getFinancialAgreements(),
             getAllProjectMembers(),
             getActionCardsFull(),
-        ]).then(([prog, proj, stat, part, memb, agr, pm, ac]) => {
+            getExpanses(),
+            getBudgetCategories(),
+            getBudgetDetails(),
+        ]).then(([prog, proj, stat, part, memb, agr, pm, ac, exp, cats, details]) => {
             setProgram((prog as Program[])[0] ?? null)
             setProjects(proj as Project[])
             setStatuses(stat as Status[])
@@ -168,6 +185,9 @@ export default function Dashboard() {
             setAgreements(agr as FinancialAgreement[])
             setProjectMembers(pm as ProjectMember[])
             setActionCards(ac as ActionCardFull[])
+            setExpanses(exp as Expanse[])
+            setBudgetCategories(cats as BudgetCategory[])
+            setBudgetDetails(details as BudgetDetail[])
         }).finally(() => setLoading(false))
     }, [])
 
@@ -192,14 +212,8 @@ export default function Dashboard() {
     const activeProjects   = projects.filter(p => activeStatuses.includes(projectStatusMap.get(p.status_id)?.label ?? ''))
     const totalGrant       = agreements.reduce((s, a) => s + a.grant, 0)
     const totalBudget      = projects.reduce((s, p) => s + p.budget, 0)
+    const totalExpanses    = expanses.reduce((s, e) => s + e.amount, 0)
 
-    // Répartition par statut
-    const statusGroups = statuses
-        .filter(s => s.context === 'project')
-        .map(s => ({ label: s.label, count: projects.filter(p => p.status_id === s.id).length }))
-        .filter(g => g.count > 0)
-        .sort((a, b) => b.count - a.count)
-    const maxStatusCount = Math.max(...statusGroups.map(g => g.count), 1)
 
 
     // Top partenaires par subvention
@@ -212,12 +226,6 @@ export default function Dashboard() {
         .slice(0, 6)
         .map(([id, grant]) => ({ partner: partners.find(p => p.id === id), grant }))
         .filter(r => r.partner)
-    // Taux de financement moyen
-    const ratedAgreements = agreements.filter(a => a.budget > 0 && a.grant > 0)
-    const avgRate = ratedAgreements.length > 0
-        ? Math.round(ratedAgreements.reduce((s, a) => s + (a.grant / a.budget) * 100, 0) / ratedAgreements.length)
-        : null
-
     // ── Alertes ──
 
     // Projets se terminant dans < 60 jours
@@ -326,26 +334,49 @@ export default function Dashboard() {
                             )}
                         </div>
                     </div>
-                    <ProgressBar value={progPercent} color="black" />
-                    {program.budget > 0 && (
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs text-muted-foreground">Budget programme :</span>
-                            <span className="text-xs font-semibold">{fmt(program.budget)}</span>
-                            {totalGrant > 0 && (
-                                <>
-                                    <span className="text-xs text-muted-foreground">·</span>
-                                    <span className="text-xs text-muted-foreground">Subventions engagées :</span>
-                                    <span className="text-xs text-muted-foreground">{fmt(totalGrant)}</span>
-                                    <span className="text-xs text-muted-foreground">({Math.round((totalGrant / program.budget) * 100)} %)</span>
-                                </>
-                            )}
-                        </div>
-                    )}
+                    <ProgressBar value={progPercent} color="#dbeafe" />
+                    {program.budget > 0 && (() => {
+                        const pct = (v: number) => program.budget > 0 ? Math.min(100, Math.round(v / program.budget * 100)) : 0
+                        const reste = Math.max(0, program.budget - totalGrant - totalExpanses)
+                        return (
+                            <div className="flex flex-col gap-2 mt-1">
+                                <div className="flex h-2 w-full rounded-full overflow-hidden gap-px">
+                                    {totalGrant > 0 && <div className="h-full rounded-l-full" style={{ width: `${pct(totalGrant)}%`, backgroundColor: '#dbeafe' }} />}
+                                    {totalExpanses > 0 && <div className="h-full" style={{ width: `${pct(totalExpanses)}%`, backgroundColor: '#f3f4f6' }} />}
+                                    {reste > 0 && <div className="h-full flex-1 rounded-r-full bg-border" />}
+                                </div>
+                                <div className="flex items-center gap-4 flex-wrap">
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                        <span className="text-muted-foreground">Budget :</span>
+                                        <span className="font-semibold">{fmt(program.budget)}</span>
+                                    </div>
+                                    {totalGrant > 0 && (
+                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#dbeafe' }} />
+                                            <span>Subventions : <span className="font-medium text-foreground">{fmt(totalGrant)}</span> ({pct(totalGrant)} %)</span>
+                                        </div>
+                                    )}
+                                    {totalExpanses > 0 && (
+                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#f3f4f6' }} />
+                                            <span>Dépenses : <span className="font-medium text-foreground">{fmt(totalExpanses)}</span> ({pct(totalExpanses)} %)</span>
+                                        </div>
+                                    )}
+                                    {reste > 0 && (
+                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <span className="w-2 h-2 rounded-full shrink-0 bg-border" />
+                                            <span>Non alloué : <span className="font-medium">{fmt(reste)}</span> ({pct(reste)} %)</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    })()}
                 </div>
             )}
 
             {/* ── KPIs ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <KpiCard
                     icon={<Briefcase size={16} />}
                     label="Projets actifs"
@@ -360,9 +391,18 @@ export default function Dashboard() {
                 />
                 <KpiCard
                     icon={<TrendingUp size={16} />}
-                    label="Subventions engagées"
-                    value={fmt(totalGrant)}
-                    sub={program?.budget ? `${Math.round((totalGrant / program.budget) * 100)} % du budget programme` : `sur ${fmt(totalBudget)} projets`}
+                    label="Budget engagé"
+                    value={fmt(totalGrant + totalExpanses)}
+                    sub={program?.budget
+                        ? `${Math.round(((totalGrant + totalExpanses) / program.budget) * 100)} % du budget programme`
+                        : `sur ${fmt(totalBudget)} projets`
+                    }
+                />
+                <KpiCard
+                    icon={<Receipt size={16} />}
+                    label="Dépenses annexes"
+                    value={fmt(totalExpanses)}
+                    sub={totalGrant > 0 ? `dont ${fmt(totalGrant)} subventions` : undefined}
                 />
                 <KpiCard
                     icon={<Users size={16} />}
@@ -373,37 +413,171 @@ export default function Dashboard() {
             </div>
 
             {/* ── Graphiques ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
 
-                {/* Répartition par statut */}
-                <div className="flex flex-col gap-4 p-5 rounded-xl border bg-card">
-                    <p className="text-sm font-medium">Projets par statut</p>
-                    <div className="flex flex-col gap-3">
-                        {statusGroups.length === 0
-                            ? <p className="text-xs text-muted-foreground italic">Aucun projet</p>
-                            : statusGroups.map(g => (
-                                <div key={g.label} className="flex items-center gap-3">
-                                    <span className="text-xs w-28 shrink-0 text-muted-foreground">{g.label}</span>
-                                    <div className="flex-1 h-5 rounded-full overflow-hidden bg-muted relative">
-                                        <div
-                                            className="h-full rounded-full flex items-center pl-2 transition-all"
-                                            style={{
-                                                width: `${Math.max(8, (g.count / maxStatusCount) * 100)}%`,
-                                                backgroundColor: STATUS_COLORS[g.label] ?? '#e5e7eb',
-                                            }}
-                                        />
-                                    </div>
-                                    <span className="text-xs font-medium tabular-nums w-6 text-right">{g.count}</span>
-                                </div>
-                            ))
-                        }
-                    </div>
-                    {avgRate !== null && (
-                        <div className="pt-2 border-t mt-1 flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Taux de financement moyen</span>
-                            <span className="text-xs font-semibold text-green-700">{avgRate} %</span>
+                {/* ── Courbe cumulative des dépenses ── */}
+            {expanses.length > 0 && (() => {
+                // Grouper par année
+                const byYear = new Map<string, number>()
+                expanses.forEach(e => {
+                    const year = e.purchase_date?.slice(0, 4)
+                    if (!year || year < '2000') return
+                    byYear.set(year, (byYear.get(year) ?? 0) + e.amount)
+                })
+                const sortedYears = [...byYear.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+                if (sortedYears.length === 0) return null
+
+                // Points cumulatifs — un par année, plus un point à 0 en début
+                let cum = 0
+                const points = [
+                    { year: '', cum: 0, amount: 0 },
+                    ...sortedYears.map(([year, amount]) => {
+                        cum += amount
+                        return { year, amount, cum }
+                    })
+                ]
+                const maxCum = points[points.length - 1].cum
+
+                // Paramètres SVG
+                const W = 560, H = 120, ML = 48, MB = 22, MT = 8, MR = 12
+                const iW = W - ML - MR, iH = H - MT - MB
+                const xOf = (i: number) => ML + (i / Math.max(points.length - 1, 1)) * iW
+                const yOf = (v: number) => MT + iH - (v / maxCum) * iH
+
+                const linePts = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(p.cum).toFixed(1)}`).join(' ')
+                const areaPath = `${linePts} L${xOf(points.length - 1).toFixed(1)},${(MT + iH).toFixed(1)} L${xOf(0).toFixed(1)},${(MT + iH).toFixed(1)} Z`
+                const yTicks = [0, 0.5, 1].map(f => ({ value: maxCum * f, y: yOf(maxCum * f) }))
+
+                return (
+                    <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">Progression cumulée des dépenses</p>
+                            <span className="text-xs text-muted-foreground tabular-nums">Total : {fmt(maxCum)}</span>
                         </div>
-                    )}
+                        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 140 }}>
+                            {yTicks.map(({ value, y }) => (
+                                <g key={value}>
+                                    <line x1={ML} y1={y} x2={W - MR} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+                                    <text x={ML - 4} y={y + 3.5} textAnchor="end" fontSize="9" fill="#9ca3af">{fmt(value)}</text>
+                                </g>
+                            ))}
+                            <path d={areaPath} fill="#3b82f6" fillOpacity="0.1" />
+                            <path d={linePts} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                            {points.map((p, i) => p.year && (
+                                <g key={p.year}>
+                                    <circle cx={xOf(i)} cy={yOf(p.cum)} r="4" fill="white" stroke="#3b82f6" strokeWidth="2" />
+                                    <text x={xOf(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{p.year}</text>
+                                    <text x={xOf(i)} y={yOf(p.cum) - 8} textAnchor="middle" fontSize="9" fill="#3b82f6" fontWeight="600">{fmt(p.cum)}</text>
+                                </g>
+                            ))}
+                            <line x1={ML} y1={MT + iH} x2={W - MR} y2={MT + iH} stroke="#e5e7eb" strokeWidth="1" />
+                        </svg>
+                    </div>
+                )
+            })()}
+
+                {/* Consommation budgétaire par catégorie */}
+                <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">Consommation budgétaire</p>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            {editingFeeRate ? (
+                                <>
+                                    <span>Frais de gestion</span>
+                                    <input
+                                        type="number" min={0} max={100} step={0.1}
+                                        value={feeRateDraft}
+                                        onChange={e => setFeeRateDraft(e.target.value)}
+                                        className="w-16 h-6 border rounded px-1.5 text-xs text-foreground"
+                                        placeholder="0"
+                                        autoFocus
+                                        onKeyDown={e => { if (e.key === 'Enter') saveFeeRate(); if (e.key === 'Escape') setEditingFeeRate(false) }}
+                                    />
+                                    <span>%</span>
+                                    <button onClick={saveFeeRate} className="text-green-600 hover:text-green-700"><Check size={12} /></button>
+                                    <button onClick={() => setEditingFeeRate(false)} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
+                                </>
+                            ) : (
+                                <button
+                                    onClick={() => { setFeeRateDraft(program?.management_fee_rate != null ? String(program.management_fee_rate) : ''); setEditingFeeRate(true) }}
+                                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                                    title="Définir les frais de gestion"
+                                >
+                                    {program?.management_fee_rate != null
+                                        ? `Frais gestion : ${program.management_fee_rate} %`
+                                        : 'Frais de gestion'
+                                    }
+                                    <Pencil size={10} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    {budgetCategories.length === 0
+                        ? <p className="text-xs text-muted-foreground italic">Aucune catégorie budgétaire</p>
+                        : (() => {
+                            const visibleAgreements = agreements.filter(a => a.budget_detail_id !== null)
+                            const totalBudget = budgetDetails.reduce((s, d) => s + d.budget, 0)
+                            const totalSpent  = expanses.reduce((s, e) => s + e.amount, 0)
+                                + visibleAgreements.reduce((s, a) => s + a.grant, 0)
+                            const totalReste  = totalBudget - totalSpent
+                            return (
+                                <table className="w-full text-xs border-collapse">
+                                    <thead>
+                                        <tr className="border-b text-muted-foreground">
+                                            <th className="text-left font-normal pb-1.5">Catégorie</th>
+                                            <th className="text-right font-normal pb-1.5 pl-3">Budget</th>
+                                            <th className="text-right font-normal pb-1.5 pl-3">Engagé</th>
+                                            <th className="text-right font-normal pb-1.5 pl-3">Reste</th>
+                                            <th className="text-right font-normal pb-1.5 pl-3">%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {budgetCategories.map(cat => {
+                                            const details   = budgetDetails.filter(d => d.budget_category_id === cat.id)
+                                            const catBudget = details.reduce((s, d) => s + d.budget, 0)
+                                            const catSpent  = expanses.filter(e => details.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
+                                                + visibleAgreements.filter(a => details.some(d => d.id === a.budget_detail_id)).reduce((s, a) => s + a.grant, 0)
+                                            const catReste  = catBudget - catSpent
+                                            const catPct    = catBudget > 0 ? Math.round(catSpent / catBudget * 100) : 0
+                                            const catOver   = catReste < 0
+                                            return (
+                                                <React.Fragment key={cat.id}>
+                                                    <tr className="border-b border-muted/60">
+                                                        <td className="py-1.5 font-medium">{cat.title}</td>
+                                                        <td className="py-1.5 pl-3 text-right tabular-nums">{fmt(catBudget)}</td>
+                                                        <td className="py-1.5 pl-3 text-right tabular-nums">{fmt(catSpent)}</td>
+                                                        <td className="py-1.5 pl-3 text-right tabular-nums" style={{ color: catOver ? '#ef4444' : undefined }}>{fmt(catReste)}</td>
+                                                        <td className="py-1.5 pl-3 text-right tabular-nums" style={{ color: catOver ? '#ef4444' : catPct > 80 ? '#f59e0b' : '#22c55e' }}>{catPct} %</td>
+                                                    </tr>
+                                                </React.Fragment>
+                                            )
+                                        })}
+                                        {totalBudget > 0 && (
+                                            <tr className="border-t-2 font-medium">
+                                                <td className="pt-2">Total</td>
+                                                <td className="pt-2 pl-3 text-right tabular-nums">{fmt(totalBudget)}</td>
+                                                <td className="pt-2 pl-3 text-right tabular-nums">{fmt(totalSpent)}</td>
+                                                <td className="pt-2 pl-3 text-right tabular-nums" style={{ color: totalReste < 0 ? '#ef4444' : undefined }}>{fmt(totalReste)}</td>
+                                                <td className="pt-2 pl-3 text-right tabular-nums text-muted-foreground">{Math.round(totalSpent / totalBudget * 100)} %</td>
+                                            </tr>
+                                        )}
+                                        {program?.management_fee_rate != null && totalSpent > 0 && (() => {
+                                            const feeAmt = Math.round(totalSpent * program.management_fee_rate / 100)
+                                            return (
+                                                <tr className="border-t text-muted-foreground">
+                                                    <td className="pt-1.5 text-xs italic">Frais de gestion ({program.management_fee_rate} %)</td>
+                                                    <td className="pt-1.5 pl-3 text-right tabular-nums text-xs">—</td>
+                                                    <td className="pt-1.5 pl-3 text-right tabular-nums text-xs">{fmt(feeAmt)}</td>
+                                                    <td className="pt-1.5 pl-3 text-right tabular-nums text-xs">—</td>
+                                                    <td />
+                                                </tr>
+                                            )
+                                        })()}
+                                    </tbody>
+                                </table>
+                            )
+                        })()
+                    }
                 </div>
 
                 {/* Top partenaires — camembert */}

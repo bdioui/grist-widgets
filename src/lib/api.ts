@@ -10,7 +10,7 @@ import {
     mockProjectPartners, mockProjectMilestones,
     mockTimeEntry,
     mockFormations, mockProjectFormations, mockProjectAttachments,
-    mockProgram
+    mockProgram, mockExpanses, mockSuppliers
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -25,7 +25,7 @@ import {
     normalizeKpiEntries, normalizeProjectPartners, normalizeProjectMilestones,
     normalizeTimeEntry,
     normalizeFormations, normalizeProjectFormations, normalizeProjectAttachments,
-    normalizeProgram
+    normalizeProgram, normalizeExpanse, normalizeSuplier
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -36,7 +36,9 @@ import type {
     Group, GroupMember, Comment, CommentFull, ProjectMember, AgreementMember,
     KpiEntry, ProjectPartner, ProjectMilestone,
     TimeEntry, Formation, ProjectFormation, ProjectAttachment,
-    Program
+    Program,
+    Expanse,
+    Supplier
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -78,11 +80,23 @@ const T = {
     formation: 'Formation',
     project_formation: 'Project_formation',
     project_attachment: 'Project_attachment',
-    program: 'Program'
+    program: 'Program',
+    expanse: 'Expanse',
+    expanse_suplier: 'Expanse_suplier',
+    supplier: 'Supplier'
 }
 
 // --- Tables de référence ---
 export async function getProgram(): Promise<Program[]> { return USE_MOCK ? mockProgram : normalizeProgram(await fetchTable(T.program)) }
+
+export async function updateProgram(id: number, patch: Partial<Omit<Program, 'id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const p = mockProgram.find(p => p.id === id)
+        if (p) Object.assign(p, patch)
+        return
+    }
+    await updateRecord(T.program, id, patch)
+}
 export async function getStatuses(): Promise<Status[]> { return USE_MOCK ? mockStatuses : normalizeStatuses(await fetchTable(T.status)) }
 export async function getCategories(): Promise<Category[]> { return USE_MOCK ? mockCategories : normalizeCategories(await fetchTable(T.category)) }
 export async function getMembers(): Promise<Member[]> { return USE_MOCK ? mockMembers : normalizeMembers(await fetchTable(T.member)) }
@@ -92,6 +106,133 @@ export async function getPartners(): Promise<Partner[]> { return USE_MOCK ? mock
 export async function getAxes(): Promise<Axis[]> { return USE_MOCK ? mockAxes : normalizeAxes(await fetchTable(T.axis)) }
 export async function getLabs(): Promise<Lab[]> { return USE_MOCK ? mockLabs : normalizeLabs(await fetchTable(T.lab)) }
 export async function getPartnerLabs(): Promise<PartnerLab[]> { return USE_MOCK ? mockPartnerLabs : normalizePartnerLabs(await fetchTable(T.partner_lab)) }
+
+// Budget & expanses
+export async function getExpanses(): Promise<Expanse[]> { return USE_MOCK ? mockExpanses : normalizeExpanse(await fetchTable(T.expanse)) }
+export async function getSupliers(): Promise<Supplier[]> { return USE_MOCK ? mockSuppliers : normalizeSuplier(await fetchTable(T.supplier)) }
+
+
+// Expanses
+export async function createExpanse(data: Omit<Expanse, 'id'>): Promise<Expanse> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockExpanses.map(e => e.id)) + 1
+        const expanse = { id, ...data }
+        mockExpanses.push(expanse)
+        return expanse
+    }
+    const id = await addRecord(T.expanse, data)
+    return { id, ...data }
+}
+
+export async function deleteExpanse(expanseId: number): Promise<void> {
+    if (USE_MOCK) {
+        const idx = mockExpanses.findIndex(e => e.id === expanseId)
+        if (idx !== -1) {
+            mockExpanses.splice(idx, 1)
+        }
+    }
+    await deleteRecord(T.expanse, expanseId)
+}
+
+export async function updateExpanse(id: number, patch: Partial<Expanse>): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockExpanses.findIndex(e => e.id === id)
+        if (i !== -1) mockExpanses[i] = { ...mockExpanses[i], ...patch }
+        return
+    }
+    await updateRecord(T.expanse, id, patch)
+}
+
+// Supplier
+export async function createSupplier(data: Omit<Supplier, 'id'>): Promise<Supplier> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockSuppliers.map(e => e.id)) + 1
+        const supplier = { id, ...data }
+        mockSuppliers.push(supplier)
+        return supplier
+    }
+    const id = await addRecord(T.supplier, data)
+    return { id, ...data }
+}
+
+export async function deleteSupplier(supplierId: number): Promise<void> {
+    if (USE_MOCK) {
+        const idx = mockSuppliers.findIndex(e => e.id === supplierId)
+        if (idx !== -1) {
+            mockSuppliers.splice(idx, 1)
+        }
+    }
+    await deleteRecord(T.supplier, supplierId)
+}
+
+export async function updateSupplier(id: number, patch: Partial<Supplier>): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockSuppliers.findIndex(e => e.id === id)
+        if (i !== -1) mockSuppliers[i] = { ...mockSuppliers[i], ...patch }
+        return
+    }
+    await updateRecord(T.supplier, id, patch)
+}
+
+// budgetCategories CRUD
+export async function createBudgetCategory(data: Omit<BudgetCategory, 'id'>): Promise<BudgetCategory> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockBudgetCategories.map(c => c.id)) + 1
+        const cat = { id, ...data }
+        mockBudgetCategories.push(cat)
+        return cat
+    }
+    const id = await addRecord(T.budget_category, data)
+    return { id, ...data }
+}
+
+export async function updateBudgetCategory(id: number, patch: Partial<BudgetCategory>): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockBudgetCategories.findIndex(c => c.id === id)
+        if (i !== -1) mockBudgetCategories[i] = { ...mockBudgetCategories[i], ...patch }
+        return
+    }
+    await updateRecord(T.budget_category, id, patch)
+}
+
+export async function deleteBudgetCategory(catId: number): Promise<void> {
+    if (USE_MOCK) {
+        const idx = mockBudgetCategories.findIndex(c => c.id === catId)
+        if (idx !== -1) mockBudgetCategories.splice(idx, 1)
+        return
+    }
+    await deleteRecord(T.budget_category, catId)
+}
+
+// budgetDetails CRUD
+export async function createBudgetDetail(data: Omit<BudgetDetail, 'id'>): Promise<BudgetDetail> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockBudgetDetails.map(e => e.id)) + 1
+        const detail = { id, ...data }
+        mockBudgetDetails.push(detail)
+        return detail
+    }
+    const id = await addRecord(T.budget_detail, data)
+    return { id, ...data }
+}
+
+export async function deleteBudgetDetail(detailId: number): Promise<void> {
+    if (USE_MOCK) {
+        const idx = mockBudgetDetails.findIndex(d => d.id === detailId)
+        if (idx !== -1) mockBudgetDetails.splice(idx, 1)
+        return
+    }
+    await deleteRecord(T.budget_detail, detailId)
+}
+
+export async function updateBudgetDetail(id: number, patch: Partial<BudgetDetail>): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockBudgetDetails.findIndex(d => d.id === id)
+        if (i !== -1) mockBudgetDetails[i] = { ...mockBudgetDetails[i], ...patch }
+        return
+    }
+    await updateRecord(T.budget_detail, id, patch)
+}
 
 // --- Cœur du système ---
 
@@ -185,8 +326,8 @@ export async function updateProjectPartner(id: number, patch: Partial<Omit<Proje
 // --- Budget & indicateurs ---
 
 export async function getKpis(): Promise<Kpi[]> { return USE_MOCK ? mockKpis : normalizeKpis(await fetchTable(T.kpi)) }
-export async function getBudgetCategories(): Promise<BudgetCategory[]> { return USE_MOCK ? mockBudgetCategories : normalizeBudgetCategories(await fetchTable(T.budget_category)) }
-export async function getBudgetDetails(): Promise<BudgetDetail[]> { return USE_MOCK ? mockBudgetDetails : normalizeBudgetDetails(await fetchTable(T.budget_detail)) }
+export async function getBudgetCategories(): Promise<BudgetCategory[]> { return USE_MOCK ? [...mockBudgetCategories] : normalizeBudgetCategories(await fetchTable(T.budget_category)) }
+export async function getBudgetDetails(): Promise<BudgetDetail[]> { return USE_MOCK ? [...mockBudgetDetails] : normalizeBudgetDetails(await fetchTable(T.budget_detail)) }
 
 // --- To-do ---
 

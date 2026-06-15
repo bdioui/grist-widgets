@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check, Tag } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check, Tag, LayoutGrid, Table2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { type MemberFull, type Partner, type Lab, type Group, type GroupMember, type ActionCardFull, type MemberActionCard, type ProjectMember, type Project } from '@/lib/types'
@@ -1278,20 +1278,23 @@ export default function Members() {
             {/* Barre + filtres + bouton */}
             <div className="flex items-center gap-3 flex-wrap">
                 <div className="bg-gray-200 rounded-full border p-1 flex relative">
-                    {(['cards', 'table'] as ViewMode[]).map(mode => (
+                   {([
+                        { mode: 'cards',    label: 'Cartes',    icon: <LayoutGrid size={13} /> },
+                        { mode: 'table',    label: 'Tableau',   icon: <Table2 size={13} /> },
+                    ] as { mode: ViewMode; label: string; icon: React.ReactNode }[]).map(({ mode, label, icon }) => (
                         <button
                             key={mode}
                             onClick={() => handleViewMode(mode)}
-                            className={`relative px-4 py-1 rounded-full text-sm z-10 transition-colors duration-300 ${viewMode === mode ? 'text-white' : 'text-black'}`}
+                            className={`relative flex items-center gap-1.5 px-4 py-1 rounded-full text-sm z-10 transition-colors duration-300 ${viewMode === mode ? 'text-white' : 'text-black'}`}
                         >
-                            <span className="relative z-20">
-                                {mode === 'cards' ? 'Cartes' : 'Tableau'}
+                            <span className="relative z-20 flex items-center gap-1.5">
+                                {icon}{label}
                             </span>
                             {viewMode === mode && (
-                                <motion.div 
-                                layoutId="activeMemberTab"
-                                className="absolute inset-0 bg-black rounded-full z-10" 
-                                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                <motion.div
+                                    layoutId="activeMemberTab"
+                                    className="absolute inset-0 bg-black rounded-full z-10"
+                                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
                                 />
                             )}
                         </button>

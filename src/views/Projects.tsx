@@ -1,4 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar'
+import { format, parse, startOfWeek, getDay } from 'date-fns'
+import { fr } from 'date-fns/locale'
+import 'react-big-calendar/lib/css/react-big-calendar.css'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,7 +18,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Eye, EyeClosed, Maximize2, Minimize2, Users, ExternalLink } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Eye, EyeClosed, Maximize2, Minimize2, Users, ExternalLink, CalendarDays, LayoutGrid, Table2 } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { ActionCardDetailSheet } from '@/views/actions/ActionCard'
@@ -39,11 +43,23 @@ import {
     getAllProjectMembers,
     getFormations, getFormationsByProject, getProjectFormationLinks, addProjectFormation, removeProjectFormation,
     getProjectAttachments, addProjectAttachment, deleteProjectAttachment,
+    getExpanses, getSupliers, updateExpanse,
+    getBudgetCategories, getBudgetDetails,
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
+
+// --- Calendrier ---
+
+const calendarLocalizer = dateFnsLocalizer({
+    format,
+    parse,
+    startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 1 }),
+    getDay,
+    locales: { fr },
+})
 
 // --- Couleurs de statut ---
 
@@ -65,15 +81,14 @@ const ROLES = [
     'Porteur',
     'Intervenant',
     'Participant',
+    'Prospect',
     'Equipe - Lead',
     'Equipe - Contributeur',
     'Equipe - Consultant',
     'Equipe - Observateur',
-    
-
 ]
 
-const ROLE_ORDER = ['Porteur', 'Intervenant', , 'Participant', 'Equipe - Lead', 'Equipe - Contributeur', 'Equipe - Consultant', 'Equipe - Observateur']
+const ROLE_ORDER = ['Porteur', 'Intervenant', , 'Participant', 'Prospect', 'Equipe - Lead', 'Equipe - Contributeur', 'Equipe - Consultant', 'Equipe - Observateur']
 
 const STATUS_ORDER = ["En cours", "Suspendu", "En attente", "Terminé",]
 
@@ -786,24 +801,31 @@ type AgreementFormProps = {
     axes: Axis[]
     projectId: number
     initial?: AgreementFull
+    budgetCategories?: BudgetCategory[]
+    budgetDetails?: BudgetDetail[]
     onSaved: (a: AgreementFull) => void
     onCancel: () => void
 }
 
-function AgreementForm({ partners, statuses, axes, projectId, initial, onSaved, onCancel }: AgreementFormProps) {
+function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCategories: _budgetCategories, budgetDetails, onSaved, onCancel }: AgreementFormProps) {
     const agreementStatuses = statuses.filter(s => s.context === 'financial_agreement')
     const defaultStatusId   = agreementStatuses[0]?.id ?? 14
 
-    const [title,      setTitle]      = useState(initial?.title      ?? '')
-    const [description,setDescription]= useState(initial?.description ?? '')
-    const [partnerId,  setPartnerId]  = useState<number>(initial?.partner_id ?? partners[0]?.id ?? 0)
-    const [statusId,   setStatusId]   = useState<number>(initial?.status_id ?? defaultStatusId)
-    const [axisId,     setAxisId]     = useState<number | null>(initial?.axis_id ?? null)
-    const [budget,     setBudget]     = useState(initial?.budget ? String(initial.budget) : '')
-    const [grant,      setGrant]      = useState(initial?.grant  ? String(initial.grant)  : '')
-    const [signedDate, setSignedDate] = useState(initial?.signed_date ?? '')
-    const [submitting, setSubmitting] = useState(false)
-    const [error,      setError]      = useState<string | null>(null)
+    const [title,         setTitle]         = useState(initial?.title          ?? '')
+    const [description,   setDescription]   = useState(initial?.description    ?? '')
+    const [partnerId,     setPartnerId]      = useState<number>(initial?.partner_id ?? partners[0]?.id ?? 0)
+    const [statusId,      setStatusId]       = useState<number>(initial?.status_id ?? defaultStatusId)
+    const [axisId,        setAxisId]         = useState<number | null>(initial?.axis_id ?? null)
+    const [budget,        setBudget]         = useState(initial?.budget ? String(initial.budget) : '')
+    const [grant,         setGrant]          = useState(initial?.grant  ? String(initial.grant)  : '')
+    const [signedDate,    setSignedDate]     = useState(initial?.signed_date ?? '')
+    const [budgetDetailId, setBudgetDetailId] = useState<number | null>(initial?.budget_detail_id ?? null)
+    const [submitting,    setSubmitting]     = useState(false)
+    const [error,         setError]          = useState<string | null>(null)
+
+    const budgetDetailMap   = new Map((budgetDetails ?? []).map(d => [d.id, d]))
+    const leafBudgetDetails = (budgetDetails ?? []).filter(d => d.parent_id !== null)
+    const selectedDetail    = leafBudgetDetails.find(d => d.id === budgetDetailId) ?? null
 
     async function handleSubmit() {
         if (!title.trim() || !partnerId) { setError('Titre et partenaire sont obligatoires.'); return }
@@ -813,6 +835,7 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, onSaved, 
                 title, description, partner_id: partnerId, project_id: projectId,
                 axis_id: axisId, status_id: statusId,
                 budget: Number(budget) || 0, grant: Number(grant) || 0, signed_date: signedDate,
+                budget_detail_id: budgetDetailId,
             }
             const partner = partners.find(p => p.id === partnerId)!
             if (initial) {
@@ -885,6 +908,24 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, onSaved, 
                 <Label className="text-xs">Date de signature</Label>
                 <Input type="date" value={signedDate} onChange={e => setSignedDate(e.target.value)} className="h-8 text-xs" />
             </div>
+            {leafBudgetDetails.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">Ligne budgétaire</Label>
+                    <SearchInput
+                        data={leafBudgetDetails}
+                        onSelect={d => setBudgetDetailId(d.id)}
+                        getLabel={d => d.title}
+                        placeholder="Rechercher une ligne budgétaire..."
+                        value={selectedDetail ? `${budgetDetailMap.get(selectedDetail.parent_id!)?.title ?? ''} › ${selectedDetail.title}` : undefined}
+                        groupBy={d => ({ primary: budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
+                    />
+                    {budgetDetailId && (
+                        <button onClick={() => setBudgetDetailId(null)} className="self-start text-[10px] text-muted-foreground hover:text-foreground underline">
+                            Retirer la ligne budgétaire
+                        </button>
+                    )}
+                </div>
+            )}
             {error && <p className="text-xs text-destructive">{error}</p>}
             <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={onCancel} disabled={submitting} className="rounded-md">Annuler</Button>
@@ -1459,6 +1500,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [showDescription,  setShowDescription]  = useState(true)
     const [showParticipants, setShowParticipants] = useState(true)
     const [showConventions,  setShowConventions]  = useState(true)
+    const [showExpanses,  setShowExpanses]  = useState(true)
     const [showIndicateurs,  setShowIndicateurs]  = useState(true)
     const [showPartenaires,  setShowPartenaires]  = useState(true)
     const [showJalons,       setShowJalons]       = useState(true)
@@ -1486,6 +1528,16 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [newAttachLabel, setNewAttachLabel] = useState('')
     const [newAttachUrl,   setNewAttachUrl]   = useState('')
     const [showAttachForm, setShowAttachForm] = useState(false)
+    const [projectExpanses, setProjectExpanses] = useState<Expanse[]>([])
+    const [allExpanses, setAllExpanses] = useState<Expanse[]>([])
+    const [expanseSuppliers, setExpanseSuppliers] = useState<Supplier[]>([])
+    const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([])
+    const [budgetDetails, setBudgetDetails] = useState<BudgetDetail[]>([])
+    const [showLinkAgreement, setShowLinkAgreement] = useState(false)
+    const [allAgreementsForLink, setAllAgreementsForLink] = useState<AgreementFull[]>([])
+    const [loadingLinkAgreements, setLoadingLinkAgreements] = useState(false)
+    const [showLinkExpanse, setShowLinkExpanse] = useState(false)
+
 
     useEffect(() => {
         if (!open || !project) return
@@ -1517,8 +1569,12 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
             getFormationsByProject(project.id),
             getProjectFormationLinks(project.id),
             getProjectAttachments(project.id),
+            getExpanses(),
+            getSupliers(),
+            getBudgetCategories(),
+            getBudgetDetails(),
         ])
-            .then(([agreements, members, kpis, kpiEntries, pp, ms, acs, formations, formationLinks, attachments]) => {
+            .then(([agreements, members, kpis, kpiEntries, pp, ms, acs, formations, formationLinks, attachments, expanses, suppliers, cats, details]) => {
                 setAgreements(agreements as AgreementFull[])
                 setProjectMembers(members)
                 setKpis(kpis)
@@ -1533,6 +1589,12 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                 setFormations(formations as Formation[])
                 setFormationLinks(formationLinks as ProjectFormation[])
                 setAttachments(attachments as ProjectAttachment[])
+                const allExp = expanses as Expanse[]
+                setAllExpanses(allExp)
+                setProjectExpanses(allExp.filter(e => e.project_id === project.id))
+                setExpanseSuppliers(suppliers as Supplier[])
+                setBudgetCategories(cats as BudgetCategory[])
+                setBudgetDetails(details as BudgetDetail[])
             })
             .finally(() => setLoading(false))
     }, [open, project?.id ?? 0])
@@ -1665,6 +1727,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
 
     const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
     const totalGrant  = agreements.reduce((s, a) => s + a.grant, 0)
+    const totalExpanses = projectExpanses.reduce((s, e) => s + e.amount, 0)
+    
 
     return (
         <>
@@ -1783,19 +1847,54 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     <span className="w-32 shrink-0 text-xs text-muted-foreground">Axe</span>
                                     <span>{project.projectCall.axis.name}</span>
                                 </div>
-                                {project.budget > 0 && (
-                                    <div className="flex items-center gap-2">
-                                        <span className="w-32 shrink-0 text-xs text-muted-foreground">Budget total</span>
-                                        <span>{fmt(project.budget)}</span>
-                                    </div>
-                                )}
-                                {totalGrant > 0 && (
-                                    <div className="flex items-center gap-2">
-                                        <span className="w-32 shrink-0 text-xs text-muted-foreground">Subvention</span>
-                                        <span>{fmt(totalGrant)}</span>
-                                    </div>
-                                )}
-                                {(() => {
+                                {project.budget > 0 && (() => {
+                                    const reste = Math.max(0, project.budget - totalGrant - totalExpanses)
+                                    const pct = (v: number) => project.budget > 0 ? Math.round(v / project.budget * 100) : 0
+                                    return (
+                                        <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
+                                            <div className="flex items-baseline justify-between">
+                                                <span className="text-xs text-muted-foreground font-medium">Budget</span>
+                                                <span className="text-sm font-semibold">{fmt(project.budget)}</span>
+                                            </div>
+                                            <div className="flex h-2 w-full rounded-full overflow-hidden gap-px">
+                                                {totalGrant > 0 && <div className="h-full rounded-l-full" style={{ width: `${pct(totalGrant)}%`, backgroundColor: '#3b82f6' }} />}
+                                                {totalExpanses > 0 && <div className="h-full" style={{ width: `${pct(totalExpanses)}%`, backgroundColor: '#8b5cf6' }} />}
+                                                {reste > 0 && <div className="h-full flex-1 rounded-r-full bg-border" />}
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                {totalGrant > 0 && (
+                                                    <div className="flex items-center justify-between text-xs">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#3b82f6' }} />
+                                                            <span className="text-muted-foreground">Subventions allouées</span>
+                                                        </div>
+                                                        <span className="tabular-nums">{fmt(totalGrant)} <span className="text-muted-foreground">({pct(totalGrant)} %)</span></span>
+                                                    </div>
+                                                )}
+                                                {totalExpanses > 0 && (
+                                                    <div className="flex items-center justify-between text-xs">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#8b5cf6' }} />
+                                                            <span className="text-muted-foreground">Dépenses engagées</span>
+                                                        </div>
+                                                        <span className="tabular-nums">{fmt(totalExpanses)} <span className="text-muted-foreground">({pct(totalExpanses)} %)</span></span>
+                                                    </div>
+                                                )}
+                                                {reste > 0 && (
+                                                    <div className="flex items-center justify-between text-xs">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="w-2 h-2 rounded-full shrink-0 bg-border" />
+                                                            <span className="text-muted-foreground">Non alloué</span>
+                                                        </div>
+                                                        <span className="tabular-nums text-muted-foreground">{fmt(reste)} ({pct(reste)} %)</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )
+                                })()}
+                                
+                                {/* {(() => {
                                     const cofinancement = projectPartners
                                         .filter(pp => pp.amount !== null)
                                         .reduce((s, pp) => s + (pp.amount ?? 0), 0)
@@ -1824,7 +1923,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                             )}
                                         </>
                                     )
-                                })()}
+                                })()} */}
                                 {(() => {
                                     const progress = projectProgress(project.start_date, project.end_date)
                                     if (progress === null) return null
@@ -2045,10 +2144,27 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     {showConventions ? <Eye size={12} /> : <EyeClosed size={12} />}
                                 </Button>
                             </div>
-                            {showConventions && !showAddForm && !editingAgreement && (
-                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddForm(true)}>
-                                    <Plus size={11} />Ajouter
-                                </Button>
+                            {showConventions && !showAddForm && !showLinkAgreement && !editingAgreement && (
+                                <div className="flex items-center gap-1">
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddForm(true)}>
+                                        <Plus size={11} />Nouvelle
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md text-muted-foreground" onClick={async () => {
+                                        setShowLinkAgreement(true)
+                                        if (allAgreementsForLink.length === 0) {
+                                            setLoadingLinkAgreements(true)
+                                            const all = await getFinancialAgreements()
+                                            const partnerMap = new Map(partners.map(p => [p.id, p]))
+                                            setAllAgreementsForLink((all as FinancialAgreement[])
+                                                .filter(a => a.project_id !== project.id)
+                                                .map(a => ({ ...a, partner: partnerMap.get(a.partner_id) ?? { id: 0, name: '?', description: '', color: '', logo: '', status_id: 0, type: '', consortium: false } }))
+                                            )
+                                            setLoadingLinkAgreements(false)
+                                        }
+                                    }}>
+                                        Rattacher
+                                    </Button>
+                                </div>
                             )}
                         </div>
 
@@ -2067,6 +2183,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                             axes={axes}
                                             projectId={project.id}
                                             initial={a}
+                                            budgetCategories={budgetCategories}
+                                            budgetDetails={budgetDetails}
                                             onSaved={handleAgreementSaved}
                                             onCancel={() => setEditingAgreement(null)}
                                         />
@@ -2089,12 +2207,39 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         statuses={statuses}
                                         axes={axes}
                                         projectId={project.id}
-                                        onSaved={handleAgreementSaved}
+                                        budgetCategories={budgetCategories}
+                                        budgetDetails={budgetDetails}
+                                        onSaved={a => { handleAgreementSaved(a); setShowAddForm(false) }}
                                         onCancel={() => setShowAddForm(false)}
                                     />
                                 )}
 
-                                {agreements.length === 0 && !showAddForm && (
+                                {showLinkAgreement && (
+                                    <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
+                                        <p className="text-xs font-medium">Rattacher une convention existante</p>
+                                        {loadingLinkAgreements
+                                            ? <p className="text-xs text-muted-foreground">Chargement…</p>
+                                            : <SearchInput
+                                                data={allAgreementsForLink}
+                                                onSelect={async a => {
+                                                    await updateAgreement(a.id, { project_id: project.id })
+                                                    setAgreements(prev => [...prev, { ...a, project_id: project.id }])
+                                                    onAgreementAdded({ ...a, project_id: project.id })
+                                                    setAllAgreementsForLink(prev => prev.filter(x => x.id !== a.id))
+                                                    setShowLinkAgreement(false)
+                                                }}
+                                                getLabel={a => a.title}
+                                                placeholder="Rechercher une convention…"
+                                                groupBy={a => ({ primary: a.partner.name })}
+                                            />
+                                        }
+                                        <div className="flex justify-end">
+                                            <Button variant="outline" size="sm" className="h-6 text-xs rounded-md" onClick={() => setShowLinkAgreement(false)}>Annuler</Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {agreements.length === 0 && !showAddForm && !showLinkAgreement && (
                                     <p className="text-xs text-muted-foreground italic">Aucune convention</p>
                                 )}
                             </div>
@@ -2119,6 +2264,125 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     </section>
 
                     {!expanded && <Separator />}
+
+                    {/* Dépenses */}
+                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Dépenses</p>
+                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowExpanses(v => !v)}>
+                                    {showExpanses ? <Eye size={12} /> : <EyeClosed size={12} />}
+                                </Button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {showExpanses && projectExpanses.length > 0 && (
+                                    <span className="text-xs text-muted-foreground">{projectExpanses.length} dépense{projectExpanses.length > 1 ? 's' : ''}</span>
+                                )}
+                                {showExpanses && !showLinkExpanse && (
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md text-muted-foreground" onClick={() => setShowLinkExpanse(true)}>
+                                        Rattacher
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+
+                        {showExpanses && showLinkExpanse && (
+                            <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
+                                <p className="text-xs font-medium">Rattacher une dépense existante</p>
+                                <SearchInput
+                                    data={allExpanses.filter(e => e.project_id !== project.id)}
+                                    onSelect={async e => {
+                                        await updateExpanse(e.id, { project_id: project.id })
+                                        const linked = { ...e, project_id: project.id }
+                                        setProjectExpanses(prev => [...prev, linked])
+                                        setAllExpanses(prev => prev.map(x => x.id === e.id ? linked : x))
+                                        setShowLinkExpanse(false)
+                                    }}
+                                    getLabel={e => e.title}
+                                    placeholder="Rechercher une dépense…"
+                                    groupBy={e => ({ primary: e.type })}
+                                />
+                                <div className="flex justify-end">
+                                    <Button variant="outline" size="sm" className="h-6 text-xs rounded-md" onClick={() => setShowLinkExpanse(false)}>Annuler</Button>
+                                </div>
+                            </div>
+                        )}
+
+                        {showExpanses && (loading ? (
+                            <div className="flex flex-col gap-2">
+                                {[1, 2].map(i => <Skeleton key={i} className="h-8 w-full rounded-lg" />)}
+                            </div>
+                        ) : projectExpanses.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">Aucune dépense rattachée à ce projet</p>
+                        ) : (
+                            <>
+                                <div className="rounded-lg border overflow-hidden">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="text-xs bg-muted/50">
+                                                <TableHead className="h-7 text-xs">Intitulé</TableHead>
+                                                <TableHead className="h-7 text-xs w-32">Type</TableHead>
+                                                <TableHead className="h-7 text-xs w-28 text-right">Montant</TableHead>
+                                                <TableHead className="h-7 text-xs w-32">Fournisseur</TableHead>
+                                                <TableHead className="h-7 text-xs w-24">Statut</TableHead>
+                                                <TableHead className="h-7 text-xs w-24">Engagement</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {projectExpanses.map(e => {
+                                                const supplier = e.supplier_id ? expanseSuppliers.find(s => s.id === e.supplier_id) : null
+                                                const typeColors: Record<string, string> = {
+                                                    'Équipement': '#fef9c3', 'Personnel': '#dbeafe',
+                                                    'Mission/Déplacement': '#ffedd5', 'Autres dépenses externes': '#f3f4f6',
+                                                    'Prestation': '#ede9fe', 'Facturation interne': '#dcfce7',
+                                                }
+                                                const statusColors: Record<string, string> = {
+                                                    'Engagé': '#dbeafe', 'Livré': '#fef9c3', 'Payé': '#dcfce7',
+                                                }
+                                                return (
+                                                    <TableRow key={e.id} className="text-xs hover:bg-muted/30">
+                                                        <Tooltip>
+                                                            <TooltipTrigger>
+                                                                <TableCell className="font-medium truncate max-w-[180px]">{e.title}</TableCell>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                {e.title}
+                                                            </TooltipContent>
+
+                                                        </Tooltip>
+                                                        
+                                                        <TableCell>
+                                                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: typeColors[e.type] ?? '#f3f4f6' }}>
+                                                                {e.type}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className="text-right tabular-nums font-medium">{fmt(e.amount)}</TableCell>
+                                                        <TableCell className="text-muted-foreground truncate">{supplier?.name ?? '—'}</TableCell>
+                                                        <TableCell>
+                                                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: statusColors[e.status] ?? '#f3f4f6' }}>
+                                                                {e.status}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground tabular-nums">
+                                                            {e.purchase_date ? new Date(e.purchase_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                                <div className="flex gap-4 text-xs justify-end">
+                                    <span className="text-muted-foreground">Engagé <span className='text-[10px] text-gray-500'>(non payé)</span> · <span className="font-medium text-foreground">{fmt(projectExpanses.filter(e => e.status === 'Engagé' || e.status === 'Livré').reduce((s, e) => s + e.amount, 0))}</span></span>
+                                    <span className="text-muted-foreground">Payé · <span className="font-medium text-foreground">{fmt(projectExpanses.filter(e => e.status === 'Payé').reduce((s, e) => s + e.amount, 0))}</span></span>
+                                    <span className="text-muted-foreground">Total · <span className="font-medium text-foreground">{fmt(projectExpanses.reduce((s, e) => s + e.amount, 0))}</span></span>
+                                </div>
+                            </>
+                        ))}
+                    </section>
+
+                    {!expanded && <Separator />}
+
 
                     {/* Formations */}
                     <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
@@ -3208,8 +3472,9 @@ export default function Projects() {
     const [selectedProjects,         setSelectedProjects]         = useState<ProjectFull[]>([])
     const [confirmingDeleteProjects, setConfirmingDeleteProjects] = useState(false)
 
-    type ViewMode = 'cards' | 'table'
+    type ViewMode = 'cards' | 'table' | 'calendar'
     const [viewMode, setViewMode] = useState<ViewMode>('cards')
+    const [calendarDate, setCalendarDate] = useState(new Date())
 
     type SortKey = 'title' | 'call' | 'axis' | 'status' | 'budget' | 'start_date' | 'end_date'
     const [sortKey,  setSortKey]  = useState<SortKey>('title')
@@ -3366,20 +3631,24 @@ export default function Projects() {
             
             <div className="flex items-center gap-2 px-6 py-3 border-b  shrink-0">
                 <div className="bg-gray-200 rounded-full border p-1 flex relative">
-                    {(['cards', 'table'] as ViewMode[]).map(mode => (
+                    {([
+                        { mode: 'cards',    label: 'Cartes',    icon: <LayoutGrid size={13} /> },
+                        { mode: 'table',    label: 'Tableau',   icon: <Table2 size={13} /> },
+                        { mode: 'calendar', label: 'Calendrier',icon: <CalendarDays size={13} /> },
+                    ] as { mode: ViewMode; label: string; icon: React.ReactNode }[]).map(({ mode, label, icon }) => (
                         <button
                             key={mode}
                             onClick={() => handleViewMode(mode)}
-                            className={`relative px-4 py-1 rounded-full text-sm z-10 transition-colors duration-300 ${viewMode === mode ? 'text-white' : 'text-black'}`}
+                            className={`relative flex items-center gap-1.5 px-4 py-1 rounded-full text-sm z-10 transition-colors duration-300 ${viewMode === mode ? 'text-white' : 'text-black'}`}
                         >
-                            <span className="relative z-20">
-                                {mode === 'cards' ? 'Cartes' : 'Tableau'}
+                            <span className="relative z-20 flex items-center gap-1.5">
+                                {icon}{label}
                             </span>
                             {viewMode === mode && (
-                                <motion.div 
-                                layoutId="activeProjectTab"
-                                className="absolute inset-0 bg-black rounded-full z-10" 
-                                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                <motion.div
+                                    layoutId="activeProjectTab"
+                                    className="absolute inset-0 bg-black rounded-full z-10"
+                                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
                                 />
                             )}
                         </button>
@@ -3927,6 +4196,97 @@ export default function Projects() {
                                         </Button>
                                     </>
                                 )}
+                            </div>
+                        )}
+                    </div>
+                )
+            })()}
+
+            {/* Vue Calendrier */}
+            {viewMode === 'calendar' && (() => {
+                const statusMap = new Map(statuses.map(s => [s.id, s]))
+
+                const withDates = filteredProjects.filter(p => p.start_date && p.end_date)
+                const withoutDates = filteredProjects.filter(p => !p.start_date || !p.end_date)
+
+                type ProjectCalEvent = {
+                    id: number
+                    title: string
+                    start: Date
+                    end: Date
+                    resource: ProjectFull
+                }
+
+                const events: ProjectCalEvent[] = withDates.map(p => ({
+                    id: p.id,
+                    title: p.title,
+                    start: new Date(p.start_date),
+                    end: new Date(p.end_date),
+                    resource: p,
+                }))
+
+                return (
+                    <div className="flex-1 overflow-auto p-6 flex flex-col gap-4">
+                        {withoutDates.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                                {withoutDates.length} projet{withoutDates.length > 1 ? 's' : ''} sans date non affiché{withoutDates.length > 1 ? 's' : ''}
+                            </p>
+                        )}
+                        {loading ? (
+                            <div className="flex flex-col gap-3">
+                                <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+                                <div className="h-[700px] w-full bg-muted animate-pulse rounded" />
+                            </div>
+                        ) : (
+                            <div style={{ height: 820 }}>
+                                <BigCalendar
+                                    localizer={calendarLocalizer}
+                                    events={events}
+                                    defaultView="month"
+                                    views={['month']}
+                                    culture="fr"
+                                    date={calendarDate}
+                                    onNavigate={date => setCalendarDate(date)}
+                                    messages={{
+                                        today:           "Aujourd'hui",
+                                        previous:        'Précédent',
+                                        next:            'Suivant',
+                                        month:           'Mois',
+                                        week:            'Semaine',
+                                        day:             'Jour',
+                                        agenda:          'Agenda',
+                                        noEventsInRange: 'Aucun projet sur cette période.',
+                                        showMore:        (count: number) => `+${count} de plus`,
+                                    }}
+                                    formats={{
+                                        monthHeaderFormat: (date: Date) =>
+                                            date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+                                    }}
+                                    popup
+                                    startAccessor="start"
+                                    endAccessor="end"
+                                    onSelectEvent={event => {
+                                        setSelectedProject(event.resource as ProjectFull)
+                                        setDetailOpen(true)
+                                    }}
+                                    eventPropGetter={event => {
+                                        const p = event.resource as ProjectFull
+                                        const status = statusMap.get(p.status_id)
+                                        const bg = PROJECT_STATUS_COLORS[status?.label ?? ''] ?? '#e5e7eb'
+                                        return {
+                                            style: {
+                                                backgroundColor: bg,
+                                                borderColor:     bg,
+                                                color:           '#2d2d2d',
+                                                borderRadius:    '4px',
+                                                fontSize:        '11px',
+                                                padding:         '1px 4px',
+                                                lineHeight:      '1.3',
+                                                minHeight:       '16px',
+                                            },
+                                        }
+                                    }}
+                                />
                             </div>
                         )}
                     </div>

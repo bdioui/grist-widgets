@@ -18,6 +18,7 @@ type SearchInputProps<T extends { id: number }> = {
     placeholder?: string
     value?: string
     orderBy?: string
+    dropdownClassName?: string
 }
 
 export default function SearchInput<T extends { id: number }>({
@@ -30,6 +31,7 @@ export default function SearchInput<T extends { id: number }>({
     placeholder = 'Rechercher...',
     value,
     orderBy,
+    dropdownClassName,
 }: SearchInputProps<T>) {
     const [query,   setQuery]   = useState('')
     const [open,    setOpen]    = useState(false)
@@ -76,7 +78,7 @@ export default function SearchInput<T extends { id: number }>({
                 className="h-8 text-xs"
             />
             {open && sorted.length > 0 && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden">
+                <div className={`absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden${dropdownClassName ? ` ${dropdownClassName}` : ''}`}>
                     <ul className="max-h-60 overflow-y-auto py-1">
                         {sorted.map((item, i) => {
                             const meta = groupBy ? groupBy(item) : null

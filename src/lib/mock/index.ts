@@ -16,7 +16,9 @@ import type {
     Formation,
     ProjectFormation,
     ProjectAttachment,
-    Program
+    Program,
+    Supplier,
+    Expanse
 } from '@/lib/types'
 
 export const mockUser: User = {
@@ -242,21 +244,20 @@ export const mockProjects: Project[] = [
 ]
 
 export const mockFinancialAgreements: FinancialAgreement[] = [
-    { id: 1, project_id: 1, partner_id: 2, axis_id: 1, status_id: 16, title: 'Convention Entreprise A', description: 'Accord de co-financement formation', budget: 45000, grant: 30000, signed_date: '2024-03-01' },
-    { id: 2, project_id: 2, partner_id: 3, axis_id: 2, status_id: 15, title: 'Convention Association B', description: 'Accord de partenariat recherche', budget: 60000, grant: 50000, signed_date: '2024-06-15' },
-    { id: 3, project_id: 3, partner_id: 4, axis_id: 3, status_id: 15, title: 'Convention Institut Recherche', description: 'Accord de coopération internationale', budget: 30000, grant: 25000, signed_date: '2025-02-01' },
-    { id: 4, project_id: 4, partner_id: 6, axis_id: null, status_id: 14, title: 'Convention Fondation E', description: 'Subvention innovation et transfert', budget: 80000, grant: 70000, signed_date: '2025-07-01' },
-    { id: 5, project_id: 2, partner_id: 5, axis_id: 2, status_id: 15, title: 'Convention Collectivité D', description: 'Cofinancement recherche territoriale', budget: 20000, grant: 15000, signed_date: '2025-03-15' },
-    // Nouveaux projets
-    { id: 6, project_id: 5, partner_id: 1, axis_id: 2, status_id: 15, title: 'Convention Université X – Data Science', description: 'Financement recherche data science territoriale', budget: 50000, grant: 40000, signed_date: '2025-06-01' },
-    { id: 7, project_id: 5, partner_id: 5, axis_id: 2, status_id: 15, title: 'Convention Collectivité D – Data', description: 'Cofinancement analyse territoriale', budget: 30000, grant: 20000, signed_date: '2025-07-15' },
-    { id: 8, project_id: 6, partner_id: 3, axis_id: 1, status_id: 14, title: 'Convention Association B – Badges', description: 'Partenariat certification open badges', budget: 20000, grant: 15000, signed_date: '' },
-    { id: 9, project_id: 7, partner_id: 4, axis_id: 2, status_id: 15, title: 'Convention Institut – Biodiversité', description: 'Financement étude biodiversité urbaine', budget: 35000, grant: 28000, signed_date: '2024-04-01' },
-    { id: 10, project_id: 7, partner_id: 5, axis_id: 2, status_id: 15, title: 'Convention Collectivité D – Biodiversité', description: 'Apport collectivité pour cartographie', budget: 22000, grant: 18000, signed_date: '2024-05-01' },
-    { id: 11, project_id: 8, partner_id: 4, axis_id: 3, status_id: 14, title: 'Convention Institut – Coopération Sud', description: 'Convention coopération internationale non signée', budget: 30000, grant: 22000, signed_date: '' },
-    { id: 12, project_id: 10, partner_id: 2, axis_id: 4, status_id: 15, title: 'Convention Entreprise A – Smart Campus', description: 'Partenariat déploiement IoT campus', budget: 60000, grant: 45000, signed_date: '2024-10-01' },
-    { id: 13, project_id: 12, partner_id: 1, axis_id: 3, status_id: 15, title: 'Convention Université X – HorizonX', description: 'Subvention Horizon Europe', budget: 200000, grant: 180000, signed_date: '2025-09-15' },
-    { id: 14, project_id: 12, partner_id: 6, axis_id: 3, status_id: 14, title: 'Convention Fondation E – HorizonX', description: 'Cofinancement fondation non finalisé', budget: 80000, grant: 60000, signed_date: '' },
+    { id: 1,  project_id: 1,  partner_id: 2, axis_id: 1,    status_id: 16, title: "Convention Entreprise A",               description: "Accord de co-financement formation",              budget: 45000,  grant: 30000,  signed_date: "2024-03-01", budget_detail_id: 11 },
+    { id: 2,  project_id: 2,  partner_id: 3, axis_id: 2,    status_id: 15, title: "Convention Association B",              description: "Accord de partenariat recherche",                 budget: 60000,  grant: 50000,  signed_date: "2024-06-15", budget_detail_id: 15 },
+    { id: 3,  project_id: 3,  partner_id: 4, axis_id: 3,    status_id: 15, title: "Convention Institut Recherche",         description: "Accord de cooperation internationale",            budget: 30000,  grant: 25000,  signed_date: "2025-02-01", budget_detail_id: 15 },
+    { id: 4,  project_id: 4,  partner_id: 6, axis_id: null, status_id: 14, title: "Convention Fondation E",                description: "Subvention innovation et transfert",              budget: 80000,  grant: 70000,  signed_date: "2025-07-01", budget_detail_id: 9  },
+    { id: 5,  project_id: 2,  partner_id: 5, axis_id: 2,    status_id: 15, title: "Convention Collectivite D",             description: "Cofinancement recherche territoriale",            budget: 20000,  grant: 15000,  signed_date: "2025-03-15", budget_detail_id: 14 },
+    { id: 6,  project_id: 5,  partner_id: 1, axis_id: 2,    status_id: 15, title: "Convention Universite X - Data",        description: "Financement recherche data science territoriale", budget: 50000,  grant: 40000,  signed_date: "2025-06-01", budget_detail_id: 15 },
+    { id: 7,  project_id: 5,  partner_id: 5, axis_id: 2,    status_id: 15, title: "Convention Collectivite D - Data",      description: "Reversement collectivite analyse territoriale",   budget: 30000,  grant: 20000,  signed_date: "2025-07-15", budget_detail_id: null },
+    { id: 8,  project_id: 6,  partner_id: 3, axis_id: 1,    status_id: 14, title: "Convention Association B - Badges",     description: "Partenariat certification open badges",           budget: 20000,  grant: 15000,  signed_date: "",           budget_detail_id: 11 },
+    { id: 9,  project_id: 7,  partner_id: 4, axis_id: 2,    status_id: 15, title: "Convention Institut - Biodiversite",    description: "Financement etude biodiversite urbaine",          budget: 35000,  grant: 28000,  signed_date: "2024-04-01", budget_detail_id: 15 },
+    { id: 10, project_id: 7,  partner_id: 5, axis_id: 2,    status_id: 15, title: "Convention Collectivite D - Bio",       description: "Reversement collectivite cartographie",           budget: 22000,  grant: 18000,  signed_date: "2024-05-01", budget_detail_id: null },
+    { id: 11, project_id: 8,  partner_id: 4, axis_id: 3,    status_id: 14, title: "Convention Institut - Cooperation Sud", description: "Convention cooperation internationale non signee", budget: 30000,  grant: 22000,  signed_date: "",           budget_detail_id: 15 },
+    { id: 12, project_id: 10, partner_id: 2, axis_id: 4,    status_id: 15, title: "Convention Entreprise A - Smart Campus",description: "Partenariat deploiement IoT campus",              budget: 60000,  grant: 45000,  signed_date: "2024-10-01", budget_detail_id: 13 },
+    { id: 13, project_id: 12, partner_id: 1, axis_id: 3,    status_id: 15, title: "Convention Universite X - HorizonX",    description: "Subvention Horizon Europe",                       budget: 200000, grant: 180000, signed_date: "2025-09-15", budget_detail_id: 9  },
+    { id: 14, project_id: 12, partner_id: 6, axis_id: 3,    status_id: 14, title: "Convention Fondation E - HorizonX",     description: "Reversement fondation non finalise",              budget: 80000,  grant: 60000,  signed_date: "",           budget_detail_id: null },
 ]
 
 export const mockPhds: Phd[] = [
@@ -301,21 +302,33 @@ export const mockKpiEntries: KpiEntry[] = [
 ]
 
 export const mockBudgetCategories: BudgetCategory[] = [
-    { id: 1, partner_id: null, title: 'Personnel' },
-    { id: 2, partner_id: null, title: 'Équipement' },
-    { id: 3, partner_id: null, title: 'Missions' },
-    { id: 4, partner_id: null, title: 'Autres dépenses' },
-    { id: 5, partner_id: 2, title: 'R&D Entreprise A' },
-    { id: 6, partner_id: 4, title: 'Frais Institut' },
+    { id: 1, partner_id: null, title: "Personnel" },
+    { id: 2, partner_id: null, title: "Equipement" },
+    { id: 3, partner_id: null, title: "Fonctionnement" },
 ]
 
 export const mockBudgetDetails: BudgetDetail[] = [
-    { id: 1, budget_category_id: 1, title: 'Post-doctorants', description: 'Salaires post-docs', budget: 60000 },
-    { id: 2, budget_category_id: 1, title: 'Ingénieurs', description: 'Salaires ingénieurs', budget: 40000 },
-    { id: 3, budget_category_id: 3, title: 'Déplacements', description: 'Frais de mission nationaux', budget: 15000 },
-    { id: 4, budget_category_id: 3, title: 'Mobilités inter', description: 'Frais de mobilité internationale', budget: 25000 },
-    { id: 5, budget_category_id: 2, title: 'Matériel labo', description: 'Équipements de laboratoire', budget: 18000 },
-    { id: 6, budget_category_id: 5, title: 'Développement', description: 'Coûts R&D partenaire', budget: 30000 },
+    // ── Groupes parents (pas de budget ni de dates propres) ──
+    { id: 1, budget_category_id: 1, parent_id: null, title: "Postdoctorants",          description: "",                                               budget: 0, start_date: null,         end_date: null         },
+    { id: 2, budget_category_id: 1, parent_id: null, title: "Ingenieurs de recherche", description: "",                                               budget: 0, start_date: null,         end_date: null         },
+    { id: 3, budget_category_id: 1, parent_id: null, title: "Formation",               description: "",                                               budget: 0, start_date: null,         end_date: null         },
+    { id: 4, budget_category_id: 2, parent_id: null, title: "Materiel informatique",   description: "",                                               budget: 0, start_date: null,         end_date: null         },
+    { id: 5, budget_category_id: 2, parent_id: null, title: "Equipement electronique", description: "",                                               budget: 0, start_date: null,         end_date: null         },
+    { id: 6, budget_category_id: 3, parent_id: null, title: "Missions",                description: "",                                               budget: 0, start_date: null,         end_date: null         },
+    { id: 7, budget_category_id: 3, parent_id: null, title: "Prestations externes",    description: "",                                               budget: 0, start_date: null,         end_date: null         },
+    { id: 8, budget_category_id: 3, parent_id: null, title: "Facturation interne",     description: "",                                               budget: 0, start_date: null,         end_date: null         },
+    // ── Lignes enfants (portent budget + période) ──
+    { id: 9,  budget_category_id: 1, parent_id: 1, title: "Contrat postdoc - traitement du signal",      description: "Postdoctorant en IA embarquee",             budget: 187000, start_date: "2023-03-01", end_date: "2025-12-31" },
+    { id: 10, budget_category_id: 1, parent_id: 2, title: "Ingenieur de recherche logiciel embarque",    description: "Developpement firmware et middleware",       budget: 140000, start_date: "2023-03-01", end_date: "2025-06-30" },
+    { id: 11, budget_category_id: 1, parent_id: 3, title: "Formations certifiantes",                     description: "Formations et accompagnement divers",        budget: 30000,  start_date: null,         end_date: null         },
+    { id: 12, budget_category_id: 2, parent_id: 4, title: "Serveurs et stations de travail",             description: "HPC, GPU, NAS et postes de travail",         budget: 90000,  start_date: "2023-03-01", end_date: "2024-12-31" },
+    { id: 13, budget_category_id: 2, parent_id: 5, title: "Cartes de developpement et composants",       description: "FPGA, microcontroleurs, capteurs",            budget: 45000,  start_date: "2023-05-01", end_date: "2025-12-31" },
+    { id: 14, budget_category_id: 3, parent_id: 6, title: "Deplacements conferences",                    description: "Frais de deplacement et hebergement",        budget: 25000,  start_date: null,         end_date: null         },
+    { id: 15, budget_category_id: 3, parent_id: 7, title: "Developpement plateforme IoT",                description: "Sprint de developpement logiciel embarque",   budget: 65000,  start_date: "2023-11-01", end_date: "2026-02-28" },
+    { id: 16, budget_category_id: 3, parent_id: 7, title: "Valorisation et transfert technologique",     description: "Brevet et licences technologiques",           budget: 12000,  start_date: "2024-07-01", end_date: "2024-09-30" },
+    { id: 17, budget_category_id: 3, parent_id: 7, title: "Conseil et audit innovation",                 description: "Prestations de conseil strategique",         budget: 15000,  start_date: "2023-10-01", end_date: "2023-11-30" },
+    { id: 18, budget_category_id: 3, parent_id: 7, title: "Licences logicielles",                        description: "Logiciels de simulation et de CAO",          budget: 12000,  start_date: null,         end_date: null         },
+    { id: 19, budget_category_id: 3, parent_id: 8, title: "Facturation LIRMM mutualisee",                description: "Utilisation equipements et plateformes",      budget: 20000,  start_date: null,         end_date: null         },
 ]
 
 export const mockToDoLists: ToDoList[] = [
@@ -610,5 +623,61 @@ export const mockProjectAttachments: ProjectAttachment[] = [
 ]
 
 export const mockProgram: Program[] = [
-    { id: 1, name: "Iris-E", budget: 20000000, start_date: "2023-01-01", end_date: "2032-12-31", description: "", logo: "" }
+    { id: 1, name: "Iris-E", budget: 20000000, start_date: "2023-01-01", end_date: "2032-12-31", description: "", logo: "", management_fee_rate: 8 }
+]
+
+export const mockSuppliers: Supplier[] = [
+    { id: 1, name: "Dell Technologies France", description: "Materiel informatique professionnel", siret: "34213797800085" },
+    { id: 2, name: "Nvidia Corporation", description: "GPU et solutions HPC", siret: "00000000000000" },
+    { id: 3, name: "Arrow Electronics", description: "Composants electroniques et distribution", siret: "30178873000019" },
+    { id: 4, name: "Altair Engineering", description: "Logiciels de simulation", siret: "38319462200041" },
+    { id: 5, name: "Thales Training", description: "Formations techniques avancees", siret: "32258800800021" },
+    { id: 6, name: "SNCF Voyageurs", description: "Transport ferroviaire", siret: "51940670700021" },
+    { id: 7, name: "Air France", description: "Transport aerien", siret: "42004016400642" },
+    { id: 8, name: "Booking Holdings", description: "Reservations hoteliers", siret: "00000000000002" },
+    { id: 9, name: "Optika Conseil", description: "Prestations de conseil en innovation", siret: "82345678900013" },
+    { id: 10, name: "Pytheas Informatique", description: "Developpement logiciel sur mesure", siret: "78234567800024" },
+    { id: 11, name: "CEA Tech Transfert", description: "Valorisation et transfert technologique", siret: "77568979800034" },
+    { id: 12, name: "Atos SE", description: "Infrastructure IT et cloud", siret: "32348625600059" },
+    { id: 13, name: "Bertin Technologies", description: "Instrumentation scientifique", siret: "38190032200072" },
+    { id: 14, name: "CNRS Formation Entreprises", description: "Formations scientifiques et techniques", siret: "18000001100019" },
+    { id: 15, name: "Expensya SAS", description: "Gestion des notes de frais", siret: "81234567900015" },
+]
+
+export const mockExpanses: Expanse[] = [
+    { id: 1,  title: "Achat serveur HP ProLiant",            description: "Serveur rack pour calcul HPC",                   amount: 18500, type: "Immobilisation", budget_detail_id: 12, supplier_id: 1,    project_id: 1,    purchase_date: "2023-03-15", delivery_date: "2023-04-02", payment_date: "2023-04-30", status: "Payé"    },
+    { id: 2,  title: "GPU Nvidia A100",                      description: "Accelerateur GPU pour apprentissage profond",     amount: 22000, type: "Immobilisation", budget_detail_id: 12, supplier_id: 2,    project_id: 1,    purchase_date: "2023-04-10", delivery_date: "2023-05-20", payment_date: "2023-06-15", status: "Payé"    },
+    { id: 3,  title: "Kit de developpement FPGA",            description: "Cartes FPGA Xilinx Alveo U250",                  amount: 8400,  type: "Materiel",       budget_detail_id: 13, supplier_id: 3,    project_id: 1,    purchase_date: "2023-05-05", delivery_date: "2023-05-28", payment_date: "2023-06-20", status: "Payé"    },
+    { id: 4,  title: "Licence Altair HyperWorks",            description: "Suite logicielle simulation CAO",                amount: 12000, type: "Logiciel",       budget_detail_id: 18, supplier_id: 4,    project_id: 2,    purchase_date: "2023-06-01", delivery_date: "2023-06-01", payment_date: "2023-07-01", status: "Payé"    },
+    { id: 5,  title: "Formation IA embarquee",               description: "Formation de 3 jours certifiante",               amount: 4500,  type: "Formation",      budget_detail_id: 11, supplier_id: 5,    project_id: 1,    purchase_date: "2023-07-10", delivery_date: "2023-07-12", payment_date: "2023-08-01", status: "Payé"    },
+    { id: 6,  title: "Mission conference ICCV",              description: "Deplacement Paris - Los Angeles",                amount: 2800,  type: "Mission",        budget_detail_id: 14, supplier_id: 7,    project_id: 1,    purchase_date: "2023-09-20", delivery_date: "2023-09-25", payment_date: "2023-10-10", status: "Payé"    },
+    { id: 7,  title: "Hotel conference ICCV",                description: "4 nuits Los Angeles",                            amount: 1200,  type: "Mission",        budget_detail_id: 14, supplier_id: 8,    project_id: 1,    purchase_date: "2023-09-20", delivery_date: "2023-09-25", payment_date: "2023-10-10", status: "Payé"    },
+    { id: 8,  title: "Contrat postdoc T1 2023",              description: "Salaire et charges postdoctorant",               amount: 30000, type: "Personnel",      budget_detail_id: 9,  supplier_id: null, project_id: 1,    purchase_date: "2023-03-01", delivery_date: "2023-06-30", payment_date: "2023-06-30", status: "Payé"    },
+    { id: 9,  title: "Contrat postdoc T2 2023",              description: "Salaire et charges postdoctorant",               amount: 30000, type: "Personnel",      budget_detail_id: 9,  supplier_id: null, project_id: 1,    purchase_date: "2023-07-01", delivery_date: "2023-09-30", payment_date: "2023-09-30", status: "Payé"    },
+    { id: 10, title: "Contrat ingenieur T1 2023",            description: "Salaire et charges ingenieur de recherche",      amount: 22500, type: "Personnel",      budget_detail_id: 10, supplier_id: null, project_id: 1,    purchase_date: "2023-03-01", delivery_date: "2023-06-30", payment_date: "2023-06-30", status: "Payé"    },
+    { id: 11, title: "Contrat ingenieur T2 2023",            description: "Salaire et charges ingenieur de recherche",      amount: 22500, type: "Personnel",      budget_detail_id: 10, supplier_id: null, project_id: 1,    purchase_date: "2023-07-01", delivery_date: "2023-09-30", payment_date: "2023-09-30", status: "Payé"    },
+    { id: 12, title: "Prestations Optika Conseil",           description: "Audit et conseil innovation 10 jours",           amount: 15000, type: "Prestation",     budget_detail_id: 17, supplier_id: 9,    project_id: 2,    purchase_date: "2023-10-01", delivery_date: "2023-11-15", payment_date: "2023-12-01", status: "Payé"    },
+    { id: 13, title: "Developpement plateforme IoT Sprint 1-2", description: "Sprint 1 et 2 developpement logiciel",        amount: 18000, type: "Prestation",     budget_detail_id: 15, supplier_id: 10,   project_id: 2,    purchase_date: "2023-11-01", delivery_date: "2023-12-31", payment_date: "2024-01-15", status: "Payé"    },
+    { id: 14, title: "Facturation interne LIRMM T4 2023",    description: "Utilisation equipements mutualisees T4 2023",   amount: 5000,  type: "Interne",        budget_detail_id: 19, supplier_id: null, project_id: 1,    purchase_date: "2023-12-01", delivery_date: "2023-12-31", payment_date: "2024-01-31", status: "Payé"    },
+    { id: 15, title: "Stations de travail HP Z4",            description: "3 stations de travail haute performance",        amount: 9600,  type: "Immobilisation", budget_detail_id: 12, supplier_id: 1,    project_id: 2,    purchase_date: "2024-01-15", delivery_date: "2024-02-10", payment_date: "2024-03-01", status: "Payé"    },
+    { id: 16, title: "Composants microcontroleurs",          description: "Lot de 500 microcontroleurs STM32",              amount: 3200,  type: "Materiel",       budget_detail_id: 13, supplier_id: 3,    project_id: 2,    purchase_date: "2024-02-05", delivery_date: "2024-02-25", payment_date: "2024-03-15", status: "Payé"    },
+    { id: 17, title: "Contrat postdoc T1 2024",              description: "Salaire et charges postdoctorant",               amount: 31500, type: "Personnel",      budget_detail_id: 9,  supplier_id: null, project_id: 1,    purchase_date: "2024-01-01", delivery_date: "2024-06-30", payment_date: "2024-06-30", status: "Payé"    },
+    { id: 18, title: "Contrat ingenieur T1 2024",            description: "Salaire et charges ingenieur de recherche",      amount: 23500, type: "Personnel",      budget_detail_id: 10, supplier_id: null, project_id: 1,    purchase_date: "2024-01-01", delivery_date: "2024-06-30", payment_date: "2024-06-30", status: "Payé"    },
+    { id: 19, title: "Mission ICASSP 2024",                  description: "Deplacement conference traitement signal",        amount: 3200,  type: "Mission",        budget_detail_id: 14, supplier_id: 6,    project_id: 1,    purchase_date: "2024-04-10", delivery_date: "2024-04-15", payment_date: "2024-05-01", status: "Payé"    },
+    { id: 20, title: "Formation deep learning Thales",       description: "Formation avancee 5 jours",                      amount: 6000,  type: "Formation",      budget_detail_id: 11, supplier_id: 5,    project_id: 1,    purchase_date: "2024-05-20", delivery_date: "2024-05-24", payment_date: "2024-06-10", status: "Payé"    },
+    { id: 21, title: "Serveur stockage NAS",                 description: "NAS 200 To pour donnees de recherche",           amount: 14000, type: "Immobilisation", budget_detail_id: 12, supplier_id: 12,   project_id: 1,    purchase_date: "2024-06-01", delivery_date: "2024-07-15", payment_date: "2024-08-01", status: "Payé"    },
+    { id: 22, title: "Developpement plateforme IoT Sprint 3-4", description: "Developpement et integration",                amount: 20000, type: "Prestation",     budget_detail_id: 15, supplier_id: 10,   project_id: 2,    purchase_date: "2024-03-01", delivery_date: "2024-06-30", payment_date: "2024-07-15", status: "Payé"    },
+    { id: 23, title: "Transfert technologique CEA",          description: "Valorisation et transfert brevet",               amount: 12000, type: "Prestation",     budget_detail_id: 16, supplier_id: 11,   project_id: 3,    purchase_date: "2024-07-01", delivery_date: "2024-09-30", payment_date: "2024-10-15", status: "Payé"    },
+    { id: 24, title: "Contrat postdoc T2 2024",              description: "Salaire et charges postdoctorant",               amount: 31500, type: "Personnel",      budget_detail_id: 9,  supplier_id: null, project_id: 1,    purchase_date: "2024-07-01", delivery_date: "2024-12-31", payment_date: "2024-12-31", status: "Payé"    },
+    { id: 25, title: "Contrat ingenieur T2 2024",            description: "Salaire et charges ingenieur de recherche",      amount: 23500, type: "Personnel",      budget_detail_id: 10, supplier_id: null, project_id: 1,    purchase_date: "2024-07-01", delivery_date: "2024-12-31", payment_date: "2024-12-31", status: "Payé"    },
+    { id: 26, title: "Capteurs et instrumentation",          description: "Capteurs IoT industriels Bertin",                amount: 7500,  type: "Materiel",       budget_detail_id: 13, supplier_id: 13,   project_id: 2,    purchase_date: "2024-09-10", delivery_date: "2024-10-05", payment_date: "2024-11-01", status: "Payé"    },
+    { id: 27, title: "Facturation interne LIRMM T3-T4 2024",description: "Utilisation equipements et plateformes",         amount: 6000,  type: "Interne",        budget_detail_id: 19, supplier_id: null, project_id: 1,    purchase_date: "2024-10-01", delivery_date: "2024-12-31", payment_date: "2025-01-31", status: "Payé"    },
+    { id: 28, title: "Formation gestion de projet",          description: "Formation PMP 2 jours CNRS",                    amount: 3500,  type: "Formation",      budget_detail_id: 11, supplier_id: 14,   project_id: null, purchase_date: "2025-01-15", delivery_date: "2025-01-16", payment_date: "2025-02-01", status: "Payé"    },
+    { id: 29, title: "Contrat postdoc 2025 S1",              description: "Salaire et charges postdoctorant",               amount: 32000, type: "Personnel",      budget_detail_id: 9,  supplier_id: null, project_id: 1,    purchase_date: "2025-01-01", delivery_date: "2025-06-30", payment_date: "2025-06-30", status: "Payé"    },
+    { id: 30, title: "Contrat ingenieur 2025 S1",            description: "Salaire et charges ingenieur de recherche",      amount: 24000, type: "Personnel",      budget_detail_id: 10, supplier_id: null, project_id: 1,    purchase_date: "2025-01-01", delivery_date: "2025-06-30", payment_date: "2025-06-30", status: "Payé"    },
+    { id: 31, title: "Infrastructure cloud Atos",            description: "Abonnement cloud HPC 6 mois",                   amount: 9000,  type: "Prestation",     budget_detail_id: 15, supplier_id: 12,   project_id: 1,    purchase_date: "2025-01-01", delivery_date: "2025-06-30", payment_date: "2025-07-15", status: "Payé"    },
+    { id: 32, title: "Mission ECCV 2025",                    description: "Deplacement conference vision par ordinateur",   amount: 2600,  type: "Mission",        budget_detail_id: 14, supplier_id: 7,    project_id: 1,    purchase_date: "2025-09-01", delivery_date: "2025-09-05", payment_date: "2025-09-20", status: "Payé"    },
+    { id: 33, title: "Contrat postdoc 2025 S2",              description: "Salaire et charges postdoctorant",               amount: 32000, type: "Personnel",      budget_detail_id: 9,  supplier_id: null, project_id: 1,    purchase_date: "2025-07-01", delivery_date: "2025-12-31", payment_date: "2025-12-31", status: "En cours" },
+    { id: 34, title: "Equipement laboratoire complementaire",description: "Oscilloscopes et analyseurs de spectre",         amount: 11000, type: "Materiel",       budget_detail_id: 13, supplier_id: 13,   project_id: 3,    purchase_date: "2025-10-01", delivery_date: "2025-11-15", payment_date: "2025-12-01", status: "En cours" },
+    { id: 35, title: "Developpement plateforme IoT Sprint 5-6", description: "Finalisation et tests integration",           amount: 18000, type: "Prestation",     budget_detail_id: 15, supplier_id: 10,   project_id: 2,    purchase_date: "2025-11-01", delivery_date: "2026-02-28", payment_date: null as unknown as string, status: "En cours" },
 ]

@@ -21,6 +21,8 @@ import type {
     ProjectFormation,
     ProjectAttachment,
     Program,
+    Expanse,
+    Supplier,
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -29,6 +31,9 @@ function str(v: unknown): string { return typeof v === 'string' ? v : '' }
 function num(v: unknown): number { return typeof v === 'number' ? v : 0 }
 function nullable(v: unknown): number | null {
     return typeof v === 'number' && v !== 0 ? v : null
+}
+function nullableStr(v: unknown): string | null {
+    return typeof v === 'string' && v !== '' ? v : null
 }
 
 // --- Tables de référence (pas de jointure, nettoyage des types seulement) ---
@@ -262,6 +267,7 @@ export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): F
         budget: num(r.budget ?? r.Budget),
         grant: num(r.grant ?? r.Grant ?? r.Subvention ?? r.subvention),
         signed_date: str(r.signed_date),
+        budget_detail_id: nullable(r.budget_detail_id),
     }))
 }
 
@@ -325,9 +331,12 @@ export function normalizeBudgetDetails(rows: Record<string, unknown>[]): BudgetD
     return rows.map(r => ({
         id: num(r.id),
         budget_category_id: num(r.budget_category_id),
+        parent_id: nullable(r.parent_id),
         title: str(r.title),
         description: str(r.description),
         budget: num(r.budget),
+        start_date: nullableStr(r.start_date),
+        end_date: nullableStr(r.end_date),
     }))
 }
 
@@ -513,6 +522,37 @@ export function normalizeProgram(rows: Record<string, unknown>[]): Program[] {
         budget: num(r.bdget),
         start_date: str(r.start_date),
         end_date: str(r.end_date),
-        logo: str(r.logo)
+        logo: str(r.logo),
+        management_fee_rate: nullable(r.management_fee_rate),
+    }))
+}
+
+// Budget & expanses
+
+export function normalizeSuplier(rows: Record<string, unknown>[]): Supplier[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        name: str(r.name),
+        description: str(r.description),
+        siret: str(r.description)
+    })
+    )
+}
+
+
+export function normalizeExpanse(rows: Record<string, unknown>[]): Expanse[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        amount: num(r.amount),
+        title: str(r.title),
+        description: str(r.description),
+        budget_detail_id: nullable(r.budget_detail_id),
+        supplier_id: nullable(r.supplier_id),
+        type: str(r.type),
+        project_id: num(r.project_id),
+        payment_date: str(r.payment_date),
+        purchase_date: str(r.purchase_date),
+        delivery_date: str(r.delivery_date),
+        status: str(r.status)
     }))
 }

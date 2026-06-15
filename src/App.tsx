@@ -4,6 +4,7 @@ import Partners from './views/Partners'
 import Members from './views/Members'
 import Projects from './views/Projects'
 import Actions from './views/Actions'
+import Finance from './views/Finance'
 import { motion } from "framer-motion"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Button } from "@/components/ui/button"
@@ -148,7 +149,7 @@ export default function App() {
         </div>
 
         <div className="bg-gray-200 rounded-full border p-1 flex relative">
-          {['dashboard', 'actions', 'projets', 'partenaires', 'contacts'].map((view) => (
+          {['dashboard', 'actions', 'projets', 'partenaires', 'contacts', 'finance'].map((view) => (
             <button
               key={view}
               onClick={() => setCurrentView(view)}
@@ -175,6 +176,7 @@ export default function App() {
         {currentView === "projets" && <Projects key={refreshKey} />}
         {currentView === "partenaires" && <Partners key={refreshKey} />}
         {currentView === "contacts" && <Members key={refreshKey} />}
+        {currentView === "finance" && <Finance key={refreshKey} />}
       </main>
 
       <ExportModal open={showExport} onClose={() => setShowExport(false)} />

@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
-import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Trash, CopyIcon, Copy, ShareIcon, CheckIcon, ListChecks, FileDown } from 'lucide-react'
+import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Trash, CopyIcon, Copy, ShareIcon, CheckIcon, ListChecks, FileDown, Building2 } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -1467,20 +1467,23 @@ export default function Partners() {
             <div className="flex items-center gap-3 flex-wrap">
                 {/* Toggle partenaires / laboratoires */}
                 <div className="bg-gray-200 rounded-full border p-1 flex relative">
-                    {(['partners', 'labs'] as ViewMode[]).map(mode => (
+                    {([
+                        { mode: 'partners',    label: 'Partenaires',    icon: <FlaskConical size={13} /> },
+                        { mode: 'labs',    label: 'Laboratoires',   icon: <Building2 size={13} /> },
+                    ] as { mode: ViewMode; label: string; icon: React.ReactNode }[]).map(({ mode, label, icon }) => (
                         <button
                             key={mode}
                             onClick={() => handleViewMode(mode)}
-                            className={`relative px-4 py-1 rounded-full text-sm z-10 transition-colors duration-300 ${viewMode === mode ? 'text-white' : 'text-black'}`}
+                            className={`relative flex items-center gap-1.5 px-4 py-1 rounded-full text-sm z-10 transition-colors duration-300 ${viewMode === mode ? 'text-white' : 'text-black'}`}
                         >
-                            <span className="relative z-20">
-                                {mode === 'partners' ? 'Partenaires' : 'Laboratoires'}
+                            <span className="relative z-20 flex items-center gap-1.5">
+                                {icon}{label}
                             </span>
                             {viewMode === mode && (
-                                <motion.div 
-                                layoutId="activeUnderTab"
-                                className="absolute inset-0 bg-black rounded-full z-10" 
-                                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                <motion.div
+                                    layoutId="activePartnerTab"
+                                    className="absolute inset-0 bg-black rounded-full z-10"
+                                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
                                 />
                             )}
                         </button>
