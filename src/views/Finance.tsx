@@ -347,8 +347,9 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
 
     async function saveEdit() {
         if (editingId == null) return
-        await updateExpanse(editingId, draft)
-        setExpanses(prev => prev.map(e => e.id === editingId ? { ...e, ...draft } : e))
+        const { id: _id, ...patch } = draft as Expanse
+        await updateExpanse(editingId, patch)
+        setExpanses(prev => prev.map(e => e.id === editingId ? { ...e, ...patch } : e))
         setEditingId(null)
         setDraft({})
     }
@@ -850,8 +851,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
 
     async function saveEdit() {
         if (editingId == null) return
-        await updateAgreement(editingId, draft)
-        setAgreements(prev => prev.map(a => a.id === editingId ? { ...a, ...draft } : a))
+        const { id: _id, ...patch } = draft as FinancialAgreement
+        await updateAgreement(editingId, patch)
+        setAgreements(prev => prev.map(a => a.id === editingId ? { ...a, ...patch } : a))
         setEditingId(null); setDraft({})
     }
 
