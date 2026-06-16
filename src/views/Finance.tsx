@@ -1320,7 +1320,7 @@ function BudgetTab({
         setDetailSaving(true)
         try {
             if (detailModal.mode === 'create-group' && detailModal.categoryId != null) {
-                await createBudgetDetail({ title: detailForm.title, description: detailForm.description, budget: 0, budget_category_id: detailModal.categoryId, parent_id: null, start_date: null, end_date: null })
+                await createBudgetDetail({ title: detailForm.title, description: detailForm.description, budget: detailForm.budget, budget_category_id: detailModal.categoryId, parent_id: null, start_date: detailForm.start_date, end_date: detailForm.end_date })
             } else if (detailModal.mode === 'create-child' && detailModal.parentId != null && detailModal.categoryId != null) {
                 await createBudgetDetail({ ...detailForm, budget_category_id: detailModal.categoryId, parent_id: detailModal.parentId })
             } else if (detailModal.mode === 'edit' && detailModal.detail) {
@@ -1455,12 +1455,14 @@ function BudgetTab({
                                                 </td>
                                             </tr>
                                             {catGroups.map(grp => {
-                                                const grpLeafs  = visibleLeafs.filter(l => l.parent_id === grp.id)
-                                                const grpBudget = grpLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
-                                                const grpSpent  = visibleExpanses.filter(e => grpLeafs.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
-                                                                + visibleAgreements.filter(a => grpLeafs.some(d => d.id === a.budget_detail_id)).reduce((s, a) => s + a.grant, 0)
-                                                const grpReste  = grpBudget - grpSpent
-                                                const grpPct    = grpBudget > 0 ? Math.round(grpSpent / grpBudget * 100) : 0
+                                                const grpLeafs    = visibleLeafs.filter(l => l.parent_id === grp.id)
+                                                const grpAlloue   = grpLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
+                                                const grpEnvelope = grp.budget > 0 ? proratedBudget(grp, yearFilter) : grpAlloue
+                                                const grpBudget   = grpEnvelope
+                                                const grpSpent    = visibleExpanses.filter(e => grpLeafs.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
+                                                                  + visibleAgreements.filter(a => grpLeafs.some(d => d.id === a.budget_detail_id)).reduce((s, a) => s + a.grant, 0)
+                                                const grpReste    = grpBudget - grpSpent
+                                                const grpPct      = grpBudget > 0 ? Math.round(grpSpent / grpBudget * 100) : 0
                                                 return (
                                                     <React.Fragment key={`grp-${grp.id}`}>
                                                         {/* ── Niveau 2 : Groupe ── */}
@@ -1474,7 +1476,12 @@ function BudgetTab({
                                                                     </span>
                                                                 </span>
                                                             </td>
-                                                            <td className="px-4 py-2 text-right tabular-nums text-sm">{grpBudget > 0 ? formatAmount(grpBudget) : '—'}</td>
+                                                            <td className="px-4 py-2 text-right tabular-nums text-sm">
+                                                                {grpBudget > 0 ? formatAmount(grpBudget) : '—'}
+                                                                {grp.budget > 0 && grpAlloue !== grpEnvelope && (
+                                                                    <div className="text-[10px] text-muted-foreground">alloué : {formatAmount(grpAlloue)}</div>
+                                                                )}
+                                                            </td>
                                                             <td className="px-4 py-2 text-right tabular-nums text-sm">{grpSpent > 0 ? formatAmount(grpSpent) : '—'}</td>
                                                             <td className="px-4 py-2 text-right tabular-nums text-sm" style={{ color: grpReste < 0 ? '#ef4444' : undefined }}>{grpBudget > 0 ? formatAmount(grpReste) : '—'}</td>
                                                             <td className="px-4 py-2 text-right tabular-nums text-sm" style={{ color: grpReste < 0 ? '#ef4444' : grpPct > 80 ? '#f59e0b' : grpPct > 0 ? '#22c55e' : undefined }}>{grpBudget > 0 ? `${grpPct} %` : '—'}</td>
@@ -1576,37 +1583,37 @@ function BudgetTab({
                                     <Label>Intitulé</Label>
                                     <input className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={detailForm.title} onChange={e => setDetailForm(f => ({ ...f, title: e.target.value }))} placeholder={isGroup || editingGroup ? 'Ex : Postdoctorants' : 'Ex : Contrat doctoral Dupont'} autoFocus />
                                 </div>
-                                {!isGroup && !editingGroup && (<>
+                                {!isGroup && (
                                     <div className="flex flex-col gap-1">
                                         <Label>Description <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
                                         <input className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={detailForm.description} onChange={e => setDetailForm(f => ({ ...f, description: e.target.value }))} placeholder="Détail complémentaire" />
                                     </div>
-                                    <div className="flex flex-col gap-1">
-                                        <Label>Budget total (€)</Label>
-                                        <input type="number" min={0} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={detailForm.budget || ''} onChange={e => setDetailForm(f => ({ ...f, budget: parseFloat(e.target.value) || 0 }))} placeholder="0" />
+                                )}
+                                <div className="flex flex-col gap-1">
+                                    <Label>{isGroup || editingGroup ? 'Enveloppe budgétaire (€)' : 'Budget total (€)'} <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+                                    <input type="number" min={0} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={detailForm.budget || ''} onChange={e => setDetailForm(f => ({ ...f, budget: parseFloat(e.target.value) || 0 }))} placeholder="0" />
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="flex flex-col gap-1 flex-1">
+                                        <Label>Début <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+                                        <input type="date" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={detailForm.start_date ?? ''} onChange={e => setDetailForm(f => ({ ...f, start_date: e.target.value || null }))} />
                                     </div>
-                                    <div className="flex gap-2">
-                                        <div className="flex flex-col gap-1 flex-1">
-                                            <Label>Début <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
-                                            <input type="date" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={detailForm.start_date ?? ''} onChange={e => setDetailForm(f => ({ ...f, start_date: e.target.value || null }))} />
-                                        </div>
-                                        <div className="flex flex-col gap-1 flex-1">
-                                            <Label>Fin <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
-                                            <input type="date" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={detailForm.end_date ?? ''} onChange={e => setDetailForm(f => ({ ...f, end_date: e.target.value || null }))} />
+                                    <div className="flex flex-col gap-1 flex-1">
+                                        <Label>Fin <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+                                        <input type="date" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={detailForm.end_date ?? ''} onChange={e => setDetailForm(f => ({ ...f, end_date: e.target.value || null }))} />
+                                    </div>
+                                </div>
+                                {!isGroup && !editingGroup && budgetChanged && programBudget > 0 && (
+                                    <div className={`flex gap-2 rounded-lg p-3 text-xs ${delta > 0 ? 'bg-red-50 text-red-700' : delta < 0 ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
+                                        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="font-medium">Impact sur le budget programme</span>
+                                            <span>Lignes : {formatAmount(leafBudgets)} → {formatAmount(newTotal)}</span>
+                                            <span>Budget programme : {formatAmount(programBudget)}</span>
+                                            {delta !== 0 && <span className="font-medium">{delta > 0 ? `Dépassement de ${formatAmount(delta)}` : `Marge restante : ${formatAmount(-delta)}`}</span>}
                                         </div>
                                     </div>
-                                    {budgetChanged && programBudget > 0 && (
-                                        <div className={`flex gap-2 rounded-lg p-3 text-xs ${delta > 0 ? 'bg-red-50 text-red-700' : delta < 0 ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
-                                            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                                            <div className="flex flex-col gap-0.5">
-                                                <span className="font-medium">Impact sur le budget programme</span>
-                                                <span>Lignes : {formatAmount(leafBudgets)} → {formatAmount(newTotal)}</span>
-                                                <span>Budget programme : {formatAmount(programBudget)}</span>
-                                                {delta !== 0 && <span className="font-medium">{delta > 0 ? `Dépassement de ${formatAmount(delta)}` : `Marge restante : ${formatAmount(-delta)}`}</span>}
-                                            </div>
-                                        </div>
-                                    )}
-                                </>)}
+                                )}
                             </div>
                             <DialogFooter>
                                 <Button variant="outline" onClick={() => setDetailModal(null)}>Annuler</Button>
