@@ -1426,13 +1426,18 @@ function BudgetTab({
                             </thead>
                             <tbody>
                                 {budgetCategories.map(cat => {
-                                    const catGroups = groupDetails.filter(g => g.budget_category_id === cat.id)
-                                    const catLeafs  = visibleLeafs.filter(l => l.budget_category_id === cat.id)
-                                    const catBudget = catLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
-                                    const catSpent  = visibleExpanses.filter(e => catLeafs.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
-                                                    + visibleAgreements.filter(a => catLeafs.some(d => d.id === a.budget_detail_id)).reduce((s, a) => s + a.grant, 0)
-                                    const catReste  = catBudget - catSpent
-                                    const catPct    = catBudget > 0 ? Math.round(catSpent / catBudget * 100) : 0
+                                    const catGroups   = groupDetails.filter(g => g.budget_category_id === cat.id)
+                                    const catLeafs    = visibleLeafs.filter(l => l.budget_category_id === cat.id)
+                                    const catAlloue   = catLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
+                                    const catEnvelope = catGroups.reduce((s, grp) => {
+                                        const grpLeafs = visibleLeafs.filter(l => l.parent_id === grp.id)
+                                        return s + (grp.budget > 0 ? proratedBudget(grp, yearFilter) : grpLeafs.reduce((gs, d) => gs + proratedBudget(d, yearFilter), 0))
+                                    }, 0)
+                                    const catBudget   = catEnvelope
+                                    const catSpent    = visibleExpanses.filter(e => catLeafs.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
+                                                      + visibleAgreements.filter(a => catLeafs.some(d => d.id === a.budget_detail_id)).reduce((s, a) => s + a.grant, 0)
+                                    const catReste    = catBudget - catSpent
+                                    const catPct      = catBudget > 0 ? Math.round(catSpent / catBudget * 100) : 0
                                     return (
                                         <React.Fragment key={cat.id}>
                                             {/* ── Niveau 1 : Catégorie ── */}
@@ -1446,7 +1451,12 @@ function BudgetTab({
                                                         </span>
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-2.5 text-right tabular-nums font-medium">{formatAmount(catBudget)}</td>
+                                                <td className="px-4 py-2.5 text-right tabular-nums font-medium">
+                                                    {formatAmount(catBudget)}
+                                                    {catAlloue !== catEnvelope && catEnvelope > 0 && (
+                                                        <div className="text-[10px] text-muted-foreground font-normal">alloué : {formatAmount(catAlloue)}</div>
+                                                    )}
+                                                </td>
                                                 <td className="px-4 py-2.5 text-right tabular-nums font-medium">{formatAmount(catSpent)}</td>
                                                 <td className="px-4 py-2.5 text-right tabular-nums font-medium" style={{ color: catReste < 0 ? '#ef4444' : undefined }}>{formatAmount(catReste)}</td>
                                                 <td className="px-4 py-2.5 text-right tabular-nums font-medium" style={{ color: catReste < 0 ? '#ef4444' : catPct > 80 ? '#f59e0b' : '#22c55e' }}>{catPct} %</td>
