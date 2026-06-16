@@ -37,7 +37,6 @@ const LABELS_BY_CATEGORY: Record<string, string[]> = {
     'Personnel':      ['Personnel'],
     'Autre':          [],
 }
-const ALL_LABELS = Object.values(LABELS_BY_CATEGORY).flat()
 
 const EXPANSE_STATUS_COLORS: Record<string, string> = {
     'Engagé': '#dbeafe',
