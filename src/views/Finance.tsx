@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CalendarDays, AlertTriangle, Receipt, FilePenLine, Scale } from 'lucide-react'
-import { Search, FileDown, Trash2, Trash, Pencil, Check, X, Plus, ChevronsUpDown, ChevronUp, ChevronDown } from 'lucide-react'
+import { Search, FileDown, Trash2, Trash, Pencil, Check, X, Plus, ChevronsUpDown, ChevronUp, ChevronDown, FolderInput, Tag } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { exportToCsv } from '@/lib/utils'
 import SearchInput from '@/components/SearchInput'
@@ -193,12 +193,34 @@ interface ActionBarProps {
     count: number
     onExport: () => void
     onDelete: () => void
+    onReclassify?: () => void
+    onRecategorize?: () => void
 }
 
-function ActionBar({ count, onExport, onDelete }: ActionBarProps) {
+function ActionBar({ count, onExport, onDelete, onReclassify, onRecategorize }: ActionBarProps) {
     return (
         <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground mr-1">{count} sélectionné{count > 1 ? 's' : ''}</span>
+            {onReclassify && (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-7 w-7 p-0 rounded-md" onClick={onReclassify}>
+                            <FolderInput size={13} />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Reclasser (ligne budgétaire)</TooltipContent>
+                </Tooltip>
+            )}
+            {onRecategorize && (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-7 w-7 p-0 rounded-md" onClick={onRecategorize}>
+                            <Tag size={13} />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Recatégoriser</TooltipContent>
+                </Tooltip>
+            )}
             <Tooltip>
                 <TooltipTrigger asChild>
                     <Button variant="outline" size="sm" className="h-7 w-7 p-0 rounded-md" onClick={onExport}>
@@ -258,6 +280,16 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const projectMap         = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
 
     const labels = useMemo(() => [...new Set(expanses.map(e => e.label))].filter(Boolean).sort(), [expanses])
+    const labelsByCategory = useMemo(() => {
+        const map: Record<string, string[]> = { ...LABELS_BY_CATEGORY }
+        for (const e of expanses) {
+            if (!e.category || !e.label) continue
+            if (!map[e.category]) map[e.category] = []
+            if (!map[e.category].includes(e.label)) map[e.category].push(e.label)
+        }
+        for (const key of Object.keys(map)) map[key] = [...new Set(map[key])].sort()
+        return map
+    }, [expanses])
     const statuses = useMemo(() => [...new Set(expanses.map(e => e.status))].filter(Boolean).sort(), [expanses])
 
     const filtered = useMemo(() => expanses.filter(e => {
@@ -366,6 +398,40 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
 
     function handleDelete() { setConfirmDelete(true) }
 
+    const [bulkModal, setBulkModal] = useState<'detail' | 'category' | null>(null)
+    const [bulkDetailId, setBulkDetailId] = useState<number | null>(null)
+    const [bulkCategory, setBulkCategory] = useState('')
+    const [bulkLabel, setBulkLabel] = useState('')
+    const [bulkSaving, setBulkSaving] = useState(false)
+
+    async function applyBulkReclassify() {
+        if (bulkDetailId == null) return
+        setBulkSaving(true)
+        try {
+            const ids = [...selected]
+            await Promise.all(ids.map(id => updateExpanse(id, { budget_detail_id: bulkDetailId })))
+            setExpanses(prev => prev.map(e => selected.has(e.id) ? { ...e, budget_detail_id: bulkDetailId } : e))
+            setSelected(new Set())
+            setBulkModal(null)
+            setBulkDetailId(null)
+        } finally { setBulkSaving(false) }
+    }
+
+    async function applyBulkCategory() {
+        if (!bulkCategory) return
+        setBulkSaving(true)
+        try {
+            const ids = [...selected]
+            const patch: Partial<Expanse> = { category: bulkCategory, ...(bulkLabel ? { label: bulkLabel } : {}) }
+            await Promise.all(ids.map(id => updateExpanse(id, patch)))
+            setExpanses(prev => prev.map(e => selected.has(e.id) ? { ...e, ...patch } : e))
+            setSelected(new Set())
+            setBulkModal(null)
+            setBulkCategory('')
+            setBulkLabel('')
+        } finally { setBulkSaving(false) }
+    }
+
     function handleExport() {
         const rows = filtered.filter(e => selected.has(e.id))
         exportToCsv('depenses.csv', ['Intitulé', 'Catégorie', 'Libellé', 'Ligne budgétaire', 'Montant', 'Fournisseur', 'Projet', 'Statut', 'Date achat'], rows.map(e => [
@@ -467,7 +533,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                     </Button>
                 )}
                 <div className="ml-auto flex items-center gap-2">
-                    {selCount > 0 && <ActionBar count={selCount} onExport={handleExport} onDelete={handleDelete} />}
+                    {selCount > 0 && <ActionBar count={selCount} onExport={handleExport} onDelete={handleDelete} onReclassify={() => { setBulkDetailId(null); setBulkModal('detail') }} onRecategorize={() => { setBulkCategory(''); setBulkLabel(''); setBulkModal('category') }} />}
                     <Button size="sm" className="h-8 text-xs gap-1 rounded-md" onClick={startAdd} disabled={isAdding}>
                         <Plus size={11} /> Nouvelle dépense
                     </Button>
@@ -526,7 +592,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                 <TableCell>
                                     <Select value={newDraft.label ?? ''} onValueChange={v => setNewDraft(d => ({ ...d, label: v }))}>
                                         <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="Libellé" /></SelectTrigger>
-                                        <SelectContent>{(LABELS_BY_CATEGORY[newDraft.category ?? ''] ?? ALL_LABELS).map(l => <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>)}</SelectContent>
+                                        <SelectContent>{(labelsByCategory[newDraft.category ?? ''] ?? labels).map(l => <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>)}</SelectContent>
                                     </Select>
                                 </TableCell>
                                 <TableCell>
@@ -619,7 +685,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                         <Select value={draft.label ?? ''} onValueChange={v => setDraft(d => ({ ...d, label: v }))}>
                                             <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
-                                                {(LABELS_BY_CATEGORY[draft.category ?? ''] ?? ALL_LABELS).map(l => <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>)}
+                                                {(labelsByCategory[draft.category ?? ''] ?? labels).map(l => <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
@@ -740,6 +806,65 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                     {filtered.length} dépense{filtered.length > 1 ? 's' : ''} · {formatAmount(totalFiltered)}
                 </p>
             )}
+
+            {/* ── Modale reclassement ligne budgétaire ── */}
+            <Dialog open={bulkModal === 'detail'} onOpenChange={open => { if (!open) setBulkModal(null) }}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Reclasser {selCount} dépense{selCount > 1 ? 's' : ''}</DialogTitle>
+                        <DialogDescription>Choisissez la nouvelle ligne budgétaire.</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-1">
+                        <SearchInput
+                            data={leafBudgetDetails}
+                            onSelect={d => setBulkDetailId(d.id)}
+                            getLabel={d => d.title}
+                            value={bulkDetailId ? (budgetDetailMap.get(bulkDetailId)?.title ?? '') : ''}
+                            placeholder="Rechercher une ligne budgétaire…"
+                            dropdownClassName="min-w-[320px]"
+                            groupBy={d => ({ primary: budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
+                        />
+                    </div>
+                    <DialogFooter className="gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setBulkModal(null)}>Annuler</Button>
+                        <Button size="sm" onClick={applyBulkReclassify} disabled={bulkDetailId == null || bulkSaving}>
+                            {bulkSaving ? 'Enregistrement…' : 'Appliquer'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Modale recatégorisation ── */}
+            <Dialog open={bulkModal === 'category'} onOpenChange={open => { if (!open) setBulkModal(null) }}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Recatégoriser {selCount} dépense{selCount > 1 ? 's' : ''}</DialogTitle>
+                        <DialogDescription>Choisissez la nouvelle catégorie et le libellé.</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-3 py-1">
+                        <div className="flex flex-col gap-1">
+                            <Label>Catégorie</Label>
+                            <Select value={bulkCategory} onValueChange={v => { setBulkCategory(v); setBulkLabel('') }}>
+                                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+                                <SelectContent>{EXPANSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label>Libellé <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+                            <Select value={bulkLabel} onValueChange={setBulkLabel} disabled={!bulkCategory}>
+                                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+                                <SelectContent>{(labelsByCategory[bulkCategory] ?? []).map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter className="gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setBulkModal(null)}>Annuler</Button>
+                        <Button size="sm" onClick={applyBulkCategory} disabled={!bulkCategory || bulkSaving}>
+                            {bulkSaving ? 'Enregistrement…' : 'Appliquer'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
                 <DialogContent className="max-w-sm">
