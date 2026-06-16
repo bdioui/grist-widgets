@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check, Tag, LayoutGrid, Table2 } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check, Tag, LayoutGrid, Table2, Users } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { type MemberFull, type Partner, type Lab, type Group, type GroupMember, type ActionCardFull, type MemberActionCard, type ProjectMember, type Project } from '@/lib/types'
@@ -936,7 +936,7 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                                     {member.is_staff && (
                                         <>
                                         <BadgeCheck className="text-[10px] px-1.5 py-0 shrink-0 border-green-200 hover:bg-blue-100" />
-                                        Equipe Iris
+                                        Equipe
                                         </>
                                         
                                     )}          
@@ -1115,6 +1115,7 @@ export default function Members() {
     const [loading,  setLoading]  = useState(false)
     const [error,    setError]    = useState('')
     const [query,         setQuery]         = useState('')
+    const [isStaffFilter, setIsStaffFilter] = useState(false)
     const [statusFilter,  setStatusFilter]  = useState<string[]>([])
     const [partnerFilter, setPartnerFilter] = useState<number[]>([])
     const [groupFilter, setGroupFilter] = useState<number[]>([])
@@ -1254,7 +1255,8 @@ export default function Members() {
         const matchesStatus  = statusFilter.length === 0 || statusFilter.includes(m.status)
         const matchesPartner = partnerFilter.length === 0 || partnerFilter.includes(m.partner_id)
         const matchesGroup = groupFilter.length === 0 || groupLinks.some(l => groupFilter.includes(l.group_id) && l.member_id === m.id)
-        return matchesQuery && matchesStatus && matchesPartner && matchesGroup
+        const isStaff = isStaffFilter === true ? m.is_staff === true : true
+        return matchesQuery && matchesStatus && matchesPartner && matchesGroup && isStaff
     })
 
     function handleUpdated(updated: MemberFull) {
@@ -1353,6 +1355,18 @@ export default function Members() {
                         ))}
                     </PopoverContent>
                 </Popover>
+
+                {/* filtre isStaff */}
+                <button
+                        onClick={() => setIsStaffFilter(!isStaffFilter)}
+                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                            isStaffFilter
+                                ? 'bg-green-200 text-white border-green-200 text-green-800'
+                                : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'
+                        }`}
+                    >
+                        <Users size={13}/> Equipe 
+                    </button>
 
 
                 {/* Filtre partenaire — multi-select avec recherche */}

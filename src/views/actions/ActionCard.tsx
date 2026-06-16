@@ -79,7 +79,7 @@ const STATUS_COLORS: Record<string, string> = {
     'À traiter': '#ffedd5',
 }
 
-const ROLES = ['Responsable', 'Contributeur', 'Observateur']
+const ROLES = ['Responsable', 'Contributeur', 'Observateur', 'Prospect']
 
 function formatDate(date?: string) {
     if (!date) return null
