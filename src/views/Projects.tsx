@@ -16,9 +16,9 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
-    DropdownMenuCheckboxItem, DropdownMenuSeparator,
+    DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Eye, EyeClosed, Maximize2, Minimize2, Users, ExternalLink, CalendarDays, LayoutGrid, Table2 } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, CalendarDays, LayoutGrid, Table2, Folder, File, BarChart2, GraduationCap, Paperclip, Milestone, Receipt, DotIcon, Menu, EllipsisIcon } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { ActionCardDetailSheet } from '@/views/actions/ActionCard'
@@ -48,6 +48,7 @@ import {
 } from '@/lib/api'
 import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
 
@@ -619,11 +620,12 @@ type AgreementDetailProps = {
     statuses: Status[]
     axes: Axis[]
     projectId: number
+    budgetDetails: BudgetDetail[]
     onSaved: (a: AgreementFull) => void
     onDeleted: (id: number) => void
 }
 
-function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, axes, projectId, onSaved, onDeleted: _onDeleted }: AgreementDetailProps) {
+function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, axes, projectId, onSaved, onDeleted: _onDeleted, budgetDetails}: AgreementDetailProps) {
     const [editing, setEditing] = useState(false)
 
     useEffect(() => {
@@ -640,7 +642,7 @@ function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, a
             <DialogContent showCloseButton={false} style={{ maxWidth: '600px' }}>
                 <DialogHeader>
                     <div className="flex items-start justify-between gap-2">
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1"> 
                             <DialogTitle className="text-base font-semibold leading-snug">{agreement.title}</DialogTitle>
                             <div className="flex items-center gap-2">
                                 <span
@@ -661,7 +663,7 @@ function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, a
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(e => !e)}>
-                                {editing ? <X size={13} /> : <Pencil size={13} />}
+                                {editing ? "" : <Pencil size={13} />}
                             </Button>
                             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onClose}>
                                 <X size={13} />
@@ -711,6 +713,7 @@ function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, a
                             statuses={statuses}
                             axes={axes}
                             projectId={projectId}
+                            budgetDetails={budgetDetails}
                             initial={agreement}
                             onSaved={a => { onSaved(a); setEditing(false) }}
                             onCancel={() => setEditing(false)}
@@ -1078,9 +1081,20 @@ function ProjectPartnerForm({ partners, initial, onSaved, onCancel }: ProjectPar
 // --- Milestone components ---
 
 const MILESTONE_STATUS_COLORS: Record<string, string> = {
-    'A faire':    '#dbeafe',
-    'En cours':   '#d1fae5',
-    'Terminé':    '#f3f4f6',
+    'En cours':  '#dbeafe',
+    'Terminé':   '#dcfce7',
+    'Planifié':  '#f3f4f6',
+    'Annulé':    '#f3f4f6',
+    'A traiter': '#fee2e2',
+    'A faire':   '#fee2e2',
+}
+const MILESTONE_STATUS_BORDER: Record<string, string> = {
+    'En cours':  '#93c5fd',
+    'Terminé':   '#86efac',
+    'Planifié':  '#d1d5db',
+    'Annulé':    '#d1d5db',
+    'A traiter': '#fca5a5',
+    'A faire':   '#fca5a5',
 }
 
 type MilestoneRowProps = {
@@ -1092,37 +1106,36 @@ type MilestoneRowProps = {
 
 function MilestoneRow({ milestone: m, statuses, onEdit, onDelete }: MilestoneRowProps) {
     const status = statuses.find(s => s.id === m.status_id)
+    const isTermine = status?.label === 'Terminé'
+    const isAnnule = status?.label === 'Annulé'
+    const dotBg = MILESTONE_STATUS_COLORS[status?.label ?? ''] ?? '#f3f4f6'
+    const dotBorder = MILESTONE_STATUS_BORDER[status?.label ?? ''] ?? '#d1d5db'
     return (
-        <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-muted/40 group">
-            <div className="flex flex-col gap-0.5 min-w-0">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate">{m.title}</span>
-                    {status && (
-                        <span
-                            className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border text-black"
-                            style={{ backgroundColor: MILESTONE_STATUS_COLORS[status.label] ?? '#f3f4f6' }}
-                        >
-                            {status.label}
-                        </span>
-                    )}
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {m.due_date && <span>{formatDate(m.due_date)}</span>}
-                    {m.description && <span className="truncate">{m.description}</span>}
-                </div>
+        <div className="relative flex gap-3 group">
+            <div className="flex flex-col items-center shrink-0">
+                <div
+                    className="w-3 h-3 rounded-full border-2 shrink-0 mt-1 z-10"
+                    style={{ backgroundColor: dotBg, borderColor: dotBorder }}
+                />
             </div>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0 ml-2">
-                <div
-                    className="h-7 w-7 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-foreground cursor-pointer"
-                    onClick={onEdit}
-                >
-                    <Pencil size={13} />
-                </div>
-                <div
-                    className="h-7 w-7 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-destructive cursor-pointer"
-                    onClick={onDelete}
-                >
-                    <Trash2 size={13} />
+            <div className="flex-1 min-w-0 pb-5">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className={`text-xs font-medium ${isTermine || isAnnule ? 'line-through text-muted-foreground' : ''}`}>{m.title}</span>
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                            {m.due_date && <span>{formatDate(m.due_date)}</span>}
+                            {status && <span className="px-1.5 py-0.5 rounded-full" style={{ backgroundColor: dotBg, border: `1px solid ${dotBorder}` }}>{status.label}</span>}
+                        </div>
+                        {m.description && <p className="text-[10px] text-muted-foreground mt-0.5">{m.description}</p>}
+                    </div>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 shrink-0">
+                        <div className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer" onClick={onEdit}>
+                            <Pencil size={11} />
+                        </div>
+                        <div className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-destructive cursor-pointer" onClick={onDelete}>
+                            <Trash2 size={11} />
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1497,14 +1510,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [selectedAgreement, setSelectedAgreement] = useState<AgreementFull | null>()
     const [projectPartners,  setProjectPartners]  = useState<ProjectPartnerFull[]>([])
     const [showAddPartner,   setShowAddPartner]   = useState(false)
-    const [showDescription,  setShowDescription]  = useState(true)
-    const [showParticipants, setShowParticipants] = useState(true)
-    const [showConventions,  setShowConventions]  = useState(true)
-    const [showExpanses,  setShowExpanses]  = useState(true)
-    const [showIndicateurs,  setShowIndicateurs]  = useState(true)
-    const [showPartenaires,  setShowPartenaires]  = useState(true)
-    const [showJalons,       setShowJalons]       = useState(true)
-    const [showActionCards,  setShowActionCards]  = useState(true)
     const [actionCards,      setActionCards]      = useState<(ActionCardFull & { linkId: number })[]>([])
     const [showLinkCard,       setShowLinkCard]       = useState(false)
     const [showCreateCard,     setShowCreateCard]     = useState(false)
@@ -1522,9 +1527,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [selectedPm, setSelectedPm] = useState<ProjectMember | null>(null)
     const [formations,     setFormations]     = useState<Formation[]>([])
     const [formationLinks, setFormationLinks] = useState<ProjectFormation[]>([])
-    const [showFormations, setShowFormations] = useState(true)
     const [attachments,    setAttachments]    = useState<ProjectAttachment[]>([])
-    const [showAttachments, setShowAttachments] = useState(true)
     const [newAttachLabel, setNewAttachLabel] = useState('')
     const [newAttachUrl,   setNewAttachUrl]   = useState('')
     const [showAttachForm, setShowAttachForm] = useState(false)
@@ -1533,11 +1536,12 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [expanseSuppliers, setExpanseSuppliers] = useState<Supplier[]>([])
     const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([])
     const [budgetDetails, setBudgetDetails] = useState<BudgetDetail[]>([])
+    const [showLinkExpanse, setShowLinkExpanse]   = useState(false)
     const [showLinkAgreement, setShowLinkAgreement] = useState(false)
     const [allAgreementsForLink, setAllAgreementsForLink] = useState<AgreementFull[]>([])
     const [loadingLinkAgreements, setLoadingLinkAgreements] = useState(false)
-    const [showLinkExpanse, setShowLinkExpanse] = useState(false)
-
+    type detailViewMode = 'overview' | 'tasks' | 'files' | 'timeline' | 'budget'
+    const [detailViewMode, setDetailViewMode] = useState<detailViewMode>('overview')
 
     useEffect(() => {
         if (!open || !project) return
@@ -1728,257 +1732,137 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
     const totalGrant  = agreements.reduce((s, a) => s + a.grant, 0)
     const totalExpanses = projectExpanses.reduce((s, e) => s + e.amount, 0)
-    
+    const pStatus = statuses.find(s => s.id === project.status_id)
+
+    const HEADER_GRADIENTS = [
+        'linear-gradient(135deg, #e0e7ff 0%, #f0fdf4 100%)',
+        'linear-gradient(135deg, #fce7f3 0%, #ede9fe 100%)',
+        'linear-gradient(135deg, #fff7ed 0%, #fef9c3 100%)',
+        'linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%)',
+        'linear-gradient(135deg, #f1f5f9 0%, #e0e7ff 100%)',
+        'linear-gradient(135deg, #fdf4ff 0%, #fce7f3 100%)',
+        'linear-gradient(135deg, #ecfdf5 0%, #e0f2fe 100%)',
+        'linear-gradient(135deg, #fff1f2 0%, #fff7ed 100%)',
+    ]
+    const headerGradient = HEADER_GRADIENTS[project.id % HEADER_GRADIENTS.length]
 
     return (
         <>
         <Sheet open={open} onOpenChange={v => { if (!v) onClose() }}>
             <SheetContent side="right" showCloseButton={false} className={`${expanded ? '!w-screen' : '!w-[520px]'} flex flex-col gap-0 p-0 transition-all duration-300`}>
-                <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
-                    <SheetTitle className="flex-1 min-w-0 truncate">
-                        {editing && draft ? (
-                            <Input
-                                value={draft.title}
-                                onChange={e => setDraft(d => d ? { ...d, title: e.target.value } : d)}
-                                className="h-8 text-sm font-semibold"
-                            />
-                        ) : project.title}
-                    </SheetTitle>
-                    <div className="flex items-center gap-2 shrink-0">
-                        {confirming ? (
-                            <>
-                                <span className="text-xs text-destructive">Supprimer ?</span>
-                                <Button size="sm" variant="destructive" className="rounded-md h-7" onClick={handleDeleteProject} disabled={deleting}>
-                                    {deleting ? '...' : 'Confirmer'}
-                                </Button>
-                                <Button size="sm" variant="ghost" className="rounded-md h-7" onClick={() => setConfirming(false)}>Annuler</Button>
-                            </>
-                        ) : editing ? (
-                            <>
-                                <Button size="sm" variant="outline" onClick={() => { setEditing(false); setDraft({ ...project }) }} className="rounded-md">
-                                    <X size={13} className="mr-1" />Annuler
-                                </Button>
-                                <Button size="sm" onClick={saveProject} disabled={saving} className="rounded-md">
-                                    <Check size={13} className="mr-1" />{saving ? 'Enregistrement...' : 'Enregistrer'}
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                <Button size="sm" variant="outline" className="rounded-md" onClick={() => setExpanded(v => !v)}>
-                                    {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                                </Button>
-                                <Button size="sm" variant="outline" className="rounded-md" onClick={() => setEditing(true)}>
-                                    <Pencil size={13} className="mr-1" />Modifier
-                                </Button>
-                                <Button size="sm" variant="ghost" className="rounded-md text-destructive hover:text-destructive" onClick={() => setConfirming(true)}>
-                                    <Trash2 size={13} />
-                                </Button>
-                            </>
-                        )}
-                    </div>
-                </SheetHeader>
+                <SheetHeader className="flex flex-col gap-0 p-0 rounded-xl m-4 overflow-hidden" style={{ background: headerGradient ?? '#f9fafb' }}>
+                    <div className="px-5 pt-5 pb-4 flex flex-col gap-3">
 
-                <div className={`flex-1 overflow-y-auto px-6 py-5 ${expanded ? 'grid grid-cols-3 gap-5 items-start content-start' : 'flex flex-col gap-6'}`}>
-
-                    {/* Infos projet */}
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
-                        {editing && draft ? (
-                            <>
-                                <div className="flex gap-4">
-                                    <div className="flex flex-col gap-1.5 flex-1">
-                                        <Label>Statut</Label>
-                                        <Select value={String(draft.status_id)} onValueChange={v => setDraft(d => d ? { ...d, status_id: Number(v) } : d)}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                {statuses.filter(s => s.context === 'project').map(s => (
-                                                    <SelectItem key={s.id} value={String(s.id)}>{s.label}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="flex flex-col gap-1.5 flex-1">
-                                        <Label>Dispositif</Label>
-                                        <Select value={String(draft.project_call_id)} onValueChange={v => setDraft(d => d ? { ...d, project_call_id: Number(v) } : d)}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                {projectCalls.map(pc => <SelectItem key={pc.id} value={String(pc.id)}>{pc.title}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <Label>Description</Label>
-                                    <Textarea value={draft.description ?? ''} onChange={e => setDraft(d => d ? { ...d, description: e.target.value } : d)} rows={3} placeholder="Description du projet..." />
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <Label>Budget total (€)</Label>
-                                    <Input type="number" value={draft.budget} onChange={e => setDraft(d => d ? { ...d, budget: Number(e.target.value) } : d)} />
-                                </div>
-                                <div className="flex gap-4">
-                                    <div className="flex flex-col gap-1.5 flex-1">
-                                        <Label>Date de début</Label>
-                                        <Input type="date" value={draft.start_date ?? ''} onChange={e => setDraft(d => d ? { ...d, start_date: e.target.value } : d)} />
-                                    </div>
-                                    <div className="flex flex-col gap-1.5 flex-1">
-                                        <Label>Date de fin</Label>
-                                        <Input type="date" value={draft.end_date ?? ''} onChange={e => setDraft(d => d ? { ...d, end_date: e.target.value } : d)} />
-                                    </div>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex flex-col gap-3 text-sm">
-                                {(() => {
-                                    const s = statuses.find(s => s.id === project.status_id)
-                                    return s ? (
-                                        <div className="flex items-center gap-2">
-                                            <span className="w-32 shrink-0 text-xs text-muted-foreground">Statut</span>
-                                            <Badge variant="secondary" className="rounded-full text-xs text-black"
-                                                style={{ backgroundColor: PROJECT_STATUS_COLORS[s.label] ?? '#f3f4f6' }}>
-                                                {s.label}
-                                            </Badge>
-                                        </div>
-                                    ) : null
-                                })()}
-                                <div className="flex items-center gap-2">
-                                    <span className="w-32 shrink-0 text-xs text-muted-foreground">Dispositif</span>
-                                    <span>{project.projectCall.title}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="w-32 shrink-0 text-xs text-muted-foreground">Axe</span>
-                                    <span>{project.projectCall.axis.name}</span>
-                                </div>
-                                {project.budget > 0 && (() => {
-                                    const reste = Math.max(0, project.budget - totalGrant - totalExpanses)
-                                    const pct = (v: number) => project.budget > 0 ? Math.round(v / project.budget * 100) : 0
-                                    return (
-                                        <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
-                                            <div className="flex items-baseline justify-between">
-                                                <span className="text-xs text-muted-foreground font-medium">Budget</span>
-                                                <span className="text-sm font-semibold">{fmt(project.budget)}</span>
-                                            </div>
-                                            <div className="flex h-2 w-full rounded-full overflow-hidden gap-px">
-                                                {totalGrant > 0 && <div className="h-full rounded-l-full" style={{ width: `${pct(totalGrant)}%`, backgroundColor: '#3b82f6' }} />}
-                                                {totalExpanses > 0 && <div className="h-full" style={{ width: `${pct(totalExpanses)}%`, backgroundColor: '#8b5cf6' }} />}
-                                                {reste > 0 && <div className="h-full flex-1 rounded-r-full bg-border" />}
-                                            </div>
-                                            <div className="flex flex-col gap-1">
-                                                {totalGrant > 0 && (
-                                                    <div className="flex items-center justify-between text-xs">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#3b82f6' }} />
-                                                            <span className="text-muted-foreground">Subventions allouées</span>
-                                                        </div>
-                                                        <span className="tabular-nums">{fmt(totalGrant)} <span className="text-muted-foreground">({pct(totalGrant)} %)</span></span>
-                                                    </div>
-                                                )}
-                                                {totalExpanses > 0 && (
-                                                    <div className="flex items-center justify-between text-xs">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#8b5cf6' }} />
-                                                            <span className="text-muted-foreground">Dépenses engagées</span>
-                                                        </div>
-                                                        <span className="tabular-nums">{fmt(totalExpanses)} <span className="text-muted-foreground">({pct(totalExpanses)} %)</span></span>
-                                                    </div>
-                                                )}
-                                                {reste > 0 && (
-                                                    <div className="flex items-center justify-between text-xs">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="w-2 h-2 rounded-full shrink-0 bg-border" />
-                                                            <span className="text-muted-foreground">Non alloué</span>
-                                                        </div>
-                                                        <span className="tabular-nums text-muted-foreground">{fmt(reste)} ({pct(reste)} %)</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )
-                                })()}
-                                
-                                {/* {(() => {
-                                    const cofinancement = projectPartners
-                                        .filter(pp => pp.amount !== null)
-                                        .reduce((s, pp) => s + (pp.amount ?? 0), 0)
-                                    const autofinancement = project.budget - totalGrant - cofinancement
-                                    return (
-                                        <>
-                                            {cofinancement > 0 && (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-32 shrink-0 text-xs text-muted-foreground">Cofinancement</span>
-                                                    <span>{fmt(cofinancement)}</span>
-                                                </div>
-                                            )}
-                                            {project.budget > 0 && totalGrant > 0 && (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-32 shrink-0 text-xs text-muted-foreground">Taux de financ.</span>
-                                                    <Badge variant="secondary" className="rounded-full">
-                                                        {financingRate(project.budget, totalGrant + cofinancement)} %
-                                                    </Badge>
-                                                </div>
-                                            )}
-                                            {project.budget > 0 && autofinancement > 0 && (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-32 shrink-0 text-xs text-muted-foreground">Autofinancement</span>
-                                                    <span>{fmt(autofinancement)}</span>
-                                                </div>
-                                            )}
-                                        </>
-                                    )
-                                })()} */}
-                                {(() => {
-                                    const progress = projectProgress(project.start_date, project.end_date)
-                                    if (progress === null) return null
-                                    return (
-                                        <>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-32 shrink-0 text-xs text-muted-foreground">Dates du projet
-                                                
-                                            </div>
-
-                                            <div className="flex flex-col gap-1 pt-1">
-                                            <div className="flex justify-between text-xs text-muted-foreground gap-1.5">
-                                                <span>{formatDate(project.start_date)} → {formatDate(project.end_date)}</span>
-                                                <span> ({progress} %)</span>
-                                            </div>
-                                            <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
-                                                <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: 'rgba(0,0,0,0.5)' }} />
-                                            </div>
-                                        </div>
-
-                                        </div>
-                                        
-                                        </>
-                                    )
-                                })()}
-                                
-                                 
-                                 {project.description && (
+                        {/* Badge statut + boutons d'action */}
+                        <div className="flex items-center justify-between gap-3">
+                            {pStatus ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/70 text-gray-700">
+                                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: PROJECT_STATUS_COLORS[pStatus.label] ?? '#6b7280' }} />
+                                    {pStatus.label}
+                                </span>
+                            ) : <span />}
+                            <div className="flex items-center gap-1 shrink-0">
+                                {confirming ? (
                                     <>
-                                    <Separator></Separator>
-                                     <div className="flex items-center gap-2">
-                                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</p>
-                                         <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowDescription(v => !v)}>
-                                             {showDescription ? <Eye size={12} /> : <EyeClosed size={12} />}
-                                         </Button>
-                                     </div>
-                                     {showDescription && <p className="text-sm text-muted-foreground leading-relaxed">{project.description}</p>}
+                                        <span className="text-xs text-destructive font-medium">Supprimer ?</span>
+                                        <Button size="sm" variant="destructive" className="h-7 rounded-lg" onClick={handleDeleteProject} disabled={deleting}>
+                                            {deleting ? '...' : 'Confirmer'}
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="h-7 rounded-lg bg-white/50 hover:bg-white/80" onClick={() => setConfirming(false)}>Annuler</Button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Button size="icon-sm" variant="ghost" className="h-7 w-7 rounded-lg bg-white/40 hover:bg-white/70" onClick={() => setExpanded(v => !v)}>
+                                            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                                        </Button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button size="icon-sm" variant="ghost" className="h-7 w-7 rounded-lg bg-white/40 hover:bg-white/70">
+                                                    <EllipsisIcon size={13} />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem variant="destructive" onClick={() => setConfirming(true)}>
+                                                    <Trash2 size={13} />Supprimer
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </>
                                 )}
                             </div>
-                        )}
-                    </section>
+                        </div>
 
-                    {!expanded && <Separator />}
+                        {/* Titre */}
+                        <SheetTitle>
+                            <span className="text-2xl font-semibold leading-tight text-gray-900">{project.title}</span>
+                        </SheetTitle>
+
+                        {/* Description */}
+                        {project.description && (
+                            <p className="text-xs text-gray-600 leading-relaxed line-clamp-2">{project.description}</p>
+                        )}
+
+                        {/* Progress bar temporelle */}
+                        {(() => {
+                            const progress = projectProgress(project.start_date, project.end_date)
+                            if (progress === null) return null
+                            return (
+                                <div className="h-1 w-full rounded-full bg-black/10 overflow-hidden">
+                                    <div className="h-full rounded-full bg-black/20 transition-all" style={{ width: `${progress}%` }} />
+                                </div>
+                            )
+                        })()}
+                    </div>
+                </SheetHeader>
+
+                {(
+                    <div className="px-6 pt-3 shrink-0 flex gap-3 border-b items-center" >
+                        <div className="py-0 px-2 flex relative">
+                            {([
+                                { mode: 'overview',  label: 'Général',         icon: <LayoutGrid size={13} /> },
+                                { mode: 'tasks',     label: 'Actions',          icon: <ListChecks size={13} /> },
+                                { mode: 'timeline',  label: 'Jalons',           icon: <Milestone size={13} /> },
+                                { mode: 'budget',    label: 'Budget',           icon: <Receipt size={13} /> },
+                                { mode: 'files',     label: 'Documents',   icon: <Paperclip size={13} /> },
+                                ] as { mode: detailViewMode; label: string; icon: React.ReactNode }[]).map(({ mode, label, icon }) => (
+                                    <button
+                                        key={mode}
+                                        onClick={() => setDetailViewMode(mode)}
+                                        className={`relative flex items-center gap-1.5 px-4 py-2 rounded-full text-sm z-10 transition-colors duration-300 text-xs ${detailViewMode === mode ? 'text-bold' : 'text-black'}`}
+                                    >
+                                        <span className="relative z-20 flex items-center gap-1.5">
+                                            {icon}{label}
+                                        </span>
+                                        {detailViewMode === mode && (
+                                            <motion.div
+                                                layoutId="activeDetailProjectTab"
+                                                className="absolute inset-0 border-b-2 border-black z-10"
+                                                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                            />
+                                        )}
+                                    </button>
+                                ))}
+
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex-1 overflow-y-auto px-6 py-5">
+
+                    {/* ── GÉNÉRAL ─────────────────────────────── */}
+                    {detailViewMode === "overview" && (
+                        <div className={expanded ? "grid grid-cols-3 gap-5 items-start" : "flex flex-col gap-6"}>
+
+                            {/* Colonne gauche 2/3 */}
+                            <div className={`flex flex-col gap-6 ${expanded ? 'col-span-2' : ''}`}>
 
                     {/* Participants */}
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
+                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
                         <div className="flex items-center justify-between group/header">
                             <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants {projectMembers.length > 0 && ( <span>({projectMembers.length})</span>)}</p>
-                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowParticipants(v => !v)}>
-                                    {showParticipants ? <Eye size={12} /> : <EyeClosed size={12} />}
-                                </Button>
                             </div>
-                            {showParticipants && selectedMembers.length > 0 && (
+                            {selectedMembers.length > 0 && (
                                 <div className="flex items-center gap-1">
                                     <span className="text-xs text-muted-foreground">{selectedMembers.length} sélectionné{selectedMembers.length > 1 ? 's' : ''}</span>
                                     <Tooltip>
@@ -2009,7 +1893,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             )}
                         </div>
 
-                        {showParticipants && projectMembers.length > 0 && (
+                        {projectMembers.length > 0 && (
                             <Table className="text-xs">
                                 <TableHeader>
                                     <TableRow className="hover:bg-transparent">
@@ -2093,8 +1977,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             </Table>
                         )}
 
-                        {showParticipants && (
-                            <div className="flex flex-col gap-2 mt-1">
+                        <div className="flex flex-col gap-2 mt-1">
                                 <div className="flex gap-2">
                                     <MemberSearchInput
                                         members={availableMembers}
@@ -2126,501 +2009,20 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         onCancel={() => setShowCreateMember(false)}
                                     />
                                 )}
-                            </div>
-                        )}
+                        </div>
 
-                        {showParticipants && projectMembers.length === 0 && !showCreateMember && (
+                        {projectMembers.length === 0 && !showCreateMember && (
                             <p className="text-xs text-muted-foreground italic">Aucun participant</p>
                         )}
                     </section>
-                    {!expanded && <Separator />}
-
-                    {/* Conventions */}
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Conventions</p>
-                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowConventions(v => !v)}>
-                                    {showConventions ? <Eye size={12} /> : <EyeClosed size={12} />}
-                                </Button>
-                            </div>
-                            {showConventions && !showAddForm && !showLinkAgreement && !editingAgreement && (
-                                <div className="flex items-center gap-1">
-                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddForm(true)}>
-                                        <Plus size={11} />Nouvelle
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md text-muted-foreground" onClick={async () => {
-                                        setShowLinkAgreement(true)
-                                        if (allAgreementsForLink.length === 0) {
-                                            setLoadingLinkAgreements(true)
-                                            const all = await getFinancialAgreements()
-                                            const partnerMap = new Map(partners.map(p => [p.id, p]))
-                                            setAllAgreementsForLink((all as FinancialAgreement[])
-                                                .filter(a => a.project_id !== project.id)
-                                                .map(a => ({ ...a, partner: partnerMap.get(a.partner_id) ?? { id: 0, name: '?', description: '', color: '', logo: '', status_id: 0, type: '', consortium: false } }))
-                                            )
-                                            setLoadingLinkAgreements(false)
-                                        }
-                                    }}>
-                                        Rattacher
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-
-                        {showConventions && (loading ? (
-                            <div className="flex flex-col gap-2">
-                                {[1, 2].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
-                            </div>
-                        ) : (
-                            <div className="flex flex-col gap-2">
-                                {agreements.map(a =>
-                                    editingAgreement?.id === a.id ? (
-                                        <AgreementForm
-                                            key={a.id}
-                                            partners={partners}
-                                            statuses={statuses}
-                                            axes={axes}
-                                            projectId={project.id}
-                                            initial={a}
-                                            budgetCategories={budgetCategories}
-                                            budgetDetails={budgetDetails}
-                                            onSaved={handleAgreementSaved}
-                                            onCancel={() => setEditingAgreement(null)}
-                                        />
-                                    ) : (
-                                        <AgreementRow
-                                            key={a.id}
-                                            agreement={a}
-                                            statuses={statuses}
-                                            axe={axis.find(ax => ax.id === a.axis_id)}
-                                            onEdit={setEditingAgreement}
-                                            onDelete={handleDeleteAgreement}
-                                            onOpen={() => setSelectedAgreement(a)}
-                                        />
-                                    )
-                                )}
-
-                                {showAddForm && (
-                                    <AgreementForm
-                                        partners={partners}
-                                        statuses={statuses}
-                                        axes={axes}
-                                        projectId={project.id}
-                                        budgetCategories={budgetCategories}
-                                        budgetDetails={budgetDetails}
-                                        onSaved={a => { handleAgreementSaved(a); setShowAddForm(false) }}
-                                        onCancel={() => setShowAddForm(false)}
-                                    />
-                                )}
-
-                                {showLinkAgreement && (
-                                    <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
-                                        <p className="text-xs font-medium">Rattacher une convention existante</p>
-                                        {loadingLinkAgreements
-                                            ? <p className="text-xs text-muted-foreground">Chargement…</p>
-                                            : <SearchInput
-                                                data={allAgreementsForLink}
-                                                onSelect={async a => {
-                                                    await updateAgreement(a.id, { project_id: project.id })
-                                                    setAgreements(prev => [...prev, { ...a, project_id: project.id }])
-                                                    onAgreementAdded({ ...a, project_id: project.id })
-                                                    setAllAgreementsForLink(prev => prev.filter(x => x.id !== a.id))
-                                                    setShowLinkAgreement(false)
-                                                }}
-                                                getLabel={a => a.title}
-                                                placeholder="Rechercher une convention…"
-                                                groupBy={a => ({ primary: a.partner.name })}
-                                            />
-                                        }
-                                        <div className="flex justify-end">
-                                            <Button variant="outline" size="sm" className="h-6 text-xs rounded-md" onClick={() => setShowLinkAgreement(false)}>Annuler</Button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {agreements.length === 0 && !showAddForm && !showLinkAgreement && (
-                                    <p className="text-xs text-muted-foreground italic">Aucune convention</p>
-                                )}
-                            </div>
-                        ))}
-
-                        {/* Totaux conventions */}
-                        {showConventions && agreements.length > 1 && (
-                            <>
-                                <Separator />
-                                <div className="flex flex-col gap-1 text-xs">
-                                    <div className="flex justify-between text-muted-foreground">
-                                        <span>Total budget conventions</span>
-                                        <span className="font-medium text-foreground">{fmt(totalBudget)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-muted-foreground">
-                                        <span>Total subventions</span>
-                                        <span className="font-medium text-foreground">{fmt(totalGrant)}</span>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </section>
-
-                    {!expanded && <Separator />}
-
-                    {/* Dépenses */}
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Dépenses</p>
-                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowExpanses(v => !v)}>
-                                    {showExpanses ? <Eye size={12} /> : <EyeClosed size={12} />}
-                                </Button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {showExpanses && projectExpanses.length > 0 && (
-                                    <span className="text-xs text-muted-foreground">{projectExpanses.length} dépense{projectExpanses.length > 1 ? 's' : ''}</span>
-                                )}
-                                {showExpanses && !showLinkExpanse && (
-                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md text-muted-foreground" onClick={() => setShowLinkExpanse(true)}>
-                                        Rattacher
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-
-                        {showExpanses && showLinkExpanse && (
-                            <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
-                                <p className="text-xs font-medium">Rattacher une dépense existante</p>
-                                <SearchInput
-                                    data={allExpanses.filter(e => e.project_id !== project.id)}
-                                    onSelect={async e => {
-                                        await updateExpanse(e.id, { project_id: project.id })
-                                        const linked = { ...e, project_id: project.id }
-                                        setProjectExpanses(prev => [...prev, linked])
-                                        setAllExpanses(prev => prev.map(x => x.id === e.id ? linked : x))
-                                        setShowLinkExpanse(false)
-                                    }}
-                                    getLabel={e => e.title}
-                                    placeholder="Rechercher une dépense…"
-                                    groupBy={e => ({ primary: e.category })}
-                                />
-                                <div className="flex justify-end">
-                                    <Button variant="outline" size="sm" className="h-6 text-xs rounded-md" onClick={() => setShowLinkExpanse(false)}>Annuler</Button>
-                                </div>
-                            </div>
-                        )}
-
-                        {showExpanses && (loading ? (
-                            <div className="flex flex-col gap-2">
-                                {[1, 2].map(i => <Skeleton key={i} className="h-8 w-full rounded-lg" />)}
-                            </div>
-                        ) : projectExpanses.length === 0 ? (
-                            <p className="text-xs text-muted-foreground italic">Aucune dépense rattachée à ce projet</p>
-                        ) : (
-                            <>
-                                <div className="rounded-lg border overflow-hidden">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow className="text-xs bg-muted/50">
-                                                <TableHead className="h-7 text-xs">Intitulé</TableHead>
-                                                <TableHead className="h-7 text-xs w-32">Catégorie</TableHead>
-                                                <TableHead className="h-7 text-xs w-28 text-right">Montant</TableHead>
-                                                <TableHead className="h-7 text-xs w-32">Fournisseur</TableHead>
-                                                <TableHead className="h-7 text-xs w-24">Statut</TableHead>
-                                                <TableHead className="h-7 text-xs w-24">Engagement</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {projectExpanses.map(e => {
-                                                const supplier = e.supplier_id ? expanseSuppliers.find(s => s.id === e.supplier_id) : null
-                                                const categoryColors: Record<string, string> = {
-                                                    'Fonctionnement': '#ffedd5', 'Investissement': '#fef9c3',
-                                                    'Personnel': '#dbeafe', 'Autre': '#f3f4f6',
-                                                }
-                                                const statusColors: Record<string, string> = {
-                                                    'Engagé': '#dbeafe', 'Livré': '#fef9c3', 'Payé': '#dcfce7',
-                                                }
-                                                return (
-                                                    <TableRow key={e.id} className="text-xs hover:bg-muted/30">
-                                                        <Tooltip>
-                                                            <TooltipTrigger>
-                                                                <TableCell className="font-medium truncate max-w-[180px]">{e.title}</TableCell>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                {e.title}
-                                                            </TooltipContent>
-
-                                                        </Tooltip>
-                                                        
-                                                        <TableCell>
-                                                            <div className="flex flex-col gap-0.5">
-                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: categoryColors[e.category] ?? '#f3f4f6' }}>
-                                                                    {e.category}
-                                                                </span>
-                                                                {e.label && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: '#f3f4f6' }}>
-                                                                    {e.label}
-                                                                </span>}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-right tabular-nums font-medium">{fmt(e.amount)}</TableCell>
-                                                        <TableCell className="text-muted-foreground truncate">{supplier?.name ?? '—'}</TableCell>
-                                                        <TableCell>
-                                                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: statusColors[e.status] ?? '#f3f4f6' }}>
-                                                                {e.status}
-                                                            </span>
-                                                        </TableCell>
-                                                        <TableCell className="text-muted-foreground tabular-nums">
-                                                            {e.purchase_date ? new Date(e.purchase_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                                <div className="flex gap-4 text-xs justify-end">
-                                    <span className="text-muted-foreground">Engagé <span className='text-[10px] text-gray-500'>(non payé)</span> · <span className="font-medium text-foreground">{fmt(projectExpanses.filter(e => e.status === 'Engagé' || e.status === 'Livré').reduce((s, e) => s + e.amount, 0))}</span></span>
-                                    <span className="text-muted-foreground">Payé · <span className="font-medium text-foreground">{fmt(projectExpanses.filter(e => e.status === 'Payé').reduce((s, e) => s + e.amount, 0))}</span></span>
-                                    <span className="text-muted-foreground">Total · <span className="font-medium text-foreground">{fmt(projectExpanses.reduce((s, e) => s + e.amount, 0))}</span></span>
-                                </div>
-                            </>
-                        ))}
-                    </section>
-
-                    {!expanded && <Separator />}
-
-
-                    {/* Formations */}
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Formations</p>
-                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowFormations(v => !v)}>
-                                    {showFormations ? <Eye size={12} /> : <EyeClosed size={12} />}
-                                </Button>
-                            </div>
-                        </div>
-
-                        {showFormations && (
-                            <div className="flex flex-col gap-2">
-                                <SearchInput
-                                    data={allFormations.filter(f => !formations.find(pf => pf.id === f.id))}
-                                    onSelect={async f => {
-                                        const link = await addProjectFormation(project!.id, f.id)
-                                        setFormations(prev => [...prev, f])
-                                        setFormationLinks(prev => [...prev, link])
-                                    }}
-                                    getLabel={f => `${f.code} — ${f.title}`}
-                                    filterFn={(f, q) => {
-                                        const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
-                                        return `${f.code} ${f.title} ${partner?.name ?? ''}`.toLowerCase().includes(q.toLowerCase())
-                                    }}
-                                    groupBy={f => {
-                                        const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
-                                        return {
-                                            primary: partner?.name ?? 'Sans partenaire',
-                                            secondary: f.level,
-                                            primaryStyle: partner?.color ? { backgroundColor: partner.color } : undefined,
-                                        }
-                                    }}
-                                    renderItem={f => {
-                                        const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
-                                        return (
-                                            <div className="flex flex-col gap-0.5 min-w-0">
-                                                <span className="text-xs font-medium truncate">{f.title}</span>
-                                                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                                                    <span>{f.code}</span>
-                                                    <span>·</span>
-                                                    <span>{f.degree_type}</span>
-                                                    {partner && <><span>·</span><span className="truncate">{partner.name}</span></>}
-                                                </div>
-                                            </div>
-                                        )
-                                    }}
-                                    placeholder="Rechercher une formation..."
-                                />
-
-                                {formations.length === 0 && (
-                                    <p className="text-xs text-muted-foreground italic">Aucune formation rattachée</p>
-                                )}
-
-                                {formations.map(f => {
-                                    const fPartner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
-                                    return (
-                                    <div key={f.id} className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2.5">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="flex flex-col gap-0.5 min-w-0">
-                                                <span className="text-xs font-medium truncate">{f.title}</span>
-                                                <span className="text-xs text-muted-foreground">{f.code} · {f.degree_type} · {f.level}</span>
-                                                {fPartner && <span className="text-xs text-muted-foreground truncate">{fPartner.name}</span>}
-                                            </div>
-                                            <Button
-                                                variant="ghost" size="icon" className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:text-destructive"
-                                                onClick={async () => {
-                                                    const link = formationLinks.find(l => l.formation_id === f.id)
-                                                    if (link) await removeProjectFormation(link.id)
-                                                    setFormations(prev => prev.filter(x => x.id !== f.id))
-                                                    setFormationLinks(prev => prev.filter(l => l.formation_id !== f.id))
-                                                }}
-                                            >
-                                                <X size={12} />
-                                            </Button>
-                                        </div>
-                                        {f.formacode && (
-                                            <div className="flex flex-wrap gap-1 mt-1">
-                                                {f.formacode.split(',').slice(0, 2).map((code, i) => (
-                                                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground truncate max-w-[160px]">{code.trim()}</span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    )
-                                })}
-                            </div>
-                        )}
-                    </section>
-
-                    {!expanded && <Separator />}
-
-                    {/* Pièces jointes */}
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pièces jointes</p>
-                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowAttachments(v => !v)}>
-                                    {showAttachments ? <Eye size={12} /> : <EyeClosed size={12} />}
-                                </Button>
-                            </div>
-                            {showAttachments && (
-                                <Button variant="outline" size="xs" className="rounded-md gap-1" onClick={() => setShowAttachForm(v => !v)}>
-                                    <Plus size={11} /> Ajouter
-                                </Button>
-                            )}
-                        </div>
-
-                        {showAttachments && (
-                            <div className="flex flex-col gap-2">
-                                {showAttachForm && (
-                                    <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-muted/30">
-                                        <Input
-                                            value={newAttachLabel}
-                                            onChange={e => setNewAttachLabel(e.target.value)}
-                                            placeholder="Libellé (ex. Convention signée)"
-                                            className="h-8 text-xs"
-                                        />
-                                        <Input
-                                            value={newAttachUrl}
-                                            onChange={e => setNewAttachUrl(e.target.value)}
-                                            placeholder="URL (https://...)"
-                                            className="h-8 text-xs"
-                                        />
-                                        <div className="flex gap-2 justify-end">
-                                            <Button variant="outline" size="sm" className="rounded-md" onClick={() => { setShowAttachForm(false); setNewAttachLabel(''); setNewAttachUrl('') }}>Annuler</Button>
-                                            <Button size="sm" className="rounded-md" disabled={!newAttachLabel.trim() || !newAttachUrl.trim()} onClick={async () => {
-                                                const a = await addProjectAttachment(project!.id, newAttachLabel.trim(), newAttachUrl.trim())
-                                                setAttachments(prev => [...prev, a])
-                                                setNewAttachLabel('')
-                                                setNewAttachUrl('')
-                                                setShowAttachForm(false)
-                                            }}>
-                                                <Check size={12} className="mr-1" /> Ajouter
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {attachments.length === 0 && !showAttachForm && (
-                                    <p className="text-xs text-muted-foreground italic">Aucune pièce jointe</p>
-                                )}
-
-                                {attachments.map(a => (
-                                    <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 group">
-                                        <a
-                                            href={a.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center gap-2 min-w-0 text-xs hover:underline"
-                                        >
-                                            <ExternalLink size={12} className="shrink-0 text-muted-foreground" />
-                                            <span className="truncate">{a.label}</span>
-                                        </a>
-                                        <Button
-                                            variant="ghost" size="icon" className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={async () => {
-                                                await deleteProjectAttachment(a.id)
-                                                setAttachments(prev => prev.filter(x => x.id !== a.id))
-                                            }}
-                                        >
-                                            <X size={12} />
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </section>
-
-                    {!expanded && <Separator />}
-
-                    {/* KPIs */}
-
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
-                        <div className="flex items-center gap-2">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Indicateurs</p>
-                            <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowIndicateurs(v => !v)}>
-                                {showIndicateurs ? <Eye size={12} /> : <EyeClosed size={12} />}
-                            </Button>
-                        </div>
-
-                        {showIndicateurs && kpis.length === 0 && (
-                            <p className="text-xs text-muted-foreground italic">Aucun indicateur défini</p>
-                        )}
-
-                        {showIndicateurs && (
-                            <SearchInput
-                                data={kpis}
-                                onSelect={(kpi) => {
-                                    setSelectedKpi(kpi);
-                                }}
-                                getLabel={kpi => kpi.label}
-                                placeholder="Rechercher un indicateur..."
-                                value={selectedKpi?.label}
-                            />
-                        )}
-
-                        {showIndicateurs && kpis.map(kpi => {
-                            const entries = kpiEntries
-                                .filter(e => e.kpi_id === kpi.id)
-                                .sort((a, b) => a.year.localeCompare(b.year))
-                            const latest = entries.at(-1)
-                            const total = entries.reduce((sum, e) => sum + e.value, 0)
-
-                            if (!total) return null  // ← cache les KPIs sans saisie
-
-                            return (
-                                <div key={kpi.id} onClick={() => setSelectedKpi(kpi)} className="flex flex-col gap-1.5 rounded-lg border border-border px-3 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs font-medium">{kpi.label}</span>
-                                        {latest && (
-                                            <span className="text-sm font-semibold tabular-nums shrink-0">
-                                                {total} <span className="text-xs font-normal text-muted-foreground">{kpi.unit}</span>
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </section>
-
-                    {!expanded && <Separator />}
 
                     {/* Partenaires */}
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
+                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Partenaires</p>
-                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowPartenaires(v => !v)}>
-                                    {showPartenaires ? <Eye size={12} /> : <EyeClosed size={12} />}
-                                </Button>
                             </div>
-                            {showPartenaires && !showAddPartner && !showCreatePartner && (
+                            {!showAddPartner && !showCreatePartner && (
                                 <div className="flex items-center gap-1">
                                     <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddPartner(true)}>
                                         <Plus size={11} />Lier
@@ -2632,8 +2034,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             )}
                         </div>
 
-                        {showPartenaires && (
-                            <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-2">
                                 {projectPartners.length === 0 && !showAddPartner && !showCreatePartner && (
                                     <p className="text-xs text-muted-foreground italic">Aucun partenaire</p>
                                 )}
@@ -2695,7 +2096,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                                         <p>{pp.partner.name}</p>
                                                     </TooltipContent>
                                                 </Tooltip>
-                                               
+
                                                 <span className="text-xs text-muted-foreground">{pp.role}</span>
                                                 {pp.amount !== null && (
                                                     <span className="text-xs font-medium text-foreground">
@@ -2723,22 +2124,286 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         </div>
                                     )
                                 ))}
+                        </div>
+                    </section>
+
+                    {/* Actions récentes */}
+                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Actions récentes</p>
+                            {actionCards.length > 0 && (
+                                <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setDetailViewMode('tasks')}>
+                                    Voir tout →
+                                </button>
+                            )}
+                        </div>
+                        {actionCards.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">Aucune fiche action rattachée</p>
+                        ) : (
+                            <div className="flex flex-col gap-1.5">
+                                {[...actionCards]
+                                    .sort((a, b) => (b.end_date ?? '').localeCompare(a.end_date ?? ''))
+                                    .slice(0, 5)
+                                    .map(card => {
+                                         const categoryColor = card.category.parent?.color ?? card.category.color ?? null
+                                        return (
+                                        <div
+                                            key={card.id}
+                                            className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-muted/40 group cursor-pointer hover:bg-muted/70 transition-colors"
+                                            onClick={() => setSelectedActionCard(card)}
+                                        >
+                                            {categoryColor && (
+                                                <div className="w-1.5 h-8 rounded-full shrink-0" style={{ backgroundColor: categoryColor }} />
+                                            )}
+                                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                                                <span className="text-sm font-medium truncate">{card.title}</span>
+                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                    <span>{card.category.parent ? `${card.category.parent.title} · ` : ''}{card.category.title}</span>
+                                                    {card.end_date && <span>→ {formatDate(card.end_date)}</span>}
+                                                </div>
+                                            </div>
+                                            <span
+                                                className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border text-black"
+                                                style={{ backgroundColor: PROJECT_STATUS_COLORS[card.status.label] ?? '#f3f4f6' }}
+                                            >
+                                                {card.status.label}
+                                            </span>
+                                            <div
+                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
+                                                onClick={e => { e.stopPropagation(); handleUnlinkCard(card.linkId) }}
+                                            >
+                                                <X size={13} />
+                                            </div>
+                                        </div>
+                                    )})
+                                }
                             </div>
                         )}
                     </section>
 
-                    {!expanded && <Separator />}
+                            </div>{/* fin colonne gauche */}
+
+                            {/* Colonne droite 1/3 */}
+                            <div className={`flex flex-col gap-6 ${expanded ? 'col-span-1' : ''}`}>
+
+                    {/* Informations projet */}
+                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Informations</p>
+                            {!editing && (
+                                <Button size="icon-sm" variant="ghost" className="h-6 w-6 rounded-md" onClick={() => { setEditing(true); setDetailViewMode('overview') }}>
+                                    <Pencil size={11} />
+                                </Button>
+                            )}
+                        </div>
+                        {editing && draft ? (
+                            <div className="flex flex-col gap-2.5">
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Titre</Label>
+                                    <Input value={draft.title} onChange={e => setDraft(d => d ? { ...d, title: e.target.value } : d)} className="h-8 text-xs" />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Statut</Label>
+                                    <Select value={String(draft.status_id)} onValueChange={v => setDraft(d => d ? { ...d, status_id: Number(v) } : d)}>
+                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{statuses.filter(s => s.context === 'project').map(s => <SelectItem key={s.id} value={String(s.id)}>{s.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Dispositif</Label>
+                                    <Select value={String(draft.project_call_id)} onValueChange={v => setDraft(d => d ? { ...d, project_call_id: Number(v) } : d)}>
+                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{projectCalls.map(pc => <SelectItem key={pc.id} value={String(pc.id)}>{pc.title}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="flex flex-col gap-1 flex-1">
+                                        <Label className="text-xs text-muted-foreground">Début</Label>
+                                        <Input type="date" value={draft.start_date ?? ''} onChange={e => setDraft(d => d ? { ...d, start_date: e.target.value } : d)} className="h-8 text-xs" />
+                                    </div>
+                                    <div className="flex flex-col gap-1 flex-1">
+                                        <Label className="text-xs text-muted-foreground">Fin</Label>
+                                        <Input type="date" value={draft.end_date ?? ''} onChange={e => setDraft(d => d ? { ...d, end_date: e.target.value } : d)} className="h-8 text-xs" />
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Budget (€)</Label>
+                                    <Input type="number" value={draft.budget} onChange={e => setDraft(d => d ? { ...d, budget: Number(e.target.value) } : d)} className="h-8 text-xs" />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Description</Label>
+                                    <Textarea value={draft.description ?? ''} onChange={e => setDraft(d => d ? { ...d, description: e.target.value } : d)} rows={3} placeholder="Description du projet…" className="text-xs resize-none" />
+                                </div>
+                                <div className="flex gap-2 pt-1">
+                                    <Button size="sm" variant="ghost" className="h-7 text-xs flex-1" onClick={() => { setEditing(false); setDraft({ ...project }) }}>
+                                        <X size={12} className="mr-1" />Annuler
+                                    </Button>
+                                    <Button size="sm" className="h-7 text-xs flex-1" onClick={saveProject} disabled={saving}>
+                                        <Check size={12} className="mr-1" />{saving ? '…' : 'Enregistrer'}
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-2 text-xs">
+                                <div className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">Statut</span><span>{pStatus?.label}</span></div>
+                                <div className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">Dispositif</span><span className="text-right truncate">{project.projectCall.title}</span></div>
+                                <div className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">Axe</span><span className="text-right">{project.projectCall.axis.name}</span></div>
+                                {(project.start_date || project.end_date) && (
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground shrink-0">Période</span>
+                                        <span className="text-right">{project.start_date ? formatDate(project.start_date) : '—'} → {project.end_date ? formatDate(project.end_date) : '—'}</span>
+                                    </div>
+                                )}
+                                {project.budget > 0 && (
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground shrink-0">Budget</span>
+                                        <span className="font-medium">{fmt(project.budget)}</span>
+                                    </div>
+                                )}
+                                {totalGrant > 0 && (
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground shrink-0">Subventions</span>
+                                        <span className="font-medium">{fmt(totalGrant)}</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </section>
+
+                    {/* KPIs / Indicateurs */}
+                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                        <div className="flex items-center gap-2">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Indicateurs</p>
+                        </div>
+
+                        {kpis.length === 0 && (
+                            <p className="text-xs text-muted-foreground italic">Aucun indicateur défini</p>
+                        )}
+
+                        <SearchInput
+                            data={kpis}
+                            onSelect={(kpi) => { setSelectedKpi(kpi) }}
+                            getLabel={kpi => kpi.label}
+                            placeholder="Rechercher un indicateur..."
+                            value={selectedKpi?.label}
+                        />
+
+                        {kpis.map(kpi => {
+                            const entries = kpiEntries
+                                .filter(e => e.kpi_id === kpi.id)
+                                .sort((a, b) => a.year.localeCompare(b.year))
+                            const latest = entries.at(-1)
+                            const total = entries.reduce((sum, e) => sum + e.value, 0)
+                            if (!total) return null
+                            return (
+                                <div key={kpi.id} onClick={() => setSelectedKpi(kpi)} className="flex flex-col gap-1.5 rounded-lg border border-border px-3 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs font-medium">{kpi.label}</span>
+                                        {latest && (
+                                            <span className="text-sm font-semibold tabular-nums shrink-0">
+                                                {total} <span className="text-xs font-normal text-muted-foreground">{kpi.unit}</span>
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </section>
+
+                    {/* Formations */}
+                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Formations</p>
+                        <div className="flex flex-col gap-2">
+                            <SearchInput
+                                data={allFormations.filter(f => !formations.find(pf => pf.id === f.id))}
+                                onSelect={async f => {
+                                    const link = await addProjectFormation(project!.id, f.id)
+                                    setFormations(prev => [...prev, f])
+                                    setFormationLinks(prev => [...prev, link])
+                                }}
+                                getLabel={f => `${f.code} — ${f.title}`}
+                                filterFn={(f, q) => {
+                                    const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
+                                    return `${f.code} ${f.title} ${partner?.name ?? ''}`.toLowerCase().includes(q.toLowerCase())
+                                }}
+                                groupBy={f => {
+                                    const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
+                                    return {
+                                        primary: partner?.name ?? 'Sans partenaire',
+                                        secondary: f.level,
+                                        primaryStyle: partner?.color ? { backgroundColor: partner.color } : undefined,
+                                    }
+                                }}
+                                renderItem={f => {
+                                    const partner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
+                                    return (
+                                        <div className="flex flex-col gap-0.5 min-w-0">
+                                            <span className="text-xs font-medium truncate">{f.title}</span>
+                                            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                                <span>{f.code}</span>
+                                                <span>·</span>
+                                                <span>{f.degree_type}</span>
+                                                {partner && <><span>·</span><span className="truncate">{partner.name}</span></>}
+                                            </div>
+                                        </div>
+                                    )
+                                }}
+                                placeholder="Rechercher une formation..."
+                            />
+                            {formations.length === 0 && (
+                                <p className="text-xs text-muted-foreground italic">Aucune formation rattachée</p>
+                            )}
+                            {formations.map(f => {
+                                const fPartner = f.partner_id ? partners.find(p => p.id === f.partner_id) : null
+                                return (
+                                    <div key={f.id} className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2.5">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex flex-col gap-0.5 min-w-0">
+                                                <span className="text-xs font-medium truncate">{f.title}</span>
+                                                <span className="text-xs text-muted-foreground">{f.code} · {f.degree_type} · {f.level}</span>
+                                                {fPartner && <span className="text-xs text-muted-foreground truncate">{fPartner.name}</span>}
+                                            </div>
+                                            <Button
+                                                variant="ghost" size="icon" className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:text-destructive"
+                                                onClick={async () => {
+                                                    const link = formationLinks.find(l => l.formation_id === f.id)
+                                                    if (link) await removeProjectFormation(link.id)
+                                                    setFormations(prev => prev.filter(x => x.id !== f.id))
+                                                    setFormationLinks(prev => prev.filter(l => l.formation_id !== f.id))
+                                                }}
+                                            >
+                                                <X size={12} />
+                                            </Button>
+                                        </div>
+                                        {f.formacode && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {f.formacode.split(',').slice(0, 2).map((code, i) => (
+                                                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground truncate max-w-[160px]">{code.trim()}</span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </section>
+
+                            </div>{/* fin colonne droite */}
+
+                        </div>
+                    )}{/* fin overview */}
+
+                    {/* ── ACTIONS ─────────────────────────────── */}
+                    {detailViewMode === "tasks" && (
+                        <div className="flex flex-col gap-6">
 
                     {/* Fiches action */}
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
+                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Fiches action</p>
-                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowActionCards(v => !v)}>
-                                    {showActionCards ? <Eye size={12} /> : <EyeClosed size={12} />}
-                                </Button>
                             </div>
-                            {showActionCards && !showLinkCard && !showCreateCard && (
+                            {!showLinkCard && !showCreateCard && (
                                 <div className="flex items-center gap-1">
                                     <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowLinkCard(true)}>
                                         <Plus size={11} />Lier
@@ -2750,8 +2415,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             )}
                         </div>
 
-                        {showActionCards && (
-                            <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-2">
                                 {actionCards.length === 0 && !showLinkCard && !showCreateCard && (
                                     <p className="text-xs text-muted-foreground italic">Aucune fiche action liée</p>
                                 )}
@@ -2828,32 +2492,113 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         </div>
                                     )
                                 })}
-                            </div>
-                        )}
+                        </div>
                     </section>
 
-                    {!expanded && <Separator />}
+                        </div>
+                    )}{/* fin tasks */}
+
+                    {/* ── PIÈCES JOINTES ──────────────────────── */}
+                    {detailViewMode === "files" && (
+                        <div className="flex flex-col gap-6">
+
+                            {/* Pièces jointes */}
+                            <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pièces jointes</p>
+                                    </div>
+                                    <Button variant="outline" size="xs" className="rounded-md gap-1" onClick={() => setShowAttachForm(v => !v)}>
+                                        <Plus size={11} /> Ajouter
+                                    </Button>
+                                </div>
+
+                                <div className="flex flex-col gap-2">
+                                        {showAttachForm && (
+                                            <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-muted/30">
+                                                <Input
+                                                    value={newAttachLabel}
+                                                    onChange={e => setNewAttachLabel(e.target.value)}
+                                                    placeholder="Libellé (ex. Convention signée)"
+                                                    className="h-8 text-xs"
+                                                />
+                                                <Input
+                                                    value={newAttachUrl}
+                                                    onChange={e => setNewAttachUrl(e.target.value)}
+                                                    placeholder="URL (https://...)"
+                                                    className="h-8 text-xs"
+                                                />
+                                                <div className="flex gap-2 justify-end">
+                                                    <Button variant="outline" size="sm" className="rounded-md" onClick={() => { setShowAttachForm(false); setNewAttachLabel(''); setNewAttachUrl('') }}>Annuler</Button>
+                                                    <Button size="sm" className="rounded-md" disabled={!newAttachLabel.trim() || !newAttachUrl.trim()} onClick={async () => {
+                                                        const a = await addProjectAttachment(project!.id, newAttachLabel.trim(), newAttachUrl.trim())
+                                                        setAttachments(prev => [...prev, a])
+                                                        setNewAttachLabel('')
+                                                        setNewAttachUrl('')
+                                                        setShowAttachForm(false)
+                                                    }}>
+                                                        <Check size={12} className="mr-1" /> Ajouter
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {attachments.length === 0 && !showAttachForm && (
+                                            <p className="text-xs text-muted-foreground italic">Aucune pièce jointe</p>
+                                        )}
+
+                                        {attachments.map(a => (
+                                            <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 group">
+                                                <a
+                                                    href={a.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center gap-2 min-w-0 text-xs hover:underline"
+                                                >
+                                                    <ExternalLink size={12} className="shrink-0 text-muted-foreground" />
+                                                    <span className="truncate">{a.label}</span>
+                                                </a>
+                                                <Button
+                                                    variant="ghost" size="icon" className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={async () => {
+                                                        await deleteProjectAttachment(a.id)
+                                                        setAttachments(prev => prev.filter(x => x.id !== a.id))
+                                                    }}
+                                                >
+                                                    <X size={12} />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                </div>
+                            </section>
+
+                        </div>
+                    )}{/* fin files */}
+
+                    {/* ── JALONS ──────────────────────────────── */}
+                    {detailViewMode === "timeline" && (
+                        <div className="flex flex-col gap-6">
 
                     {/* Jalons */}
-                    <section className={`flex flex-col gap-3 ${expanded ? 'bg-white border border-border rounded-xl p-4' : ''}`}>
+                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Jalons</p>
-                                <Button variant="outline" size="xs" className="rounded-md" onClick={() => setShowJalons(v => !v)}>
-                                    {showJalons ? <Eye size={12} /> : <EyeClosed size={12} />}
-                                </Button>
                             </div>
-                            {showJalons && !showAddMilestone && !editingMilestone && (
+                            {!showAddMilestone && !editingMilestone && (
                                 <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddMilestone(true)}>
                                     <Plus size={11} />Ajouter
                                 </Button>
                             )}
                         </div>
 
-                        {showJalons && (
-                            <div className="flex flex-col gap-2">
+                        <div className="relative">
                                 {milestones.length === 0 && !showAddMilestone && (
                                     <p className="text-xs text-muted-foreground italic">Aucun jalon</p>
+                                )}
+
+                                {milestones.length > 0 && (
+                                    <div className="absolute left-[5px] top-2 bottom-6 w-px bg-border" />
                                 )}
 
                                 {milestones
@@ -2861,17 +2606,18 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     .sort((a, b) => a.due_date.localeCompare(b.due_date))
                                     .map(m =>
                                         editingMilestone?.id === m.id ? (
-                                            <MilestoneForm
-                                                key={m.id}
-                                                statuses={statuses}
-                                                initial={m}
-                                                onSaved={async (fields) => {
-                                                    await updateProjectMilestone(m.id, fields)
-                                                    setMilestones(prev => prev.map(x => x.id === m.id ? { ...m, ...fields } : x))
-                                                    setEditingMilestone(null)
-                                                }}
-                                                onCancel={() => setEditingMilestone(null)}
-                                            />
+                                            <div key={m.id} className="pl-6 mb-3">
+                                                <MilestoneForm
+                                                    statuses={statuses}
+                                                    initial={m}
+                                                    onSaved={async (fields) => {
+                                                        await updateProjectMilestone(m.id, fields)
+                                                        setMilestones(prev => prev.map(x => x.id === m.id ? { ...m, ...fields } : x))
+                                                        setEditingMilestone(null)
+                                                    }}
+                                                    onCancel={() => setEditingMilestone(null)}
+                                                />
+                                            </div>
                                         ) : (
                                             <MilestoneRow
                                                 key={m.id}
@@ -2897,9 +2643,250 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         onCancel={() => setShowAddMilestone(false)}
                                     />
                                 )}
+                        </div>
+                    </section>
+
+                        </div>
+                    )}{/* fin timeline */}
+
+                    {/* ── BUDGET ──────────────────────────────── */}
+                    {detailViewMode === "budget" && (
+                        <div className="flex flex-col gap-6">
+
+                            {/* Dépenses */}
+                     <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Dépenses {projectExpanses.length > 0 && <span>({projectExpanses.length})</span>}
+                            </p>
+                            {!showLinkExpanse && (
+                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md text-muted-foreground" onClick={() => setShowLinkExpanse(true)}>
+                                    Rattacher
+                                </Button>
+                            )}
+                        </div>
+
+                        {showLinkExpanse && (
+                            <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
+                                <p className="text-xs font-medium">Rattacher une dépense existante</p>
+                                <SearchInput
+                                    data={allExpanses.filter(e => e.project_id !== project.id)}
+                                    onSelect={async e => {
+                                        await updateExpanse(e.id, { project_id: project.id })
+                                        const linked = { ...e, project_id: project.id }
+                                        setProjectExpanses(prev => [...prev, linked])
+                                        setAllExpanses(prev => prev.map(x => x.id === e.id ? linked : x))
+                                        setShowLinkExpanse(false)
+                                    }}
+                                    getLabel={e => e.title}
+                                    placeholder="Rechercher une dépense…"
+                                    groupBy={e => ({ primary: e.category })}
+                                />
+                                <div className="flex justify-end">
+                                    <Button variant="outline" size="sm" className="h-6 text-xs rounded-md" onClick={() => setShowLinkExpanse(false)}>Annuler</Button>
+                                </div>
                             </div>
                         )}
+
+                        {loading ? (
+                            <div className="flex flex-col gap-2">
+                                {[1, 2].map(i => <Skeleton key={i} className="h-8 w-full rounded-lg" />)}
+                            </div>
+                        ) : projectExpanses.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">Aucune dépense rattachée à ce projet</p>
+                        ) : (
+                            <>
+                                <div className="rounded-lg border overflow-hidden">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="text-xs bg-muted/50">
+                                                <TableHead className="h-7 text-xs">Intitulé</TableHead>
+                                                <TableHead className="h-7 text-xs w-32">Catégorie</TableHead>
+                                                <TableHead className="h-7 text-xs w-28 text-right">Montant</TableHead>
+                                                <TableHead className="h-7 text-xs w-32">Fournisseur</TableHead>
+                                                <TableHead className="h-7 text-xs w-24">Statut</TableHead>
+                                                <TableHead className="h-7 text-xs w-24">Engagement</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {projectExpanses.map(e => {
+                                                const supplier = e.supplier_id ? expanseSuppliers.find(s => s.id === e.supplier_id) : null
+                                                const categoryColors: Record<string, string> = {
+                                                    'Fonctionnement': '#ffedd5', 'Investissement': '#fef9c3',
+                                                    'Personnel': '#dbeafe', 'Autre': '#f3f4f6',
+                                                }
+                                                const statusColors: Record<string, string> = {
+                                                    'Engagé': '#dbeafe', 'Livré': '#fef9c3', 'Payé': '#dcfce7',
+                                                }
+                                                return (
+                                                    <TableRow key={e.id} className="text-xs hover:bg-muted/30">
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <TableCell className="font-medium truncate max-w-[180px]">{e.title}</TableCell>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>{e.title}</TooltipContent>
+                                                        </Tooltip>
+                                                        <TableCell>
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: categoryColors[e.category] ?? '#f3f4f6' }}>
+                                                                    {e.category}
+                                                                </span>
+                                                                {e.label && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: '#f3f4f6' }}>{e.label}</span>}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right tabular-nums font-medium">{fmt(e.amount)}</TableCell>
+                                                        <TableCell className="text-muted-foreground truncate">{supplier?.name ?? '—'}</TableCell>
+                                                        <TableCell>
+                                                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: statusColors[e.status] ?? '#f3f4f6' }}>
+                                                                {e.status}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground tabular-nums">
+                                                            {e.purchase_date ? new Date(e.purchase_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                                <div className="flex gap-4 text-xs justify-end">
+                                    <span className="text-muted-foreground">Engagé <span className='text-[10px] text-gray-500'>(non payé)</span> · <span className="font-medium text-foreground">{fmt(projectExpanses.filter(e => e.status === 'Engagé' || e.status === 'Livré').reduce((s, e) => s + e.amount, 0))}</span></span>
+                                    <span className="text-muted-foreground">Payé · <span className="font-medium text-foreground">{fmt(projectExpanses.filter(e => e.status === 'Payé').reduce((s, e) => s + e.amount, 0))}</span></span>
+                                    <span className="text-muted-foreground">Total · <span className="font-medium text-foreground">{fmt(totalExpanses)}</span></span>
+                                </div>
+                            </>
+                        )}
                     </section>
+
+                    {/* Conventions */}
+                     <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Conventions</p>
+                            </div>
+                            {!showAddForm && !showLinkAgreement && !editingAgreement && (
+                                <div className="flex items-center gap-1">
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddForm(true)}>
+                                        <Plus size={11} />Nouvelle
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md text-muted-foreground" onClick={async () => {
+                                        setShowLinkAgreement(true)
+                                        if (allAgreementsForLink.length === 0) {
+                                            setLoadingLinkAgreements(true)
+                                            const all = await getFinancialAgreements()
+                                            const partnerMap = new Map(partners.map(p => [p.id, p]))
+                                            setAllAgreementsForLink((all as FinancialAgreement[])
+                                                .filter(a => a.project_id !== project.id)
+                                                .map(a => ({ ...a, partner: partnerMap.get(a.partner_id) ?? { id: 0, name: '?', description: '', color: '', logo: '', status_id: 0, type: '', consortium: false } }))
+                                            )
+                                            setLoadingLinkAgreements(false)
+                                        }
+                                    }}>
+                                        Rattacher
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+
+                        {loading ? (
+                            <div className="flex flex-col gap-2">
+                                {[1, 2].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-2">
+                                {agreements.map(a =>
+                                    editingAgreement?.id === a.id ? (
+                                        <AgreementForm
+                                            key={a.id}
+                                            partners={partners}
+                                            statuses={statuses}
+                                            axes={axes}
+                                            projectId={project.id}
+                                            initial={a}
+                                            budgetCategories={budgetCategories}
+                                            budgetDetails={budgetDetails}
+                                            onSaved={handleAgreementSaved}
+                                            onCancel={() => setEditingAgreement(null)}
+                                        />
+                                    ) : (
+                                        <AgreementRow
+                                            key={a.id}
+                                            agreement={a}
+                                            statuses={statuses}
+                                            axe={axis.find(ax => ax.id === a.axis_id)}
+                                            onEdit={setEditingAgreement}
+                                            onDelete={handleDeleteAgreement}
+                                            onOpen={() => setSelectedAgreement(a)}
+                                        />
+                                    )
+                                )}
+
+                                {showAddForm && (
+                                    <AgreementForm
+                                        partners={partners}
+                                        statuses={statuses}
+                                        axes={axes}
+                                        projectId={project.id}
+                                        budgetCategories={budgetCategories}
+                                        budgetDetails={budgetDetails}
+                                        onSaved={a => { handleAgreementSaved(a); setShowAddForm(false) }}
+                                        onCancel={() => setShowAddForm(false)}
+                                    />
+                                )}
+
+                                {showLinkAgreement && (
+                                    <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
+                                        <p className="text-xs font-medium">Rattacher une convention existante</p>
+                                        {loadingLinkAgreements
+                                            ? <p className="text-xs text-muted-foreground">Chargement…</p>
+                                            : <SearchInput
+                                                data={allAgreementsForLink}
+                                                onSelect={async a => {
+                                                    await updateAgreement(a.id, { project_id: project.id })
+                                                    setAgreements(prev => [...prev, { ...a, project_id: project.id }])
+                                                    onAgreementAdded({ ...a, project_id: project.id })
+                                                    setAllAgreementsForLink(prev => prev.filter(x => x.id !== a.id))
+                                                    setShowLinkAgreement(false)
+                                                }}
+                                                getLabel={a => a.title}
+                                                placeholder="Rechercher une convention…"
+                                                groupBy={a => ({ primary: a.partner.name })}
+                                            />
+                                        }
+                                        <div className="flex justify-end">
+                                            <Button variant="outline" size="sm" className="h-6 text-xs rounded-md" onClick={() => setShowLinkAgreement(false)}>Annuler</Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {agreements.length === 0 && !showAddForm && !showLinkAgreement && (
+                                    <p className="text-xs text-muted-foreground italic">Aucune convention</p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Totaux conventions */}
+                        {agreements.length > 1 && (
+                            <>
+                                <Separator />
+                                <div className="flex flex-col gap-1 text-xs">
+                                    <div className="flex justify-between text-muted-foreground">
+                                        <span>Total budget conventions</span>
+                                        <span className="font-medium text-foreground">{fmt(totalBudget)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-muted-foreground">
+                                        <span>Total subventions</span>
+                                        <span className="font-medium text-foreground">{fmt(totalGrant)}</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </section>
+
+
+                        </div>
+                    )}{/* fin budget */}
 
                 </div>
             </SheetContent>
@@ -2914,6 +2901,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
             statuses={statuses}
             axes={axes}
             projectId={project?.id ?? 0}
+            budgetDetails={budgetDetails}
             onSaved={a => setAgreements(prev => prev.map(x => x.id === a.id ? a : x))}
             onDeleted={id => { setAgreements(prev => prev.filter(x => x.id !== id)); setSelectedAgreement(null) }}
         />
