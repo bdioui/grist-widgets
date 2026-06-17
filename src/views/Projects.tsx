@@ -48,7 +48,6 @@ import {
 } from '@/lib/api'
 import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
 
