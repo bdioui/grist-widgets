@@ -18,7 +18,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, CalendarDays, LayoutGrid, Table2, Folder, File, BarChart2, GraduationCap, Paperclip, Milestone, Receipt, DotIcon, Menu, EllipsisIcon } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, CalendarDays, LayoutGrid, Table2, Paperclip, Milestone, Receipt, EllipsisIcon } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { ActionCardDetailSheet } from '@/views/actions/ActionCard'
@@ -3716,7 +3716,7 @@ export default function Projects() {
                                     {active > 0 && <span className="text-muted-foreground text-xs">{active}/{projectCalls.length}</span>}
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-64">
+                            <DropdownMenuContent align="start" className="w-64 max-h-64 overflow-y-auto">
                                 {visibleCalls.map(pc => (
                                     <DropdownMenuCheckboxItem
                                         key={pc.id}
