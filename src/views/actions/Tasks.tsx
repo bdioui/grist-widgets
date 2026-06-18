@@ -470,7 +470,7 @@ export default function Tasks() {
                     />
                 </div>
 
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex items-center gap-2 shrink-0">
                     {multipleSelect ? (
                         <Button size="sm" variant="outline" className="gap-1.5 rounded-md" onClick={() => { setMultipleSelect(false); setSelectedCards([]) }}>
                             <X size={14} /> Terminer

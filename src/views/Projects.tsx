@@ -3639,8 +3639,8 @@ export default function Projects() {
 
             {/* Toolbar */}
             
-            <div className="flex items-center gap-2 px-6 py-3 border-b  shrink-0">
-                <div className="bg-gray-200 rounded-full border p-1 flex relative">
+            <div className="flex items-center gap-2 px-6 py-3 border-b shrink-0 flex-wrap">
+                <div className="bg-gray-200 rounded-full border p-1 flex relative shrink-0">
                     {([
                         { mode: 'cards',    label: 'Cartes',    icon: <LayoutGrid size={13} /> },
                         { mode: 'table',    label: 'Tableau',   icon: <Table2 size={13} /> },
@@ -3797,7 +3797,7 @@ export default function Projects() {
                     )
                 })()}
 
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex items-center gap-2 shrink-0">
                     {viewMode === "cards" && (
                         <>
                         {multipleSelect ? (

@@ -55,13 +55,6 @@ function KpiCard({ icon, label, value, sub, accent }: {
     )
 }
 
-function ProgressBar({ value, color = '#6366f1', bg = '#e5e7eb' }: { value: number; color?: string; bg?: string }) {
-    return (
-        <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: bg }}>
-            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, Math.max(0, value))}%`, backgroundColor: color }} />
-        </div>
-    )
-}
 
 function AlertCard({ project, statusLabel, daysLeft, memberCount, grant, onOpen }: {
     project:     Project
