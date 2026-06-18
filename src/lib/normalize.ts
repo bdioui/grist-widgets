@@ -551,6 +551,7 @@ export function normalizeExpanse(rows: Record<string, unknown>[]): Expanse[] {
         category: str(r.category),
         label: str(r.label),
         project_id: num(r.project_id),
+        agreement_id: nullable(r.agreement_id),
         payment_date: str(r.payment_date),
         purchase_date: str(r.purchase_date),
         delivery_date: str(r.delivery_date),

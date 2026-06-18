@@ -58,7 +58,22 @@ export default function App() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button className="rounded-md" variant="outline" size="sm">
-                <Menu />
+                <Menu /> {currentMember ? (
+                <>
+                  <div className="flex items-center gap-2 px-2 py-2">
+                    {/* <Avatar size="sm" className="h-7 w-7 border-l border-gray">
+                      <AvatarImage src={currentMember.profile_image} />
+                      <AvatarFallback className="text-xs" style={{ backgroundColor: currentMember.partner?.color ?? '#E7E8E2' }}>
+                        {currentMember.first_name[0]}{currentMember.last_name[0]}
+                      </AvatarFallback>
+                    </Avatar> */}
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium truncate">{currentMember.first_name} {currentMember.last_name}</span>
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator />
+                </>
+              ) : "Utilisteur non connecté"}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56" onCloseAutoFocus={() => setShowProfilePicker(false)}>

@@ -369,6 +369,7 @@ export type Expanse = {
     budget_detail_id: number | null
     supplier_id: number | null
     project_id: number | null
+    agreement_id: number | null
     purchase_date: string
     delivery_date: string
     payment_date: string

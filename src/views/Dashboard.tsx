@@ -210,9 +210,10 @@ export default function Dashboard() {
     const projectStatusMap = new Map(statuses.filter(s => s.context === 'project').map(s => [s.id, s]))
     const activeStatuses   = ['En cours', 'En attente', 'Suspendu']
     const activeProjects   = projects.filter(p => activeStatuses.includes(projectStatusMap.get(p.status_id)?.label ?? ''))
-    const totalGrant       = agreements.reduce((s, a) => s + a.grant, 0)
-    const totalBudget      = projects.reduce((s, p) => s + p.budget, 0)
-    const totalExpanses    = expanses.reduce((s, e) => s + e.amount, 0)
+    const totalGrant           = agreements.reduce((s, a) => s + a.grant, 0)
+    const totalBudget          = projects.reduce((s, p) => s + p.budget, 0)
+    const totalExpanses        = expanses.reduce((s, e) => s + e.amount, 0)
+    const totalReversements    = expanses.filter(e => e.agreement_id != null).reduce((s, e) => s + e.amount, 0)
 
 
 
@@ -310,68 +311,100 @@ export default function Dashboard() {
 
             {/* ── En-tête Programme ── */}
             {program && (
-                <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex flex-col gap-0.5">
-                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Programme</span>
-                            <h1 className="text-xl font-semibold">{program.name}</h1>
-                            {program.description && <p className="text-sm text-muted-foreground mt-0.5">{program.description}</p>}
-                        </div>
-                        <div className="flex flex-col items-end gap-0.5 shrink-0">
-                            <span className="text-xs text-muted-foreground">
-                                {new Date(program.start_date).getFullYear()} — {new Date(program.end_date).getFullYear()}
-                            </span>
-                            <span className="text-xs font-medium">
-                                {progPercent}% écoulé
-                                {progYearsLeft && parseFloat(progYearsLeft) > 0
-                                    ? ` · ${progYearsLeft} ans restants`
-                                    : ' · Programme terminé'}
-                            </span>
-                            {progDaysLeft !== null && progDaysLeft <= 365 && progDaysLeft > 0 && (
-                                <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
-                                    <AlertTriangle size={11} /> Moins d'un an restant
+                <div className="rounded-xl overflow-hidden" style={{ position: 'relative', background: '#f0f2ff' }}>
+                    <style>{`
+                        @keyframes _blob1 {
+                            0%   { transform: translate(0px, 0px) scale(1); }
+                            25%  { transform: translate(60px, -40px) scale(1.08); }
+                            50%  { transform: translate(20px, 50px) scale(0.92); }
+                            75%  { transform: translate(-50px, 10px) scale(1.05); }
+                            100% { transform: translate(0px, 0px) scale(1); }
+                        }
+                        @keyframes _blob2 {
+                            0%   { transform: translate(0px, 0px) scale(1); }
+                            30%  { transform: translate(-70px, 30px) scale(1.1); }
+                            60%  { transform: translate(40px, -50px) scale(0.9); }
+                            100% { transform: translate(0px, 0px) scale(1); }
+                        }
+                        @keyframes _blob3 {
+                            0%   { transform: translate(0px, 0px) scale(1); }
+                            40%  { transform: translate(50px, 40px) scale(0.88); }
+                            70%  { transform: translate(-30px, -30px) scale(1.12); }
+                            100% { transform: translate(0px, 0px) scale(1); }
+                        }
+                        @keyframes _blob4 {
+                            0%   { transform: translate(0px, 0px) scale(1); }
+                            35%  { transform: translate(-40px, -50px) scale(1.1); }
+                            70%  { transform: translate(60px, 20px) scale(0.9); }
+                            100% { transform: translate(0px, 0px) scale(1); }
+                        }
+                    `}</style>
+                    {/* Blobs animés */}
+                    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+                        <div style={{
+                            position: 'absolute', width: 360, height: 360,
+                            borderRadius: '62% 38% 70% 30% / 44% 58% 42% 56%',
+                            background: '#8ca2fa', filter: 'blur(72px)', opacity: 0.75,
+                            top: -120, left: -80,
+                            animation: '_blob1 12s ease-in-out infinite',
+                            willChange: 'transform',
+                        }} />
+                        <div style={{
+                            position: 'absolute', width: 300, height: 300,
+                            borderRadius: '38% 62% 30% 70% / 56% 44% 56% 44%',
+                            background: '#dbeafe', filter: 'blur(64px)', opacity: 0.65,
+                            bottom: -100, right: '20%',
+                            animation: '_blob2 16s ease-in-out infinite',
+                            willChange: 'transform',
+                        }} />
+                        <div style={{
+                            position: 'absolute', width: 340, height: 240,
+                            borderRadius: '50% 50% 38% 62% / 62% 44% 56% 38%',
+                            background: '#9e8ded', filter: 'blur(56px)', opacity: 0.7,
+                            top: -60, right: '5%',
+                            animation: '_blob3 9s ease-in-out infinite',
+                            willChange: 'transform',
+                        }} />
+                        <div style={{
+                            position: 'absolute', width: 200, height: 200,
+                            borderRadius: '70% 30% 50% 50% / 38% 62% 38% 62%',
+                            background: '#aedef8', filter: 'blur(50px)', opacity: 0.6,
+                            bottom: -40, left: '35%',
+                            animation: '_blob4 14s ease-in-out infinite',
+                            willChange: 'transform',
+                        }} />
+                    </div>
+                    {/* Voile glossy matte */}
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.42)', backdropFilter: 'blur(0.5px)' }} />
+                    {/* Contenu */}
+                    <div className="relative z-10 flex flex-col gap-3 p-5">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Programme</span>
+                                <h1 className="text-4xl font-semibold">{program.name}</h1>
+                                {program.description && <p className="text-sm text-muted-foreground max-w-md mt-0.5">{program.description}</p>}
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                <span className="text-XL text-black">
+                                    {new Date(program.start_date).getFullYear()} — {new Date(program.end_date).getFullYear()}
                                 </span>
-                            )}
+                                <span className="text-2XL font-medium">
+                                    {progPercent}% écoulé
+                                    {progYearsLeft && parseFloat(progYearsLeft) > 0
+                                        ? ` · ${progYearsLeft} ans restants`
+                                        : ' · Programme terminé'}
+                                </span>
+                                {progDaysLeft !== null && progDaysLeft <= 365 && progDaysLeft > 0 && (
+                                    <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                                        <AlertTriangle size={11} /> Moins d'un an restant
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <div className="h-1 w-full rounded-full bg-black/10 overflow-hidden">
+                            <div className="h-full rounded-full bg-black/20 transition-all" style={{ width: `${progPercent}%` }} />
                         </div>
                     </div>
-                    <ProgressBar value={progPercent} color="#dbeafe" />
-                    {program.budget > 0 && (() => {
-                        const pct = (v: number) => program.budget > 0 ? Math.min(100, Math.round(v / program.budget * 100)) : 0
-                        const reste = Math.max(0, program.budget - totalGrant - totalExpanses)
-                        return (
-                            <div className="flex flex-col gap-2 mt-1">
-                                <div className="flex h-2 w-full rounded-full overflow-hidden gap-px">
-                                    {totalGrant > 0 && <div className="h-full rounded-l-full" style={{ width: `${pct(totalGrant)}%`, backgroundColor: '#dbeafe' }} />}
-                                    {totalExpanses > 0 && <div className="h-full" style={{ width: `${pct(totalExpanses)}%`, backgroundColor: '#f3f4f6' }} />}
-                                    {reste > 0 && <div className="h-full flex-1 rounded-r-full bg-border" />}
-                                </div>
-                                <div className="flex items-center gap-4 flex-wrap">
-                                    <div className="flex items-center gap-1.5 text-xs">
-                                        <span className="text-muted-foreground">Budget :</span>
-                                        <span className="font-semibold">{fmt(program.budget)}</span>
-                                    </div>
-                                    {totalGrant > 0 && (
-                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#dbeafe' }} />
-                                            <span>Subventions : <span className="font-medium text-foreground">{fmt(totalGrant)}</span> ({pct(totalGrant)} %)</span>
-                                        </div>
-                                    )}
-                                    {totalExpanses > 0 && (
-                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#f3f4f6' }} />
-                                            <span>Dépenses : <span className="font-medium text-foreground">{fmt(totalExpanses)}</span> ({pct(totalExpanses)} %)</span>
-                                        </div>
-                                    )}
-                                    {reste > 0 && (
-                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                            <span className="w-2 h-2 rounded-full shrink-0 bg-border" />
-                                            <span>Non alloué : <span className="font-medium">{fmt(reste)}</span> ({pct(reste)} %)</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )
-                    })()}
                 </div>
             )}
 
@@ -392,23 +425,23 @@ export default function Dashboard() {
                 <KpiCard
                     icon={<TrendingUp size={16} />}
                     label="Budget engagé"
-                    value={fmt(totalGrant + totalExpanses)}
+                    value={fmt(totalExpanses)}
                     sub={program?.budget
-                        ? `${Math.round(((totalGrant + totalExpanses) / program.budget) * 100)} % du budget programme`
+                        ? `${Math.round((totalExpanses / program.budget) * 100)} % du budget programme`
                         : `sur ${fmt(totalBudget)} projets`
                     }
                 />
                 <KpiCard
                     icon={<Receipt size={16} />}
-                    label="Dépenses annexes"
+                    label="Dépenses réalisées"
                     value={fmt(totalExpanses)}
-                    sub={totalGrant > 0 ? `dont ${fmt(totalGrant)} subventions` : undefined}
+                    sub={totalReversements > 0 ? `dont ${fmt(totalReversements)} reversés aux partenaires` : totalGrant > 0 ? `${agreements.length} convention${agreements.length > 1 ? 's' : ''}` : undefined}
                 />
                 <KpiCard
                     icon={<Users size={16} />}
-                    label="Membres"
+                    label="Contacts"
                     value={members.length}
-                    sub={`${members.filter(m => m.is_staff).length} staff`}
+                    sub={`${members.filter(m => m.is_staff).length} dans l'équipe`}
                 />
             </div>
 
@@ -515,10 +548,8 @@ export default function Dashboard() {
                     {budgetCategories.length === 0
                         ? <p className="text-xs text-muted-foreground italic">Aucune catégorie budgétaire</p>
                         : (() => {
-                            const visibleAgreements = agreements.filter(a => a.budget_detail_id !== null)
                             const totalBudget = budgetDetails.reduce((s, d) => s + d.budget, 0)
                             const totalSpent  = expanses.reduce((s, e) => s + e.amount, 0)
-                                + visibleAgreements.reduce((s, a) => s + a.grant, 0)
                             const totalReste  = totalBudget - totalSpent
                             return (
                                 <table className="w-full text-xs border-collapse">
@@ -536,7 +567,6 @@ export default function Dashboard() {
                                             const details   = budgetDetails.filter(d => d.budget_category_id === cat.id)
                                             const catBudget = details.reduce((s, d) => s + d.budget, 0)
                                             const catSpent  = expanses.filter(e => details.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
-                                                + visibleAgreements.filter(a => details.some(d => d.id === a.budget_detail_id)).reduce((s, a) => s + a.grant, 0)
                                             const catReste  = catBudget - catSpent
                                             const catPct    = catBudget > 0 ? Math.round(catSpent / catBudget * 100) : 0
                                             const catOver   = catReste < 0

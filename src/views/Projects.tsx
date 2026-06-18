@@ -1730,6 +1730,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
 
     const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
     const totalGrant  = agreements.reduce((s, a) => s + a.grant, 0)
+    const operationalExpanses  = projectExpanses.filter(e => !e.agreement_id)
+    const reversementExpanses  = projectExpanses.filter(e => !!e.agreement_id)
     const totalExpanses = projectExpanses.reduce((s, e) => s + e.amount, 0)
     const pStatus = statuses.find(s => s.id === project.status_id)
 
@@ -1852,11 +1854,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     {detailViewMode === "overview" && (
                         <div className={expanded ? "grid grid-cols-3 gap-5 items-start" : "flex flex-col gap-6"}>
 
-                            {/* Colonne gauche 2/3 */}
-                            <div className={`flex flex-col gap-6 ${expanded ? 'col-span-2' : ''}`}>
-
                     {/* Participants */}
-                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-2 row-start-1' : 'order-2'}`}>
                         <div className="flex items-center justify-between group/header">
                             <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants {projectMembers.length > 0 && ( <span>({projectMembers.length})</span>)}</p>
@@ -2016,7 +2015,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     </section>
 
                     {/* Partenaires */}
-                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-2 row-start-2' : 'order-3'}`}>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Partenaires</p>
@@ -2127,7 +2126,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     </section>
 
                     {/* Actions récentes */}
-                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-2 row-start-3' : 'order-4'}`}>
                         <div className="flex items-center justify-between">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Actions récentes</p>
                             {actionCards.length > 0 && (
@@ -2180,13 +2179,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                         )}
                     </section>
 
-                            </div>{/* fin colonne gauche */}
-
-                            {/* Colonne droite 1/3 */}
-                            <div className={`flex flex-col gap-6 ${expanded ? 'col-span-1' : ''}`}>
-
                     {/* Informations projet */}
-                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-1 row-start-1' : 'order-1'}`}>
                         <div className="flex items-center justify-between">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Informations</p>
                             {!editing && (
@@ -2270,7 +2264,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     </section>
 
                     {/* KPIs / Indicateurs */}
-                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-1 row-start-3' : 'order-6'}`}>
                         <div className="flex items-center gap-2">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Indicateurs</p>
                         </div>
@@ -2310,7 +2304,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     </section>
 
                     {/* Formations */}
-                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-1 row-start-2' : 'order-5'}`}>
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Formations</p>
                         <div className="flex flex-col gap-2">
                             <SearchInput
@@ -2386,8 +2380,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             })}
                         </div>
                     </section>
-
-                            </div>{/* fin colonne droite */}
 
                         </div>
                     )}{/* fin overview */}
@@ -2695,7 +2687,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             <p className="text-xs text-muted-foreground italic">Aucune dépense rattachée à ce projet</p>
                         ) : (
                             <>
-                                <div className="rounded-lg border overflow-hidden">
+                                <div className="rounded-lg border">
                                     <Table>
                                         <TableHeader>
                                             <TableRow className="text-xs bg-muted/50">
@@ -2710,6 +2702,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         <TableBody>
                                             {projectExpanses.map(e => {
                                                 const supplier = e.supplier_id ? expanseSuppliers.find(s => s.id === e.supplier_id) : null
+                                                const linkedAgreement = e.agreement_id ? agreements.find(a => a.id === e.agreement_id) : null
                                                 const categoryColors: Record<string, string> = {
                                                     'Fonctionnement': '#ffedd5', 'Investissement': '#fef9c3',
                                                     'Personnel': '#dbeafe', 'Autre': '#f3f4f6',
@@ -2717,11 +2710,18 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                                 const statusColors: Record<string, string> = {
                                                     'Engagé': '#dbeafe', 'Livré': '#fef9c3', 'Payé': '#dcfce7',
                                                 }
-                                                return (
-                                                    <TableRow key={e.id} className="text-xs hover:bg-muted/30">
+                                                                return (
+                                                    <TableRow key={e.id} className={`text-xs hover:bg-muted/30 ${linkedAgreement ? 'bg-blue-50/40' : ''}`}>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
-                                                                <TableCell className="font-medium truncate max-w-[180px]">{e.title}</TableCell>
+                                                                <TableCell className="font-medium truncate max-w-[180px]">
+                                                                    <div className="flex flex-col gap-0.5">
+                                                                        <span className="truncate">{e.title}</span>
+                                                                        {linkedAgreement && (
+                                                                            <span className="text-[10px] text-blue-600 font-normal">↳ {linkedAgreement.title}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </TableCell>
                                                             </TooltipTrigger>
                                                             <TooltipContent>{e.title}</TooltipContent>
                                                         </Tooltip>
@@ -2749,10 +2749,23 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         </TableBody>
                                     </Table>
                                 </div>
-                                <div className="flex gap-4 text-xs justify-end">
-                                    <span className="text-muted-foreground">Engagé <span className='text-[10px] text-gray-500'>(non payé)</span> · <span className="font-medium text-foreground">{fmt(projectExpanses.filter(e => e.status === 'Engagé' || e.status === 'Livré').reduce((s, e) => s + e.amount, 0))}</span></span>
-                                    <span className="text-muted-foreground">Payé · <span className="font-medium text-foreground">{fmt(projectExpanses.filter(e => e.status === 'Payé').reduce((s, e) => s + e.amount, 0))}</span></span>
-                                    <span className="text-muted-foreground">Total · <span className="font-medium text-foreground">{fmt(totalExpanses)}</span></span>
+                                <div className="flex flex-col gap-1 text-xs border-t pt-2 mt-1">
+                                    {reversementExpanses.length > 0 && (
+                                        <div className="flex justify-between text-muted-foreground">
+                                            <span>Dépenses opérationnelles</span>
+                                            <span className="font-medium text-foreground">{fmt(operationalExpanses.reduce((s, e) => s + e.amount, 0))}</span>
+                                        </div>
+                                    )}
+                                    {reversementExpanses.length > 0 && (
+                                        <div className="flex justify-between text-muted-foreground">
+                                            <span>Reversements conventions</span>
+                                            <span className="font-medium text-foreground">{fmt(reversementExpanses.reduce((s, e) => s + e.amount, 0))}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between font-medium text-foreground">
+                                        <span>Total engagé</span>
+                                        <span>{fmt(totalExpanses)}</span>
+                                    </div>
                                 </div>
                             </>
                         )}
@@ -2866,18 +2879,24 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                         )}
 
                         {/* Totaux conventions */}
-                        {agreements.length > 1 && (
+                        {agreements.length > 0 && (
                             <>
                                 <Separator />
                                 <div className="flex flex-col gap-1 text-xs">
                                     <div className="flex justify-between text-muted-foreground">
-                                        <span>Total budget conventions</span>
+                                        <span>Budget total conventions</span>
                                         <span className="font-medium text-foreground">{fmt(totalBudget)}</span>
                                     </div>
                                     <div className="flex justify-between text-muted-foreground">
-                                        <span>Total subventions</span>
+                                        <span>Subventions accordées</span>
                                         <span className="font-medium text-foreground">{fmt(totalGrant)}</span>
                                     </div>
+                                    {reversementExpanses.length > 0 && (
+                                        <div className="flex justify-between text-muted-foreground">
+                                            <span className="italic">Dont versé (comptabilisé en dépenses)</span>
+                                            <span className="italic">{fmt(reversementExpanses.reduce((s, e) => s + e.amount, 0))}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}

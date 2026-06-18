@@ -250,9 +250,10 @@ interface DepensesTabProps {
     suppliers: Supplier[]
     setSuppliers: React.Dispatch<React.SetStateAction<Supplier[]>>
     projects: Project[]
+    agreements: FinancialAgreement[]
 }
 
-function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, suppliers, setSuppliers, projects }: DepensesTabProps) {
+function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, suppliers, setSuppliers, projects, agreements }: DepensesTabProps) {
     const [search, setSearch] = useState('')
     const [categoryFilter, setCategoryFilter] = useState('all')
     const [labelFilter, setLabelFilter] = useState('all')
@@ -277,6 +278,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const budgetCategoryMap  = useMemo(() => new Map(budgetCategories.map(c => [c.id, c])), [budgetCategories])
     const supplierMap        = useMemo(() => new Map(suppliers.map(s => [s.id, s])), [suppliers])
     const projectMap         = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
+    const agreementMap       = useMemo(() => new Map(agreements.map(a => [a.id, a])), [agreements])
 
     const labels = useMemo(() => [...new Set(expanses.map(e => e.label))].filter(Boolean).sort(), [expanses])
     const labelsByCategory = useMemo(() => {
@@ -352,7 +354,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
 
     function startAdd() {
         setIsAdding(true)
-        setNewDraft({ title: '', category: 'Fonctionnement', label: '', status: 'Engagé', amount: 0, purchase_date: '', payment_date: '', delivery_date: '', description: '', budget_detail_id: leafBudgetDetails[0]?.id ?? null, supplier_id: null, project_id: null })
+        setNewDraft({ title: '', category: 'Fonctionnement', label: '', status: 'Engagé', amount: 0, purchase_date: '', payment_date: '', delivery_date: '', description: '', budget_detail_id: leafBudgetDetails[0]?.id ?? null, supplier_id: null, project_id: null, agreement_id: null })
         setEditingId(null)
     }
 
@@ -447,7 +449,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     }
 
     const selCount = filtered.filter(e => selected.has(e.id)).length
-    const selEngage = expanses.filter(e => selected.has(e.id) && (e.status === 'Engagé' || e.status === 'Livré')).reduce((s, e) => s + e.amount, 0)
+    const selEngage = expanses.filter(e => selected.has(e.id) && e.status !== 'Payé').reduce((s, e) => s + e.amount, 0)
     const selPaye   = expanses.filter(e => selected.has(e.id) && e.status === 'Payé').reduce((s, e) => s + e.amount, 0)
     const selTotal  = expanses.filter(e => selected.has(e.id)).reduce((s, e) => s + e.amount, 0)
 
@@ -457,7 +459,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
             <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs text-muted-foreground">Engagé</p>
-                    <p className="text-xl font-semibold mt-1">{formatAmount(expanses.filter(e => e.status === 'Engagé' || e.status === 'Livré').reduce((s, e) => s + e.amount, 0))}</p>
+                    <p className="text-xl font-semibold mt-1">{formatAmount(expanses.filter(e => e.status !== 'Payé').reduce((s, e) => s + e.amount, 0))}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">Non encore payé</p>
                     {selCount > 0 && <p className="text-[10px] text-primary/70 mt-1">Sélection · {formatAmount(selEngage)}</p>}
                 </div>
@@ -555,6 +557,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                 { key: 'amount',   label: 'Montant',           className: 'h-8 w-28 text-right' },
                                 { key: 'supplier', label: 'Fournisseur', className: 'h-8 w-36' },
                                 { key: 'project',  label: 'Projet',      className: 'h-8 w-36' },
+                                { key: 'convention', label: 'Convention', className: 'h-8 w-40' },
                                 { key: 'status',   label: 'Statut',      className: 'h-8 w-28' },
                                 { key: 'purchase', label: 'Engagement',  className: 'h-8 w-28' },
                                 { key: 'payment',  label: 'Paiement',    className: 'h-8 w-28' },
@@ -633,6 +636,15 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                         placeholder="Projet…"
                                         dropdownClassName="min-w-[260px]"
                                     />
+                                </TableCell>
+                                <TableCell>
+                                    <Select value={newDraft.agreement_id != null ? String(newDraft.agreement_id) : '__none__'} onValueChange={v => setNewDraft(d => ({ ...d, agreement_id: v === '__none__' ? null : Number(v) }))}>
+                                        <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="— Aucune —" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="__none__" className="text-xs text-muted-foreground">— Aucune —</SelectItem>
+                                            {agreements.map(a => <SelectItem key={a.id} value={String(a.id)} className="text-xs">{a.title}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
                                 </TableCell>
                                 <TableCell>
                                     <Select value={newDraft.status ?? ''} onValueChange={v => setNewDraft(d => ({ ...d, status: v }))}>
@@ -729,6 +741,15 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                         />
                                     </TableCell>
                                     <TableCell>
+                                        <Select value={draft.agreement_id != null ? String(draft.agreement_id) : '__none__'} onValueChange={v => setDraft(d => ({ ...d, agreement_id: v === '__none__' ? null : Number(v) }))}>
+                                            <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="— Aucune —" /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__none__" className="text-xs text-muted-foreground">— Aucune —</SelectItem>
+                                                {agreements.map(a => <SelectItem key={a.id} value={String(a.id)} className="text-xs">{a.title}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </TableCell>
+                                    <TableCell>
                                         <Select value={draft.status ?? ''} onValueChange={v => setDraft(d => ({ ...d, status: v }))}>
                                             <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent>
@@ -782,6 +803,13 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                     <TableCell className="text-right font-medium tabular-nums">{formatAmount(e.amount)}</TableCell>
                                     <TableCell className="text-muted-foreground truncate">{supplier?.name ?? '—'}</TableCell>
                                     <TableCell className="text-muted-foreground truncate">{project?.title ?? '—'}</TableCell>
+                                    <TableCell className="text-muted-foreground truncate">
+                                        {e.agreement_id ? (
+                                            <span className="text-[10px] text-blue-600 font-medium">
+                                                ↳ {agreementMap.get(e.agreement_id)?.title ?? '—'}
+                                            </span>
+                                        ) : '—'}
+                                    </TableCell>
                                     <TableCell>
                                         <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: EXPANSE_STATUS_COLORS[e.status] ?? '#f3f4f6' }}>
                                             {e.status}
@@ -1375,7 +1403,6 @@ function periodLabel(d: BudgetDetail): string | null {
 function BudgetTab({
     program,
     expanses,
-    agreements,
     budgetCategories,
     budgetDetails,
     setBudgetCategories,
@@ -1383,7 +1410,6 @@ function BudgetTab({
 }: {
     program: Program | null
     expanses: Expanse[]
-    agreements: FinancialAgreement[]
     budgetCategories: BudgetCategory[]
     budgetDetails: BudgetDetail[]
     setBudgetCategories: React.Dispatch<React.SetStateAction<BudgetCategory[]>>
@@ -1502,11 +1528,9 @@ function BudgetTab({
     const visibleExpanses   = baseExpanses
         .filter(e => e.budget_detail_id === null || visibleLeafIds.has(e.budget_detail_id))
         .filter(e => yearFilter === null || !e.purchase_date || new Date(e.purchase_date).getFullYear() === yearFilter)
-    const visibleAgreements = agreements
-        .filter(a => a.budget_detail_id !== null && (budgetMode === 'engaged' || a.signed_date) && visibleLeafIds.has(a.budget_detail_id!))
-        .filter(a => yearFilter === null || !a.signed_date || new Date(a.signed_date).getFullYear() === yearFilter)
     const totalBudgetLines  = visibleLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
-    const totalSpent        = visibleExpanses.reduce((s, e) => s + e.amount, 0) + visibleAgreements.reduce((s, a) => s + a.grant, 0)
+    const totalSpent        = visibleExpanses.reduce((s, e) => s + e.amount, 0)
+    const totalReversements = visibleExpanses.filter(e => e.agreement_id != null).reduce((s, e) => s + e.amount, 0)
     const totalReste        = totalBudgetLines - totalSpent
 
     return (
@@ -1559,7 +1583,6 @@ function BudgetTab({
                                     }, 0)
                                     const catBudget   = catEnvelope
                                     const catSpent    = visibleExpanses.filter(e => catLeafs.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
-                                                      + visibleAgreements.filter(a => catLeafs.some(d => d.id === a.budget_detail_id)).reduce((s, a) => s + a.grant, 0)
                                     const catReste    = catBudget - catSpent
                                     const catPct      = catBudget > 0 ? Math.round(catSpent / catBudget * 100) : 0
                                     return (
@@ -1594,7 +1617,6 @@ function BudgetTab({
                                                 const grpEnvelope = grp.budget > 0 ? proratedBudget(grp, yearFilter) : grpAlloue
                                                 const grpBudget   = grpEnvelope
                                                 const grpSpent    = visibleExpanses.filter(e => grpLeafs.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
-                                                                  + visibleAgreements.filter(a => grpLeafs.some(d => d.id === a.budget_detail_id)).reduce((s, a) => s + a.grant, 0)
                                                 const grpReste    = grpBudget - grpSpent
                                                 const grpPct      = grpBudget > 0 ? Math.round(grpSpent / grpBudget * 100) : 0
                                                 return (
@@ -1625,8 +1647,7 @@ function BudgetTab({
                                                         </tr>
                                                         {grpLeafs.map(leaf => {
                                                             const leafBudget = proratedBudget(leaf, yearFilter)
-                                                            const leafSpent  = visibleExpanses.filter(e => e.budget_detail_id === leaf.id).reduce((s, e) => s + e.amount, 0)
-                                                                             + visibleAgreements.filter(a => a.budget_detail_id === leaf.id).reduce((s, a) => s + a.grant, 0)
+                                            const leafSpent  = visibleExpanses.filter(e => e.budget_detail_id === leaf.id).reduce((s, e) => s + e.amount, 0)
                                                             const leafReste  = leafBudget - leafSpent
                                                             const leafPct    = leafBudget > 0 ? Math.round(leafSpent / leafBudget * 100) : 0
                                                             const period     = periodLabel(leaf)
@@ -1667,6 +1688,15 @@ function BudgetTab({
                                         <td className="px-4 pt-3 pb-4 text-right tabular-nums" style={{ color: totalReste < 0 ? '#ef4444' : undefined }}>{formatAmount(totalReste)}</td>
                                         <td className="px-4 pt-3 pb-4 text-right tabular-nums text-muted-foreground">{totalBudgetLines > 0 ? Math.round(totalSpent / totalBudgetLines * 100) : 0} %</td>
                                         <td />
+                                    </tr>
+                                )}
+                                {totalReversements > 0 && (
+                                    <tr className="text-muted-foreground text-xs">
+                                        <td className="px-4 py-1 italic">dont reversements conventions</td>
+                                        <td className="px-4 py-1 text-right tabular-nums">—</td>
+                                        <td className="px-4 py-1 text-right tabular-nums text-blue-600">{formatAmount(totalReversements)}</td>
+                                        <td className="px-4 py-1 text-right tabular-nums">—</td>
+                                        <td colSpan={2} />
                                     </tr>
                                 )}
                                 {program?.management_fee_rate != null && totalSpent > 0 && (() => {
@@ -1940,6 +1970,7 @@ export default function Finance() {
                     suppliers={suppliers}
                     setSuppliers={setSuppliers}
                     projects={projects}
+                    agreements={agreements}
                 />
             )}
 
@@ -1959,7 +1990,6 @@ export default function Finance() {
                 <BudgetTab
                     program={program}
                     expanses={expanses}
-                    agreements={agreements}
                     budgetCategories={budgetCategories}
                     budgetDetails={budgetDetails}
                     setBudgetCategories={setBudgetCategories}
