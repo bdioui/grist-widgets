@@ -656,7 +656,7 @@ export default function Dashboard() {
             </div>
 
             {/* ── Graphes de relations ── */}
-            {/* <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 hidden">
                 <p className="text-sm font-medium flex items-center gap-2">
                         <NetworkIcon size={15} />
                         Graph
@@ -672,7 +672,7 @@ export default function Dashboard() {
                     </div>
                 </div>
                 
-            </div> */}
+            </div>
 
             {staffWithProjects.length > 0 && (
                 <div className="flex flex-col gap-3">

@@ -298,22 +298,38 @@ export default function MemberGraph() {
     const [graph, setGraph]           = useState<{ nodes: Node[]; edges: Edge[] } | null>(null)
     const [hoveredId, setHoveredId]   = useState<number | null>(null)
     const [selectedId, setSelectedId] = useState<number | null>(null)
+    const [topN, setTopN]             = useState(150)
 
     useEffect(() => {
         Promise.all([getMembers(), getPartners(), getProjects(), getAllProjectMembers()])
             .then(([m, p, proj, pm]) => setGraph(buildGraph(m, p, proj, pm)))
     }, [])
 
+    const visibleGraph = useMemo(() => {
+        if (!graph) return null
+        const degree = new Map<number, number>()
+        for (const e of graph.edges) {
+            degree.set(e.source, (degree.get(e.source) ?? 0) + 1)
+            degree.set(e.target, (degree.get(e.target) ?? 0) + 1)
+        }
+        const nodes = [...graph.nodes]
+            .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))
+            .slice(0, topN)
+        const ids = new Set(nodes.map(n => n.id))
+        return { nodes, edges: graph.edges.filter(e => ids.has(e.source) && ids.has(e.target)) }
+    }, [graph, topN])
+
     const handleHover  = useCallback((id: number | null) => { hoveredRef.current = id;  setHoveredId(id)  }, [])
     const handleSelect = useCallback((id: number | null) => { selectedRef.current = id; setSelectedId(id) }, [])
     const handleFilter = useCallback((ids: Set<number> | null) => { filterIdsRef.current = ids }, [])
 
     useEffect(() => {
-        if (!canvasRef.current || !graph || !containerRef.current || !tooltipRef.current) return
+        if (!canvasRef.current || !visibleGraph || !containerRef.current || !tooltipRef.current) return
         const canvas    = canvasRef.current    as HTMLCanvasElement
         const container = containerRef.current as HTMLDivElement
         const tooltip   = tooltipRef.current   as HTMLDivElement
-        const g         = graph as NonNullable<typeof graph>
+        const g         = visibleGraph as NonNullable<typeof visibleGraph>
+        transformRef.current = { x: 0, y: 0, scale: 1 }
         const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
         if (!ctx) return
 
@@ -361,7 +377,7 @@ export default function MemberGraph() {
             mouseDownScreen = s
             const w = toWorld(s.x, s.y)
             dragging = simNodes.find(n => Math.hypot(n.x - w.x, n.y - w.y) < 12) ?? null
-            if (dragging) { canvas.style.cursor = 'grabbing'; return }
+            if (dragging) { canvas.style.cursor = 'grabbing'; alpha = Math.max(alpha, 0.3); return }
             isPanning  = true
             panOrigin  = { x: transformRef.current.x, y: transformRef.current.y }
             canvas.style.cursor = 'move'
@@ -439,13 +455,17 @@ export default function MemberGraph() {
         canvas.addEventListener('mouseleave', onMouseLeave)
         canvas.addEventListener('wheel',      onWheel, { passive: false })
 
+        let alpha = 1.0
+
         function tick() {
+            if (alpha < 0.001) return
+            alpha *= 0.97
             for (let i = 0; i < simNodes.length; i++) {
                 for (let j = i + 1; j < simNodes.length; j++) {
                     const A = simNodes[i], B = simNodes[j]
                     const dx = B.x - A.x, dy = B.y - A.y
                     const dist  = Math.max(Math.sqrt(dx * dx + dy * dy), 1)
-                    const force = REPULSION / (dist * dist)
+                    const force = REPULSION / (dist * dist) * alpha
                     const fx = force * dx / dist, fy = force * dy / dist
                     A.vx -= fx; A.vy -= fy; B.vx += fx; B.vy += fy
                 }
@@ -455,13 +475,13 @@ export default function MemberGraph() {
                 if (!A || !B) continue
                 const dx = B.x - A.x, dy = B.y - A.y
                 const dist  = Math.max(Math.sqrt(dx * dx + dy * dy), 1)
-                const force = (dist - TARGET_LEN) * SPRING * edge.weight
+                const force = (dist - TARGET_LEN) * SPRING * edge.weight * alpha
                 const fx = force * dx / dist, fy = force * dy / dist
                 A.vx += fx; A.vy += fy; B.vx -= fx; B.vy -= fy
             }
             for (const n of simNodes) {
-                n.vx += (cx - n.x) * GRAVITY
-                n.vy += (cy - n.y) * GRAVITY
+                n.vx += (cx - n.x) * GRAVITY * alpha
+                n.vy += (cy - n.y) * GRAVITY * alpha
             }
             for (const n of simNodes) {
                 if (n === dragging) continue
@@ -536,11 +556,9 @@ export default function MemberGraph() {
         }
 
         let rafId: number
-        let frame = 0
-        const SIM_FRAMES = 200
         const SHOW_LABELS = simNodes.length <= 150
         function loop() {
-            if (frame < SIM_FRAMES) { tick(); frame++ }
+            tick()
             draw(SHOW_LABELS)
             rafId = requestAnimationFrame(loop)
         }
@@ -554,7 +572,7 @@ export default function MemberGraph() {
             canvas.removeEventListener('mouseleave', onMouseLeave)
             canvas.removeEventListener('wheel',      onWheel)
         }
-    }, [graph, handleHover, handleSelect])
+    }, [visibleGraph, handleHover, handleSelect])
 
     return (
         <div ref={containerRef} className="flex rounded-lg border border-gray-100 overflow-hidden" style={{ height: 420, position: 'relative' }}>
@@ -581,10 +599,10 @@ export default function MemberGraph() {
                 ))}
             </div>
             <div className="shrink-0 border-r border-gray-100 bg-gray-50/40 overflow-hidden" style={{ width: 210 }}>
-                {graph
+                {visibleGraph
                     ? <Sidebar
-                        nodes={graph.nodes}
-                        edges={graph.edges}
+                        nodes={visibleGraph.nodes}
+                        edges={visibleGraph.edges}
                         hoveredId={hoveredId}
                         selectedId={selectedId}
                         onHover={handleHover}
@@ -594,8 +612,18 @@ export default function MemberGraph() {
                     : <div className="flex items-center justify-center h-full text-xs text-gray-300">Chargement…</div>
                 }
             </div>
-            <div className="flex-1 min-w-0">
-                <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+            <div className="flex-1 min-w-0 flex flex-col">
+                <div className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-100 bg-gray-50/40 shrink-0">
+                    <span className="text-[10px] text-gray-400 font-medium mr-0.5">Top</span>
+                    {[50, 100, 200, 500, 9999].map(n => (
+                        <button key={n} onClick={() => setTopN(n)}
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${topN === n ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                            {n === 9999 ? 'Tous' : n}
+                        </button>
+                    ))}
+                    <span className="ml-auto text-[10px] text-gray-400">{visibleGraph?.nodes.length ?? 0} membres</span>
+                </div>
+                <canvas ref={canvasRef} style={{ width: '100%', flex: 1, display: 'block' }} />
             </div>
         </div>
     )

@@ -302,7 +302,7 @@ export default function PartnerGraph() {
             mouseDownScreen = s
             const w = toWorld(s.x, s.y)
             dragging = simNodes.find(n => Math.hypot(n.x - w.x, n.y - w.y) < 12) ?? null
-            if (dragging) { canvas.style.cursor = 'grabbing'; return }
+            if (dragging) { canvas.style.cursor = 'grabbing'; alpha = Math.max(alpha, 0.3); return }
             isPanning = true
             panOrigin = { x: transformRef.current.x, y: transformRef.current.y }
             canvas.style.cursor = 'move'
@@ -380,13 +380,17 @@ export default function PartnerGraph() {
         canvas.addEventListener('mouseleave', onMouseLeave)
         canvas.addEventListener('wheel',      onWheel, { passive: false })
 
+        let alpha = 1.0
+
         function tick() {
+            if (alpha < 0.001) return
+            alpha *= 0.97
             for (let i = 0; i < simNodes.length; i++) {
                 for (let j = i + 1; j < simNodes.length; j++) {
                     const A = simNodes[i], B = simNodes[j]
                     const dx = B.x - A.x, dy = B.y - A.y
                     const dist  = Math.max(Math.sqrt(dx * dx + dy * dy), 1)
-                    const force = REPULSION / (dist * dist)
+                    const force = REPULSION / (dist * dist) * alpha
                     const fx = force * dx / dist, fy = force * dy / dist
                     A.vx -= fx; A.vy -= fy; B.vx += fx; B.vy += fy
                 }
@@ -396,13 +400,13 @@ export default function PartnerGraph() {
                 if (!A || !B) continue
                 const dx = B.x - A.x, dy = B.y - A.y
                 const dist  = Math.max(Math.sqrt(dx * dx + dy * dy), 1)
-                const force = (dist - TARGET_LEN) * SPRING * edge.weight
+                const force = (dist - TARGET_LEN) * SPRING * edge.weight * alpha
                 const fx = force * dx / dist, fy = force * dy / dist
                 A.vx += fx; A.vy += fy; B.vx -= fx; B.vy -= fy
             }
             for (const n of simNodes) {
-                n.vx += (cx - n.x) * GRAVITY
-                n.vy += (cy - n.y) * GRAVITY
+                n.vx += (cx - n.x) * GRAVITY * alpha
+                n.vy += (cy - n.y) * GRAVITY * alpha
             }
             for (const n of simNodes) {
                 if (n === dragging) continue
@@ -482,10 +486,8 @@ export default function PartnerGraph() {
         }
 
         let rafId: number
-        let frame = 0
-        const SIM_FRAMES = 200
         function loop() {
-            if (frame < SIM_FRAMES) { tick(); frame++ }
+            tick()
             draw()
             rafId = requestAnimationFrame(loop)
         }
