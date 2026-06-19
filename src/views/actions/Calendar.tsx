@@ -253,7 +253,7 @@ export default function Calendar() {
         <div className="mt-4 flex flex-col gap-4">
 
             {/* Barre d'actions */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap mr-3">
 
                 {/* Filtre catégories */}
                 {(() => {

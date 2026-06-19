@@ -6,8 +6,10 @@ import {
 } from '@/lib/api'
 import { type Program, type Project, type Status, type Partner, type Member, type FinancialAgreement, type ProjectMember, type ActionCardFull, type Expanse, type BudgetCategory, type BudgetDetail } from '@/lib/types'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, Users, Briefcase, Building2, TrendingUp, Clock, Receipt, Pencil, Check, X } from 'lucide-react'
+import { AlertTriangle, Users, Briefcase, Building2, TrendingUp, Clock, Receipt, Pencil, Check, X, NetworkIcon } from 'lucide-react'
 import {ProjectViewerSheet, ActionCardViewerSheet} from '../components/viewers'
+import PartnerGraph from '../components/partnerGraphView'
+import MemberGraph from '../components/memberGraphView'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
@@ -651,6 +653,25 @@ export default function Dashboard() {
                         })()
                     }
                 </div>
+            </div>
+
+            {/* ── Graphes de relations ── */}
+            <div className="flex flex-col gap-4">
+                <p className="text-sm font-medium flex items-center gap-2">
+                        <NetworkIcon size={15} />
+                        Graph
+                    </p>
+                <div className="flex flex-row gap-4">
+                    <div className="rounded-xl border bg-card p-5">
+                        <p className="text-sm font-medium mb-3">Réseau partenaires - {partners.length}</p>
+                        <PartnerGraph />
+                    </div>
+                    <div className="rounded-xl border bg-card p-5">
+                        <p className="text-sm font-medium mb-3">Réseau membres - {members.length}</p>
+                        <MemberGraph />
+                    </div>
+                </div>
+                
             </div>
 
             {staffWithProjects.length > 0 && (

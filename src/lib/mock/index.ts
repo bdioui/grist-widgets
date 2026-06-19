@@ -70,7 +70,15 @@ export const mockPartners: Partner[] = [
     { id: 3, name: 'Association B', description: 'Association de recherche appliquée', color: '#EEC5EF', logo: '', status_id: 1, type: 'Association', consortium: true },
     { id: 4, name: 'Institut de Recherche', description: 'Institut national de recherche', color: '#C5D2EF', logo: '', status_id: 1, type: 'Établissement public', consortium: false },
     { id: 5, name: 'Collectivité D', description: 'Collectivité territoriale partenaire', color: '#EDD803', logo: '', status_id: 1, type: 'Collectivité', consortium: false },
-    { id: 6, name: 'Fondation E', description: 'Fondation de financement scientifique', color: '#EEC5EF', logo: '', status_id: 1, type: 'Fondation', consortium: false },
+    { id: 6,  name: 'Fondation E',         description: 'Fondation de financement scientifique',         color: '#EEC5EF', logo: '', status_id: 1, type: 'Fondation',                   consortium: false },
+    { id: 7,  name: 'Labo NumSci',          description: 'Laboratoire sciences du numérique',             color: '#BAE6FD', logo: '', status_id: 1, type: 'Laboratoire académique',      consortium: true  },
+    { id: 8,  name: 'Entreprise B',         description: 'PME spécialisée en instrumentation',            color: '#D9F99D', logo: '', status_id: 1, type: 'Entreprise privée',           consortium: false },
+    { id: 9,  name: 'GreenTech',            description: 'Startup solutions environnementales',           color: '#6EE7B7', logo: '', status_id: 1, type: 'Entreprise privée',           consortium: false },
+    { id: 10, name: 'Région Sud',           description: 'Collectivité régionale partenaire',             color: '#FDE68A', logo: '', status_id: 1, type: 'Collectivité',                consortium: false },
+    { id: 11, name: 'Métropole',            description: 'Établissement public de coopération inter.',   color: '#FCA5A5', logo: '', status_id: 1, type: 'Collectivité',                consortium: false },
+    { id: 12, name: 'École Sup',            description: 'Grande école ingénierie et management',        color: '#A5B4FC', logo: '', status_id: 1, type: 'Université et grandes écoles', consortium: true  },
+    { id: 13, name: 'CHU',                  description: 'Centre hospitalier universitaire partenaire',   color: '#FBCFE8', logo: '', status_id: 1, type: 'Établissement public',        consortium: false },
+    { id: 14, name: 'ONG Coopération',      description: 'ONG coopération internationale',               color: '#FCD34D', logo: '', status_id: 1, type: 'Association',                 consortium: false },
 ]
 
 export const mockLabs: Lab[] = [
@@ -541,23 +549,81 @@ export const mockAgreementMembers: AgreementMember[] = [
 ]
 
 export const mockProjectPartners: ProjectPartner[] = [
-    // Projet 1 – Formation Numérique (budget 120k, grant 80k → 40k à couvrir)
-    { id: 1, project_id: 1, partner_id: 1, role: 'Associé', amount: null, label: null },
-    { id: 2, project_id: 1, partner_id: 5, role: 'Cofinanceur', amount: 20000, label: 'Apport en numéraire' },
+    // Projet 1 – Formation Numérique
+    { id: 1,  project_id: 1,  partner_id: 1,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 2,  project_id: 1,  partner_id: 5,  role: 'Cofinanceur',  amount: 20000, label: 'Apport en numéraire' },
+    { id: 3,  project_id: 1,  partner_id: 7,  role: 'Associé',      amount: null,  label: null },
+    { id: 4,  project_id: 1,  partner_id: 12, role: 'Associé',      amount: null,  label: null },
 
-    // Projet 2 – Recherche IA (budget 200k, grant 150k → 50k à couvrir)
-    { id: 3, project_id: 2, partner_id: 1, role: 'Bénéficiaire', amount: null, label: null },
-    { id: 4, project_id: 2, partner_id: 2, role: 'Cofinanceur', amount: 30000, label: 'Apport en numéraire' },
-    { id: 5, project_id: 2, partner_id: 4, role: 'Associé', amount: null, label: null },
+    // Projet 2 – Recherche IA
+    { id: 5,  project_id: 2,  partner_id: 1,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 6,  project_id: 2,  partner_id: 2,  role: 'Cofinanceur',  amount: 30000, label: 'Apport en numéraire' },
+    { id: 7,  project_id: 2,  partner_id: 4,  role: 'Associé',      amount: null,  label: null },
+    { id: 8,  project_id: 2,  partner_id: 7,  role: 'Associé',      amount: null,  label: null },
+    { id: 9,  project_id: 2,  partner_id: 8,  role: 'Cofinanceur',  amount: 15000, label: 'Apport en nature' },
 
-    // Projet 3 – Mobilités Europe (budget 85k, grant 60k → 25k à couvrir)
-    { id: 6, project_id: 3, partner_id: 1, role: 'Bénéficiaire', amount: null, label: null },
-    { id: 7, project_id: 3, partner_id: 5, role: 'Cofinanceur', amount: 15000, label: 'Apport en nature' },
+    // Projet 3 – Mobilités Europe
+    { id: 10, project_id: 3,  partner_id: 1,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 11, project_id: 3,  partner_id: 5,  role: 'Cofinanceur',  amount: 15000, label: 'Apport en nature' },
+    { id: 12, project_id: 3,  partner_id: 12, role: 'Associé',      amount: null,  label: null },
+    { id: 13, project_id: 3,  partner_id: 14, role: 'Associé',      amount: null,  label: null },
 
-    // Projet 4 – Transfert Technologique (budget 160k, grant 120k → 40k à couvrir)
-    { id: 8, project_id: 4, partner_id: 2, role: 'Bénéficiaire', amount: null, label: null },
-    { id: 9, project_id: 4, partner_id: 1, role: 'Associé', amount: null, label: null },
-    { id: 10, project_id: 4, partner_id: 5, role: 'Cofinanceur', amount: 25000, label: 'Apport en numéraire' },
+    // Projet 4 – Transfert Technologique
+    { id: 14, project_id: 4,  partner_id: 2,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 15, project_id: 4,  partner_id: 1,  role: 'Associé',      amount: null,  label: null },
+    { id: 16, project_id: 4,  partner_id: 8,  role: 'Cofinanceur',  amount: 25000, label: 'Apport en numéraire' },
+    { id: 17, project_id: 4,  partner_id: 9,  role: 'Associé',      amount: null,  label: null },
+    { id: 18, project_id: 4,  partner_id: 12, role: 'Associé',      amount: null,  label: null },
+
+    // Projet 5 – Data Science Territoires
+    { id: 19, project_id: 5,  partner_id: 1,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 20, project_id: 5,  partner_id: 5,  role: 'Cofinanceur',  amount: 20000, label: 'Apport en numéraire' },
+    { id: 21, project_id: 5,  partner_id: 7,  role: 'Associé',      amount: null,  label: null },
+    { id: 22, project_id: 5,  partner_id: 10, role: 'Associé',      amount: null,  label: null },
+    { id: 23, project_id: 5,  partner_id: 11, role: 'Cofinanceur',  amount: 10000, label: 'Apport en nature' },
+
+    // Projet 6 – Open Badges
+    { id: 24, project_id: 6,  partner_id: 3,  role: 'Associé',      amount: null,  label: null },
+    { id: 25, project_id: 6,  partner_id: 7,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 26, project_id: 6,  partner_id: 12, role: 'Associé',      amount: null,  label: null },
+
+    // Projet 7 – Biodiversité Urbaine
+    { id: 27, project_id: 7,  partner_id: 4,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 28, project_id: 7,  partner_id: 5,  role: 'Cofinanceur',  amount: 18000, label: 'Apport en numéraire' },
+    { id: 29, project_id: 7,  partner_id: 9,  role: 'Associé',      amount: null,  label: null },
+    { id: 30, project_id: 7,  partner_id: 10, role: 'Associé',      amount: null,  label: null },
+    { id: 31, project_id: 7,  partner_id: 11, role: 'Cofinanceur',  amount: 12000, label: 'Apport en nature' },
+
+    // Projet 8 – Coopération Sud
+    { id: 32, project_id: 8,  partner_id: 1,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 33, project_id: 8,  partner_id: 4,  role: 'Associé',      amount: null,  label: null },
+    { id: 34, project_id: 8,  partner_id: 14, role: 'Associé',      amount: null,  label: null },
+
+    // Projet 9 – Hydrogène Vert
+    { id: 35, project_id: 9,  partner_id: 2,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 36, project_id: 9,  partner_id: 8,  role: 'Associé',      amount: null,  label: null },
+    { id: 37, project_id: 9,  partner_id: 9,  role: 'Associé',      amount: null,  label: null },
+    { id: 38, project_id: 9,  partner_id: 6,  role: 'Cofinanceur',  amount: 40000, label: 'Subvention' },
+
+    // Projet 10 – Smart Campus
+    { id: 39, project_id: 10, partner_id: 2,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 40, project_id: 10, partner_id: 8,  role: 'Associé',      amount: null,  label: null },
+    { id: 41, project_id: 10, partner_id: 7,  role: 'Associé',      amount: null,  label: null },
+    { id: 42, project_id: 10, partner_id: 11, role: 'Cofinanceur',  amount: 15000, label: 'Apport en numéraire' },
+
+    // Projet 11 – Inclusion Numérique
+    { id: 43, project_id: 11, partner_id: 3,  role: 'Bénéficiaire', amount: null,  label: null },
+    { id: 44, project_id: 11, partner_id: 10, role: 'Cofinanceur',  amount: 8000,  label: 'Apport en nature' },
+    { id: 45, project_id: 11, partner_id: 11, role: 'Associé',      amount: null,  label: null },
+    { id: 46, project_id: 11, partner_id: 14, role: 'Associé',      amount: null,  label: null },
+
+    // Projet 12 – European Grant HorizonX
+    { id: 47, project_id: 12, partner_id: 1,  role: 'Coordinateur', amount: null,  label: null },
+    { id: 48, project_id: 12, partner_id: 4,  role: 'Associé',      amount: null,  label: null },
+    { id: 49, project_id: 12, partner_id: 6,  role: 'Cofinanceur',  amount: 60000, label: 'Subvention' },
+    { id: 50, project_id: 12, partner_id: 7,  role: 'Associé',      amount: null,  label: null },
+    { id: 51, project_id: 12, partner_id: 12, role: 'Associé',      amount: null,  label: null },
+    { id: 52, project_id: 12, partner_id: 13, role: 'Associé',      amount: null,  label: null },
 ]
 
 export const mockProjectMilestones: ProjectMilestone[] = [

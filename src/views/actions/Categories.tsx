@@ -236,6 +236,7 @@ export default function Categories() {
     const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([])
     const [myCardsOnly,       setMyCardsOnly]       = useState(false)
     const [searchQuery,       setSearchQuery]       = useState('')
+    const [selectAllCat, setSelectAllCat]                 = useState(false)
 
     // Multi-select
     const [multipleSelect,    setMultipleSelect]    = useState(false)
@@ -375,6 +376,17 @@ export default function Categories() {
         setConfirmingDelete(false)
     }
 
+    function toggleAllCategories() {
+        if(selectAllCat === true) {
+            setSelectAllCat(false)
+            setVisibleIds([])
+            
+         } else {
+            setSelectAllCat(true)
+            columnGroups.map(group => toggleGroup(group))
+         }
+    }
+
     // Cartes filtrées selon les 3 critères
     const filteredCards = cards.filter(card => {
         if (searchQuery.trim()) {
@@ -475,7 +487,7 @@ export default function Categories() {
             onDragOver={onDragOver}
             onDragEnd={onDragEnd}
         >
-        <div className="mt-4 flex flex-col gap-4">
+        <div className="mt-4 flex flex-col gap-4 mr-3">
 
             {/* Barre d'actions */}
             <div className="flex items-center gap-2 flex-wrap">
@@ -503,6 +515,7 @@ export default function Categories() {
                                         checked={state === true}
                                         className={hasChildren ? 'font-medium' : ''}
                                         onCheckedChange={() => toggleGroup(group)}
+                                        onSelect={e => e.preventDefault()} 
                                     >
                                         {group.title}
                                         <span className="ml-auto text-xs text-muted-foreground">
@@ -515,6 +528,7 @@ export default function Categories() {
                                             checked={visibleIds.includes(child.id)}
                                             className="pl-7 text-muted-foreground"
                                             onCheckedChange={() => toggleChild(child.id)}
+                                            onSelect={e => e.preventDefault()} 
                                         >
                                             {child.title}
                                             <span className="ml-auto text-xs text-muted-foreground">
@@ -525,6 +539,19 @@ export default function Categories() {
                                 </div>
                             )
                         })}
+                        <DropdownMenuSeparator />
+                        <div> 
+                            {selectAllCat ? (
+                                <DropdownMenuCheckboxItem className='text-gray-700 font-medium' checked={selectAllCat} onCheckedChange={toggleAllCategories} onSelect={e => e.preventDefault()} >
+                                    Tout décocher
+                                </DropdownMenuCheckboxItem>
+                            ) : (
+                                <DropdownMenuCheckboxItem className='text-gray-700 font-medium' checked={selectAllCat} onCheckedChange={toggleAllCategories} onSelect={e => e.preventDefault()} >
+                                    Tout sélectionner
+                                </DropdownMenuCheckboxItem>
+                            )}
+                           
+                        </div>
                         </div>
                     </DropdownMenuContent>
                 </DropdownMenu>
