@@ -666,10 +666,10 @@ export default function Dashboard() {
                         <p className="text-sm font-medium mb-3">Réseau partenaires - {partners.length}</p>
                         <PartnerGraph />
                     </div>
-                    {/* <div className="rounded-xl border bg-card p-5">
+                    <div className="rounded-xl border bg-card p-5">
                         <p className="text-sm font-medium mb-3">Réseau membres - {members.length}</p>
                         <MemberGraph />
-                    </div> */}
+                    </div>
                 </div>
                 
             </div>

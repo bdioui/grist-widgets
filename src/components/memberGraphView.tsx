@@ -23,14 +23,6 @@ function buildGraph(members: Member[], partners: Partner[], projects: Project[],
     const partnerName  = new Map<number, string>(partners.map(p => [p.id, p.name]))
     const projectById  = new Map<number, string>(projects.map(p => [p.id, p.title]))
 
-    const nodes: Node[] = members.map(m => ({
-        id:          m.id,
-        name:        `${m.first_name} ${m.last_name}`,
-        color:       partnerColor.get(m.partner_id) ?? '#94a3b8',
-        sub:         m.position ?? m.status ?? '',
-        partnerName: partnerName.get(m.partner_id) ?? '',
-    }))
-
     const byProject = new Map<number, number[]>()
     for (const pm of projectMembers) {
         const list = byProject.get(pm.project_id) ?? []
@@ -53,7 +45,23 @@ function buildGraph(members: Member[], partners: Partner[], projects: Project[],
         }
     }
 
-    return { nodes, edges: Array.from(edgeMap.values()) }
+    const edges = Array.from(edgeMap.values())
+
+    // Exclure les membres sans aucune connexion
+    const connectedIds = new Set<number>()
+    for (const e of edges) { connectedIds.add(e.source); connectedIds.add(e.target) }
+
+    const nodes: Node[] = members
+        .filter(m => connectedIds.has(m.id))
+        .map(m => ({
+            id:          m.id,
+            name:        `${m.first_name} ${m.last_name}`,
+            color:       partnerColor.get(m.partner_id) ?? '#94a3b8',
+            sub:         m.position ?? m.status ?? '',
+            partnerName: partnerName.get(m.partner_id) ?? '',
+        }))
+
+    return { nodes, edges }
 }
 
 // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -259,6 +267,7 @@ export default function MemberGraph() {
     const hoveredRef   = useRef<number | null>(null)
     const selectedRef  = useRef<number | null>(null)
     const filterIdsRef = useRef<Set<number> | null>(null)
+    const transformRef = useRef({ x: 0, y: 0, scale: 1 })
     const [graph, setGraph]           = useState<{ nodes: Node[]; edges: Edge[] } | null>(null)
     const [hoveredId, setHoveredId]   = useState<number | null>(null)
     const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -303,9 +312,11 @@ export default function MemberGraph() {
         }
 
         let dragging:    SimNode | null = null
-        let mouseDownPos = { x: 0, y: 0 }
+        let isPanning  = false
+        let mouseDownScreen = { x: 0, y: 0 }
+        let panOrigin       = { x: 0, y: 0 }
 
-        function getMousePos(e: MouseEvent) {
+        function screenPos(e: MouseEvent) {
             const rect = canvas.getBoundingClientRect()
             return {
                 x: (e.clientX - rect.left) * (W / rect.width),
@@ -313,22 +324,39 @@ export default function MemberGraph() {
             }
         }
 
+        function toWorld(sx: number, sy: number) {
+            const { x: tx, y: ty, scale } = transformRef.current
+            return { x: (sx - tx) / scale, y: (sy - ty) / scale }
+        }
+
         function onMouseDown(e: MouseEvent) {
-            const pos = getMousePos(e)
-            mouseDownPos = pos
-            dragging = simNodes.find(n => Math.hypot(n.x - pos.x, n.y - pos.y) < 12) ?? null
-            if (dragging) canvas.style.cursor = 'grabbing'
+            const s = screenPos(e)
+            mouseDownScreen = s
+            const w = toWorld(s.x, s.y)
+            dragging = simNodes.find(n => Math.hypot(n.x - w.x, n.y - w.y) < 12) ?? null
+            if (dragging) { canvas.style.cursor = 'grabbing'; return }
+            isPanning  = true
+            panOrigin  = { x: transformRef.current.x, y: transformRef.current.y }
+            canvas.style.cursor = 'move'
         }
 
         function onMouseMove(e: MouseEvent) {
-            const { x, y } = getMousePos(e)
+            const s = screenPos(e)
+            const w = toWorld(s.x, s.y)
+
             if (dragging) {
-                dragging.x = x; dragging.y = y
-                dragging.vx = 0; dragging.vy = 0
+                dragging.x = w.x; dragging.y = w.y
+                dragging.vx = 0;  dragging.vy = 0
                 tooltip.style.display = 'none'
                 return
             }
-            const hovered = simNodes.find(n => Math.hypot(n.x - x, n.y - y) < 12)
+            if (isPanning) {
+                transformRef.current.x = panOrigin.x + (s.x - mouseDownScreen.x)
+                transformRef.current.y = panOrigin.y + (s.y - mouseDownScreen.y)
+                return
+            }
+
+            const hovered = simNodes.find(n => Math.hypot(n.x - w.x, n.y - w.y) < 12)
             canvas.style.cursor = hovered ? 'grab' : 'default'
             const newId = hovered?.id ?? null
             if (newId !== hoveredRef.current) handleHover(newId)
@@ -346,26 +374,43 @@ export default function MemberGraph() {
         }
 
         function onMouseUp(e: MouseEvent) {
-            const pos   = getMousePos(e)
-            const moved = Math.hypot(pos.x - mouseDownPos.x, pos.y - mouseDownPos.y)
-            if (moved < 4) {
-                const clicked = simNodes.find(n => Math.hypot(n.x - pos.x, n.y - pos.y) < 12)
+            const s = screenPos(e)
+            const moved = Math.hypot(s.x - mouseDownScreen.x, s.y - mouseDownScreen.y)
+            if (!isPanning && moved < 4) {
+                const w = toWorld(s.x, s.y)
+                const clicked = simNodes.find(n => Math.hypot(n.x - w.x, n.y - w.y) < 12)
                 const newSel  = clicked ? (selectedRef.current === clicked.id ? null : clicked.id) : null
                 handleSelect(newSel)
             }
-            dragging = null
+            dragging  = null
+            isPanning = false
             canvas.style.cursor = 'default'
         }
 
         function onMouseLeave() {
+            dragging  = null
+            isPanning = false
             handleHover(null)
             tooltip.style.display = 'none'
+            canvas.style.cursor = 'default'
+        }
+
+        function onWheel(e: WheelEvent) {
+            e.preventDefault()
+            const s     = screenPos(e)
+            const delta = e.deltaY > 0 ? 0.85 : 1.18
+            const t     = transformRef.current
+            const newScale = Math.max(0.15, Math.min(8, t.scale * delta))
+            t.x = s.x - (s.x - t.x) * (newScale / t.scale)
+            t.y = s.y - (s.y - t.y) * (newScale / t.scale)
+            t.scale = newScale
         }
 
         canvas.addEventListener('mousedown',  onMouseDown)
         canvas.addEventListener('mousemove',  onMouseMove)
         canvas.addEventListener('mouseup',    onMouseUp)
         canvas.addEventListener('mouseleave', onMouseLeave)
+        canvas.addEventListener('wheel',      onWheel, { passive: false })
 
         function tick() {
             for (let i = 0; i < simNodes.length; i++) {
@@ -398,8 +443,12 @@ export default function MemberGraph() {
             }
         }
 
-        function draw() {
+        function draw(showLabels = true) {
             ctx.clearRect(0, 0, W, H)
+            const { x: tx, y: ty, scale } = transformRef.current
+            ctx.save()
+            ctx.translate(tx, ty)
+            ctx.scale(scale, scale)
             const selId      = selectedRef.current
             const activeIds  = filterIdsRef.current
             const selNeighbors = selId !== null ? (adjacency.get(selId) ?? new Set<number>()) : null
@@ -453,13 +502,21 @@ export default function MemberGraph() {
                 ctx.fillStyle = isDimmed ? '#bbb' : '#222'
                 ctx.font      = isSelected ? 'bold 11px sans-serif' : '10px sans-serif'
                 ctx.textAlign = 'center'
-                ctx.fillText(trunc(n.name), n.x, n.y + (isSelected ? 28 : 22))
+                if (showLabels || isSelected || isHovered) ctx.fillText(trunc(n.name), n.x, n.y + (isSelected ? 28 : 22))
                 ctx.globalAlpha = 1
             }
+            ctx.restore()
         }
 
         let rafId: number
-        function loop() { tick(); draw(); rafId = requestAnimationFrame(loop) }
+        let frame = 0
+        const SIM_FRAMES = 200
+        const SHOW_LABELS = simNodes.length <= 150
+        function loop() {
+            if (frame < SIM_FRAMES) { tick(); frame++ }
+            draw(SHOW_LABELS)
+            rafId = requestAnimationFrame(loop)
+        }
         rafId = requestAnimationFrame(loop)
 
         return () => {
@@ -468,6 +525,7 @@ export default function MemberGraph() {
             canvas.removeEventListener('mousemove',  onMouseMove)
             canvas.removeEventListener('mouseup',    onMouseUp)
             canvas.removeEventListener('mouseleave', onMouseLeave)
+            canvas.removeEventListener('wheel',      onWheel)
         }
     }, [graph, handleHover, handleSelect])
 
@@ -483,6 +541,18 @@ export default function MemberGraph() {
                     boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
                 }}
             />
+            <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {([
+                    { label: '+', title: 'Zoom avant',  action: () => { const t = transformRef.current; const s = Math.min(8, t.scale * 1.25); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
+                    { label: '−', title: 'Zoom arrière', action: () => { const t = transformRef.current; const s = Math.max(0.15, t.scale * 0.8); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
+                    { label: '⌖', title: 'Réinitialiser', action: () => { transformRef.current = { x: 0, y: 0, scale: 1 } } },
+                ] as const).map(btn => (
+                    <button key={btn.label} title={btn.title} onClick={btn.action}
+                        style={{ width: 28, height: 28, background: 'rgba(255,255,255,0.92)', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 16, lineHeight: 1, color: '#374151', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>
+                        {btn.label}
+                    </button>
+                ))}
+            </div>
             <div className="shrink-0 border-r border-gray-100 bg-gray-50/40 overflow-hidden" style={{ width: 210 }}>
                 {graph
                     ? <Sidebar
