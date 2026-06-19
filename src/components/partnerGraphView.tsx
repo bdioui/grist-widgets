@@ -137,7 +137,7 @@ function Sidebar({
                     )}
                 </div>
                 <div className="flex gap-1 flex-wrap">
-                    {[0, 2, 3, 5].map(n => (
+                    {[0, 2, 5, 10, 20].map(n => (
                         <button
                             key={n}
                             onClick={() => setMinLinks(n)}
@@ -147,7 +147,7 @@ function Sidebar({
                                     : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                             }`}
                         >
-                            {n === 0 ? 'Tous' : `${n}+ liens`}
+                            {n === 0 ? 'Tous' : `${n}+`}
                         </button>
                     ))}
                 </div>
@@ -194,6 +194,11 @@ function Sidebar({
                             {/* Expanded neighbors when selected */}
                             {isSel && selectedNeighbors && (
                                 <div className="bg-indigo-50 border-t border-indigo-100 px-3 py-2 flex flex-col gap-2">
+                                    <p className="text-[10px] font-semibold text-indigo-500">
+                                        {selectedNeighbors.length} partenaire{selectedNeighbors.length > 1 ? 's' : ''}
+                                        {' · '}
+                                        {new Set(selectedNeighbors.flatMap(n => n.projects)).size} projet{new Set(selectedNeighbors.flatMap(n => n.projects)).size > 1 ? 's' : ''} en commun
+                                    </p>
                                     {selectedNeighbors.map(({ node: nb, projects }) => (
                                         <div key={nb.id} className="flex items-start gap-2">
                                             <span

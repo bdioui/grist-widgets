@@ -45,7 +45,11 @@ function buildGraph(members: Member[], partners: Partner[], projects: Project[],
         }
     }
 
-    const edges = Array.from(edgeMap.values())
+    const allEdges = Array.from(edgeMap.values())
+
+    // Seuls les membres existants dans la table Members
+    const memberIds = new Set(members.map(m => m.id))
+    const edges = allEdges.filter(e => memberIds.has(e.source) && memberIds.has(e.target))
 
     // Exclure les membres sans aucune connexion
     const connectedIds = new Set<number>()
@@ -78,6 +82,7 @@ function Sidebar({
 }) {
     const [search,    setSearch]    = useState('')
     const [orgFilter, setOrgFilter] = useState<string | null>(null)
+    const [minLinks,  setMinLinks]  = useState(1)
 
     const adjacency = useMemo(() => {
         const map = new Map<number, Set<number>>()
@@ -108,24 +113,28 @@ function Sidebar({
 
     const filtered = useMemo(() => {
         const q = search.toLowerCase().trim()
-        return sorted.filter(n =>
-            (q === '' || n.name.toLowerCase().includes(q)) &&
-            (orgFilter === null || n.partnerName === orgFilter)
-        )
-    }, [sorted, search, orgFilter])
+        return sorted.filter(n => {
+            const links = adjacency.get(n.id)?.size ?? 0
+            return (q === '' || n.name.toLowerCase().includes(q)) &&
+                (orgFilter === null || n.partnerName === orgFilter) &&
+                links >= minLinks
+        })
+    }, [sorted, search, orgFilter, minLinks, adjacency])
 
     useEffect(() => {
-        onFilter(search === '' && orgFilter === null ? null : new Set(filtered.map(n => n.id)))
-    }, [filtered, search, orgFilter, onFilter])
+        const isDefault = search === '' && orgFilter === null && minLinks <= 1
+        onFilter(isDefault ? null : new Set(filtered.map(n => n.id)))
+    }, [filtered, search, orgFilter, minLinks, onFilter])
 
     const selectedNeighbors = useMemo(() => {
         if (selectedId === null) return null
-        return Array.from(adjacency.get(selectedId) ?? []).map(nid => {
-            const nb   = nodes.find(n => n.id === nid)!
+        return Array.from(adjacency.get(selectedId) ?? []).flatMap(nid => {
+            const nb   = nodes.find(n => n.id === nid)
+            if (!nb) return []
             const a    = Math.min(selectedId, nid)
             const b    = Math.max(selectedId, nid)
             const edge = edges.find(e => e.source === a && e.target === b)
-            return { node: nb, projects: edge?.projects ?? [] }
+            return [{ node: nb, projects: edge?.projects ?? [] }]
         })
     }, [selectedId, adjacency, nodes, edges])
 
@@ -187,6 +196,19 @@ function Sidebar({
                         </button>
                     )}
                 </div>
+                <div className="flex gap-1 flex-wrap">
+                    {[1, 2, 3, 5, 10].map(n => (
+                        <button
+                            key={n}
+                            onClick={() => setMinLinks(n)}
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+                                minLinks === n ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            }`}
+                        >
+                            {n === 1 ? '1+ lien' : `${n}+ liens`}
+                        </button>
+                    ))}
+                </div>
             </div>
             <div className="flex-1 overflow-y-auto">
                 {filtered.map(node => {
@@ -231,6 +253,11 @@ function Sidebar({
 
                             {isSel && selectedNeighbors && (
                                 <div className="bg-indigo-50 border-t border-indigo-100 px-3 py-2 flex flex-col gap-2">
+                                    <p className="text-[10px] font-semibold text-indigo-500">
+                                        {selectedNeighbors.length} collègue{selectedNeighbors.length > 1 ? 's' : ''}
+                                        {' · '}
+                                        {new Set(selectedNeighbors.flatMap(n => n.projects)).size} projet{new Set(selectedNeighbors.flatMap(n => n.projects)).size > 1 ? 's' : ''} en commun
+                                    </p>
                                     {selectedNeighbors.map(({ node: nb, projects }) => (
                                         <div key={nb.id} className="flex items-start gap-2">
                                             <span
