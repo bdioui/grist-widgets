@@ -70,19 +70,18 @@ function buildGraph(members: Member[], partners: Partner[], projects: Project[],
 
 // ── Sidebar ────────────────────────────────────────────────────────────────
 function Sidebar({
-    nodes, edges, hoveredId, selectedId, onHover, onSelect, onFilter,
+    nodes, edges, hoveredId, selectedIds, onHover, onSelect, onFilter,
 }: {
     nodes: Node[]
     edges: Edge[]
-    hoveredId:  number | null
-    selectedId: number | null
+    hoveredId:   number | null
+    selectedIds: number[]
     onHover:  (id: number | null) => void
-    onSelect: (id: number | null) => void
+    onSelect: (ids: number[]) => void
     onFilter: (ids: Set<number> | null) => void
 }) {
-    const [search,    setSearch]    = useState('')
     const [orgFilter, setOrgFilter] = useState<string | null>(null)
-    const [minLinks,  setMinLinks]  = useState(1)
+    const [minLinks,  setMinLinks]  = useState(2)
 
     const adjacency = useMemo(() => {
         const map = new Map<number, Set<number>>()
@@ -112,31 +111,53 @@ function Sidebar({
     }, [nodes])
 
     const filtered = useMemo(() => {
-        const q = search.toLowerCase().trim()
         return sorted.filter(n => {
             const links = adjacency.get(n.id)?.size ?? 0
-            return (q === '' || n.name.toLowerCase().includes(q)) &&
-                (orgFilter === null || n.partnerName === orgFilter) &&
-                links >= minLinks
+            return (orgFilter === null || n.partnerName === orgFilter) && links >= minLinks
         })
-    }, [sorted, search, orgFilter, minLinks, adjacency])
+    }, [sorted, orgFilter, minLinks, adjacency])
 
     useEffect(() => {
-        const isDefault = search === '' && orgFilter === null && minLinks <= 1
+        const isDefault = orgFilter === null && minLinks <= 2
         onFilter(isDefault ? null : new Set(filtered.map(n => n.id)))
-    }, [filtered, search, orgFilter, minLinks, onFilter])
+    }, [filtered, orgFilter, minLinks, onFilter])
+
+    const edgeMap = useMemo(() => {
+        const map = new Map<string, Edge>()
+        for (const e of edges) map.set(`${e.source}-${e.target}`, e)
+        return map
+    }, [edges])
+
+    const nodeMap = useMemo(() => new Map(nodes.map(n => [n.id, n])), [nodes])
 
     const selectedNeighbors = useMemo(() => {
-        if (selectedId === null) return null
-        return Array.from(adjacency.get(selectedId) ?? []).flatMap(nid => {
-            const nb   = nodes.find(n => n.id === nid)
+        if (selectedIds.length === 0) return null
+        const selSet = new Set(selectedIds)
+        const neighborMap = new Map<number, Set<string>>()
+        for (const selId of selectedIds) {
+            for (const nid of adjacency.get(selId) ?? []) {
+                if (selSet.has(nid)) continue
+                if (!neighborMap.has(nid)) neighborMap.set(nid, new Set())
+                const a = Math.min(selId, nid), b = Math.max(selId, nid)
+                const edge = edgeMap.get(`${a}-${b}`)
+                for (const p of edge?.projects ?? []) neighborMap.get(nid)!.add(p)
+            }
+        }
+        return Array.from(neighborMap.entries()).flatMap(([nid, projs]) => {
+            const nb = nodeMap.get(nid)
             if (!nb) return []
-            const a    = Math.min(selectedId, nid)
-            const b    = Math.max(selectedId, nid)
-            const edge = edges.find(e => e.source === a && e.target === b)
-            return [{ node: nb, projects: edge?.projects ?? [] }]
+            return [{ node: nb, projects: Array.from(projs) }]
         })
-    }, [selectedId, adjacency, nodes, edges])
+    }, [selectedIds, adjacency, edgeMap, nodeMap])
+
+    const allSelNeighborIds = useMemo(() => {
+        if (selectedIds.length === 0) return null
+        const s = new Set<number>()
+        for (const selId of selectedIds) for (const nid of adjacency.get(selId) ?? []) s.add(nid)
+        return s
+    }, [selectedIds, adjacency])
+
+    const uniqueProjects = selectedNeighbors ? new Set(selectedNeighbors.flatMap(n => n.projects)) : new Set<string>()
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
@@ -148,9 +169,14 @@ function Sidebar({
                     <SearchInput
                         data={sorted}
                         getLabel={n => n.name}
-                        onSelect={n => { setSearch(n.name); onSelect(n.id) }}
-                        value={search}
+                        onSelect={n => {
+                            const newIds = selectedIds.includes(n.id)
+                                ? selectedIds.filter(id => id !== n.id)
+                                : [...selectedIds, n.id]
+                            onSelect(newIds)
+                        }}
                         placeholder="Rechercher…"
+                        selectedIds={selectedIds}
                         renderItem={n => (
                             <span className="flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-full shrink-0" style={{ background: n.color }} />
@@ -161,11 +187,11 @@ function Sidebar({
                             </span>
                         )}
                     />
-                    {search !== '' && (
+                    {selectedIds.length > 0 && (
                         <button
-                            onClick={() => { setSearch(''); onSelect(null) }}
+                            onClick={() => onSelect([])}
                             className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
-                            title="Effacer"
+                            title="Effacer la sélection"
                         >
                             ×
                         </button>
@@ -210,75 +236,75 @@ function Sidebar({
                     ))}
                 </div>
             </div>
+
+            {selectedIds.length > 0 && (
+                <div className="border-b border-indigo-100 bg-indigo-50 px-3 py-2 flex flex-col gap-1 shrink-0">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-semibold text-indigo-600">
+                            {selectedIds.length} membre{selectedIds.length > 1 ? 's' : ''} sélectionné{selectedIds.length > 1 ? 's' : ''}
+                        </span>
+                        <button onClick={() => onSelect([])} className="text-[10px] text-indigo-400 hover:text-indigo-600">
+                            Effacer
+                        </button>
+                    </div>
+                    {selectedNeighbors && (
+                        <p className="text-[10px] text-indigo-500">
+                            {selectedNeighbors.length} collègue{selectedNeighbors.length > 1 ? 's' : ''}
+                            {' · '}
+                            {uniqueProjects.size} projet{uniqueProjects.size > 1 ? 's' : ''} en commun
+                        </p>
+                    )}
+                </div>
+            )}
+
             <div className="flex-1 overflow-y-auto">
                 {filtered.map(node => {
                     const links    = adjacency.get(node.id)?.size ?? 0
-                    const isHov    = hoveredId  === node.id
-                    const isSel    = selectedId === node.id
-                    const isDimmed = selectedId !== null && !isSel && !(adjacency.get(selectedId)?.has(node.id))
+                    const isHov    = hoveredId === node.id
+                    const isSel    = selectedIds.includes(node.id)
+                    const isNeighbor = allSelNeighborIds?.has(node.id) ?? false
+                    const isDimmed = selectedIds.length > 0 && !isSel && !isNeighbor
 
                     return (
-                        <div key={node.id}>
-                            <button
-                                className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors ${
-                                    isSel ? 'bg-indigo-50' : isHov ? 'bg-gray-50' : ''
-                                } ${isDimmed ? 'opacity-30' : ''}`}
-                                onMouseEnter={() => onHover(node.id)}
-                                onMouseLeave={() => onHover(null)}
-                                onClick={() => onSelect(isSel ? null : node.id)}
-                            >
-                                <span
-                                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                                    style={{ background: node.color }}
-                                />
-                                <div className="flex flex-col min-w-0 flex-1">
-                                    <span className={`text-xs truncate ${isSel ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
-                                        {node.name}
-                                    </span>
-                                    <span className="text-[9px] text-gray-400 truncate">{node.partnerName}</span>
-                                </div>
-                                <span className={`text-[10px] shrink-0 ${isSel ? 'text-indigo-500 font-semibold' : 'text-gray-400'}`}>
-                                    {links}
+                        <button
+                            key={node.id}
+                            className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors ${
+                                isSel ? 'bg-indigo-50' : isHov ? 'bg-gray-50' : ''
+                            } ${isDimmed ? 'opacity-30' : ''}`}
+                            onMouseEnter={() => onHover(node.id)}
+                            onMouseLeave={() => onHover(null)}
+                            onClick={() => {
+                                const newIds = isSel
+                                    ? selectedIds.filter(id => id !== node.id)
+                                    : [...selectedIds, node.id]
+                                onSelect(newIds)
+                            }}
+                        >
+                            <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                style={{ background: node.color }}
+                            />
+                            <div className="flex flex-col min-w-0 flex-1">
+                                <span className={`text-xs truncate ${isSel ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                                    {node.name}
                                 </span>
-                                <div className="w-10 shrink-0">
-                                    <div
-                                        className="h-1 rounded-full"
-                                        style={{
-                                            width:      `${(links / maxLinks) * 100}%`,
-                                            background: isSel ? node.color : '#d1d5db',
-                                        }}
-                                    />
-                                </div>
-                            </button>
-
-                            {isSel && selectedNeighbors && (
-                                <div className="bg-indigo-50 border-t border-indigo-100 px-3 py-2 flex flex-col gap-2">
-                                    <p className="text-[10px] font-semibold text-indigo-500">
-                                        {selectedNeighbors.length} collègue{selectedNeighbors.length > 1 ? 's' : ''}
-                                        {' · '}
-                                        {new Set(selectedNeighbors.flatMap(n => n.projects)).size} projet{new Set(selectedNeighbors.flatMap(n => n.projects)).size > 1 ? 's' : ''} en commun
-                                    </p>
-                                    {selectedNeighbors.map(({ node: nb, projects }) => (
-                                        <div key={nb.id} className="flex items-start gap-2">
-                                            <span
-                                                className="w-2 h-2 rounded-full shrink-0 mt-0.5"
-                                                style={{ background: nb.color }}
-                                            />
-                                            <div className="min-w-0">
-                                                <p className="text-[10px] font-medium text-gray-600 leading-tight truncate">{nb.name}</p>
-                                                <div className="flex flex-wrap gap-0.5 mt-0.5">
-                                                    {projects.map((p, i) => (
-                                                        <span key={i} className="text-[8px] bg-white text-gray-400 border border-gray-200 rounded px-1 py-px leading-tight">
-                                                            {p}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                                <span className="text-[9px] text-gray-400 truncate">{node.partnerName}</span>
+                            </div>
+                            <span className={`text-[10px] shrink-0 ${isSel ? 'text-indigo-500 font-semibold' : 'text-gray-400'}`}>
+                                {links}
+                            </span>
+                            {isSel
+                                ? <span className="text-indigo-500 font-bold text-sm shrink-0 leading-none">✓</span>
+                                : (
+                                    <div className="w-10 shrink-0">
+                                        <div
+                                            className="h-1 rounded-full"
+                                            style={{ width: `${(links / maxLinks) * 100}%`, background: '#d1d5db' }}
+                                        />
+                                    </div>
+                                )
+                            }
+                        </button>
                     )
                 })}
             </div>
@@ -291,14 +317,15 @@ export default function MemberGraph() {
     const canvasRef    = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const tooltipRef   = useRef<HTMLDivElement>(null)
-    const hoveredRef   = useRef<number | null>(null)
-    const selectedRef  = useRef<number | null>(null)
-    const filterIdsRef = useRef<Set<number> | null>(null)
-    const transformRef = useRef({ x: 0, y: 0, scale: 1 })
-    const [graph, setGraph]           = useState<{ nodes: Node[]; edges: Edge[] } | null>(null)
-    const [hoveredId, setHoveredId]   = useState<number | null>(null)
-    const [selectedId, setSelectedId] = useState<number | null>(null)
-    const [topN, setTopN]             = useState(150)
+    const hoveredRef      = useRef<number | null>(null)
+    const selectedIdsRef  = useRef<number[]>([])
+    const filterIdsRef    = useRef<Set<number> | null>(null)
+    const transformRef    = useRef({ x: 0, y: 0, scale: 1 })
+    const fitSelectionRef = useRef<(() => void) | null>(null)
+    const [graph, setGraph]             = useState<{ nodes: Node[]; edges: Edge[] } | null>(null)
+    const [hoveredId, setHoveredId]     = useState<number | null>(null)
+    const [selectedIds, setSelectedIds] = useState<number[]>([])
+    const [topN, setTopN]               = useState(20)
 
     useEffect(() => {
         Promise.all([getMembers(), getPartners(), getProjects(), getAllProjectMembers()])
@@ -319,9 +346,13 @@ export default function MemberGraph() {
         return { nodes, edges: graph.edges.filter(e => ids.has(e.source) && ids.has(e.target)) }
     }, [graph, topN])
 
-    const handleHover  = useCallback((id: number | null) => { hoveredRef.current = id;  setHoveredId(id)  }, [])
-    const handleSelect = useCallback((id: number | null) => { selectedRef.current = id; setSelectedId(id) }, [])
+    const handleHover  = useCallback((id: number | null) => { hoveredRef.current = id; setHoveredId(id) }, [])
+    const handleSelect = useCallback((ids: number[]) => { selectedIdsRef.current = ids; setSelectedIds(ids) }, [])
     const handleFilter = useCallback((ids: Set<number> | null) => { filterIdsRef.current = ids }, [])
+
+    useEffect(() => {
+        if (selectedIds.length > 0) fitSelectionRef.current?.()
+    }, [selectedIds])
 
     useEffect(() => {
         if (!canvasRef.current || !visibleGraph || !containerRef.current || !tooltipRef.current) return
@@ -333,11 +364,11 @@ export default function MemberGraph() {
         const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
         if (!ctx) return
 
-        const W = canvas.parentElement?.offsetWidth ?? 500
+        let W = canvas.parentElement?.offsetWidth || 500
         const H = 420
         canvas.width  = W
         canvas.height = H
-        const cx = W / 2, cy = H / 2
+        let cx = W / 2, cy = H / 2
 
         const simNodes: SimNode[] = g.nodes.map((node, i) => {
             const angle = (2 * Math.PI * i) / g.nodes.length - Math.PI / 2
@@ -422,8 +453,15 @@ export default function MemberGraph() {
             if (!isPanning && moved < 4) {
                 const w = toWorld(s.x, s.y)
                 const clicked = simNodes.find(n => Math.hypot(n.x - w.x, n.y - w.y) < 12)
-                const newSel  = clicked ? (selectedRef.current === clicked.id ? null : clicked.id) : null
-                handleSelect(newSel)
+                if (clicked) {
+                    const cur = selectedIdsRef.current
+                    const newIds = cur.includes(clicked.id)
+                        ? cur.filter(id => id !== clicked.id)
+                        : [...cur, clicked.id]
+                    handleSelect(newIds)
+                } else {
+                    handleSelect([])
+                }
             }
             dragging  = null
             isPanning = false
@@ -459,7 +497,7 @@ export default function MemberGraph() {
 
         function tick() {
             if (alpha < 0.001) return
-            alpha *= 0.97
+            alpha *= 0.98
             for (let i = 0; i < simNodes.length; i++) {
                 for (let j = i + 1; j < simNodes.length; j++) {
                     const A = simNodes[i], B = simNodes[j]
@@ -479,9 +517,10 @@ export default function MemberGraph() {
                 const fx = force * dx / dist, fy = force * dy / dist
                 A.vx += fx; A.vy += fy; B.vx -= fx; B.vy -= fy
             }
+            const grav = GRAVITY / Math.max(1, simNodes.length / 20)
             for (const n of simNodes) {
-                n.vx += (cx - n.x) * GRAVITY * alpha
-                n.vy += (cy - n.y) * GRAVITY * alpha
+                n.vx += (cx - n.x) * grav * alpha
+                n.vy += (cy - n.y) * grav * alpha
             }
             for (const n of simNodes) {
                 if (n === dragging) continue
@@ -496,25 +535,34 @@ export default function MemberGraph() {
             ctx.save()
             ctx.translate(tx, ty)
             ctx.scale(scale, scale)
-            const selId      = selectedRef.current
+            const selIds     = selectedIdsRef.current
+            const selSet     = new Set(selIds)
             const activeIds  = filterIdsRef.current
-            const selNeighbors = selId !== null ? (adjacency.get(selId) ?? new Set<number>()) : null
+            const selNeighbors = new Set<number>()
+            for (const sid of selIds) for (const nid of adjacency.get(sid) ?? []) selNeighbors.add(nid)
+
+            // nœuds visibles = sélectionnés + leurs voisins (quand sélection active)
+            const visibleNodeIds = selSet.size > 0
+                ? new Set([...selSet, ...selNeighbors])
+                : null
 
             for (const edge of g.edges) {
                 const A = nodeById.get(edge.source), B = nodeById.get(edge.target)
                 if (!A || !B) continue
-                const aFiltered   = activeIds !== null && (!activeIds.has(edge.source) || !activeIds.has(edge.target))
-                const isConnected = selId !== null && (edge.source === selId || edge.target === selId)
+                const aFiltered = activeIds !== null && (!activeIds.has(edge.source) || !activeIds.has(edge.target))
+                // quand sélection active : ne dessiner que les arêtes touchant un nœud visible
+                if (visibleNodeIds && (!visibleNodeIds.has(edge.source) || !visibleNodeIds.has(edge.target))) continue
+                const isConnected = selSet.size > 0 && (selSet.has(edge.source) || selSet.has(edge.target))
                 ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y)
                 if (aFiltered) {
                     ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.03)'
-                } else if (selId !== null && !isConnected) {
-                    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.04)'
-                } else if (selId !== null) {
-                    const selNode = nodeById.get(selId)
+                } else if (selSet.size > 0 && !isConnected) {
+                    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.08)'
+                } else if (selSet.size > 0) {
+                    const srcColor = selSet.has(edge.source) ? nodeById.get(edge.source)?.color : nodeById.get(edge.target)?.color
                     const op = Math.min(0.3 + edge.weight * 0.2, 0.9)
                     ctx.lineWidth = 2
-                    ctx.strokeStyle = (selNode?.color ?? '#6366f1') + Math.round(op * 255).toString(16).padStart(2, '0')
+                    ctx.strokeStyle = (srcColor ?? '#6366f1') + Math.round(op * 255).toString(16).padStart(2, '0')
                 } else {
                     ctx.lineWidth = 1.5
                     ctx.strokeStyle = `rgba(0,0,0,${Math.min(0.08 + edge.weight * 0.12, 0.7)})`
@@ -523,14 +571,16 @@ export default function MemberGraph() {
             }
 
             for (const n of simNodes) {
-                const isSelected  = n.id === selId
+                // masquer complètement les nœuds non-pertinents quand sélection active
+                if (visibleNodeIds && !visibleNodeIds.has(n.id)) continue
+                const isSelected  = selSet.has(n.id)
                 const isHovered   = n.id === hoveredRef.current
-                const isNeighbor  = selNeighbors?.has(n.id) ?? false
+                const isNeighbor  = selNeighbors.has(n.id) && !isSelected
                 const isFiltered  = activeIds !== null && !activeIds.has(n.id)
-                const isDimmed    = isFiltered || (selId !== null && !isSelected && !isNeighbor)
+                const isDimmed    = isFiltered || (selSet.size > 0 && !isSelected && !isNeighbor)
                 const radius      = isSelected ? 8 : 5
 
-                ctx.globalAlpha = isDimmed ? 0.12 : 1
+                ctx.globalAlpha = isDimmed ? 0.15 : 1
                 if (isSelected) {
                     ctx.beginPath()
                     ctx.arc(n.x, n.y, radius + 5, 0, 2 * Math.PI)
@@ -555,9 +605,35 @@ export default function MemberGraph() {
             ctx.restore()
         }
 
+        function fitToVisible() {
+            const selIds = selectedIdsRef.current
+            const selSet = new Set(selIds)
+            const nbSet  = new Set<number>()
+            for (const sid of selIds) for (const nid of adjacency.get(sid) ?? []) nbSet.add(nid)
+            const visibleIds = selSet.size > 0 ? new Set([...selSet, ...nbSet]) : null
+            const visible = visibleIds ? simNodes.filter(n => visibleIds.has(n.id)) : simNodes
+            if (visible.length === 0) return
+            const pad = 60
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+            for (const n of visible) {
+                minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x)
+                minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y)
+            }
+            const bw = maxX - minX || 1, bh = maxY - minY || 1
+            const newScale = Math.max(0.2, Math.min(4, Math.min((W - pad * 2) / bw, (H - pad * 2) / bh)))
+            const mcx = (minX + maxX) / 2, mcy = (minY + maxY) / 2
+            transformRef.current = { x: W / 2 - mcx * newScale, y: H / 2 - mcy * newScale, scale: newScale }
+        }
+        fitSelectionRef.current = fitToVisible
+
         let rafId: number
         const SHOW_LABELS = simNodes.length <= 150
         function loop() {
+            const newW = canvas.parentElement?.offsetWidth || 0
+            if (newW > 0 && newW !== W) {
+                W = newW; cx = W / 2
+                canvas.width = W
+            }
             tick()
             draw(SHOW_LABELS)
             rafId = requestAnimationFrame(loop)
@@ -575,7 +651,7 @@ export default function MemberGraph() {
     }, [visibleGraph, handleHover, handleSelect])
 
     return (
-        <div ref={containerRef} className="flex rounded-lg border border-gray-100 overflow-hidden" style={{ height: 420, position: 'relative' }}>
+        <div ref={containerRef} className="flex rounded-lg border border-gray-100 overflow-hidden" style={{ height: 420, position: 'relative', width: '100%' }}>
             <div
                 ref={tooltipRef}
                 style={{
@@ -604,7 +680,7 @@ export default function MemberGraph() {
                         nodes={visibleGraph.nodes}
                         edges={visibleGraph.edges}
                         hoveredId={hoveredId}
-                        selectedId={selectedId}
+                        selectedIds={selectedIds}
                         onHover={handleHover}
                         onSelect={handleSelect}
                         onFilter={handleFilter}
@@ -615,12 +691,21 @@ export default function MemberGraph() {
             <div className="flex-1 min-w-0 flex flex-col">
                 <div className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-100 bg-gray-50/40 shrink-0">
                     <span className="text-[10px] text-gray-400 font-medium mr-0.5">Top</span>
-                    {[50, 100, 200, 500, 9999].map(n => (
-                        <button key={n} onClick={() => setTopN(n)}
-                            className={`text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${topN === n ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                            {n === 9999 ? 'Tous' : n}
-                        </button>
-                    ))}
+                    {[10, 20, 50, 100, 200, 500, 9999].map(n => {
+                        const totalNodes = graph?.nodes.length ?? 0
+                        const isWarn = n === 9999 && totalNodes > 500
+                        return (
+                            <button key={n} onClick={() => setTopN(n)}
+                                title={isWarn ? `${totalNodes} nœuds — risque de lenteur` : undefined}
+                                className={`text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+                                    topN === n
+                                        ? isWarn ? 'bg-amber-500 text-white' : 'bg-indigo-500 text-white'
+                                        : isWarn ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                }`}>
+                                {n === 9999 ? `Tous${isWarn ? ' ⚠' : ''}` : n}
+                            </button>
+                        )
+                    })}
                     <span className="ml-auto text-[10px] text-gray-400">{visibleGraph?.nodes.length ?? 0} membres</span>
                 </div>
                 <canvas ref={canvasRef} style={{ width: '100%', flex: 1, display: 'block' }} />

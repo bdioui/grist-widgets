@@ -19,6 +19,7 @@ type SearchInputProps<T extends { id: number }> = {
     value?: string
     orderBy?: string
     dropdownClassName?: string
+    selectedIds?: number[]
 }
 
 export default function SearchInput<T extends { id: number }>({
@@ -32,6 +33,7 @@ export default function SearchInput<T extends { id: number }>({
     value,
     orderBy,
     dropdownClassName,
+    selectedIds,
 }: SearchInputProps<T>) {
     const [query,   setQuery]   = useState('')
     const [open,    setOpen]    = useState(false)
@@ -60,11 +62,15 @@ export default function SearchInput<T extends { id: number }>({
         })
         : filtered
 
+    const isMulti = selectedIds !== undefined
+
     function select(item: T) {
         onSelect(item)
-        setQuery('')
-        setFocused(false)
-        setOpen(false)
+        if (!isMulti) {
+            setQuery('')
+            setFocused(false)
+            setOpen(false)
+        }
     }
 
     return (
@@ -104,9 +110,12 @@ export default function SearchInput<T extends { id: number }>({
                                     )}
                                     <div
                                         onMouseDown={() => select(item)}
-                                        className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted"
+                                        className={`flex items-center justify-between gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted ${isMulti && selectedIds.includes(item.id) ? 'bg-indigo-50' : ''}`}
                                     >
                                         {renderItem ? renderItem(item) : <span>{getLabel(item)}</span>}
+                                        {isMulti && selectedIds.includes(item.id) && (
+                                            <span className="shrink-0 text-indigo-500 font-bold text-sm leading-none">✓</span>
+                                        )}
                                     </div>
                                 </li>
                             )

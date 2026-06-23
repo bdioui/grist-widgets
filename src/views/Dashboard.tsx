@@ -6,10 +6,11 @@ import {
 } from '@/lib/api'
 import { type Program, type Project, type Status, type Partner, type Member, type FinancialAgreement, type ProjectMember, type ActionCardFull, type Expanse, type BudgetCategory, type BudgetDetail } from '@/lib/types'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, Users, Briefcase, Building2, TrendingUp, Clock, Receipt, Pencil, Check, X, NetworkIcon } from 'lucide-react'
+import { AlertTriangle, Users, Briefcase, Building2, TrendingUp, Clock, Receipt, Pencil, Check, X, NetworkIcon, InfoIcon } from 'lucide-react'
 import {ProjectViewerSheet, ActionCardViewerSheet} from '../components/viewers'
 import PartnerGraph from '../components/partnerGraphView'
 import MemberGraph from '../components/memberGraphView'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
@@ -656,22 +657,49 @@ export default function Dashboard() {
             </div>
 
             {/* ── Graphes de relations ── */}
-            <div className="flex flex-col gap-4 hidden">
+            <div className="flex flex-col gap-4">
+                
                 <p className="text-sm font-medium flex items-center gap-2">
-                        <NetworkIcon size={15} />
-                        Graph
-                    </p>
+                    <NetworkIcon size={15} />
+                    Graph
+                </p>
+                
+                
                 <div className="flex flex-row gap-4">
-                    <div className="rounded-xl border bg-card p-5">
-                        <p className="text-sm font-medium mb-3">Réseau partenaires - {partners.length}</p>
+                    <div className="rounded-xl border bg-card p-5 flex-1 min-w-0">
+                        <div className='flex justify-between items-center mb-3'>
+                            <div>
+                                <p className="text-sm font-medium item-center">Réseau partenaires - {partners.length}</p>
+                            </div>
+
+                            <div>
+                                <Tooltip>
+                                    <TooltipTrigger>
+                                        <InfoIcon size={13}/>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        Modélise les relations entre partenaires en fonction des projets sur lesquels ils coopèrent. 
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+                        </div>
                         <PartnerGraph />
                     </div>
-                    <div className="rounded-xl border bg-card p-5">
-                        <p className="text-sm font-medium mb-3">Réseau membres - {members.length}</p>
+                    <div className="rounded-xl border bg-card p-5 flex-1 min-w-0">
+                        <div className='flex justify-between items-center mb-3'>
+                             <p className="text-sm font-medium">Réseau membres - {members.length}</p>
+                             <Tooltip>
+                                <TooltipTrigger>
+                                    <InfoIcon size={13}/>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    Modélise les relations entre membres en fonction des projets sur lesquels ils coopèrent. 
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
                         <MemberGraph />
                     </div>
                 </div>
-                
             </div>
 
             {staffWithProjects.length > 0 && (
