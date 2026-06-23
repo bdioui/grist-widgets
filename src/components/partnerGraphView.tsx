@@ -474,7 +474,7 @@ export default function PartnerGraph() {
                     ctx.strokeStyle = (srcColor ?? '#6366f1') + Math.round(op * 255).toString(16).padStart(2, '0')
                 } else {
                     const edgeColor = nodeById.get(edge.source)?.color ?? '#6366f1'
-                    const op = Math.min(0.06 + edge.weight * 0.06, 0.25)
+                    const op = Math.min(0.06 + edge.weight * 0.06, 0.60)
                     ctx.lineWidth = 1
                     ctx.strokeStyle = edgeColor + Math.round(op * 255).toString(16).padStart(2, '0')
                 }
