@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback, useMemo } from "react"
 import type { Partner, Project, ProjectPartner } from "@/lib/types"
 import { getProjectPartners, getPartners, getProjects } from "@/lib/api"
 import SearchInput from "@/components/SearchInput"
+import { Users } from "lucide-react"
 
 type Node    = { id: number; name: string; color: string }
 type Edge    = { source: number; target: number; weight: number; projects: string[] }
@@ -163,11 +164,22 @@ function Sidebar({
                         </button>
                     </div>
                     {selectedNeighbors && (
-                        <p className="text-[10px] text-indigo-500">
-                            {selectedNeighbors.length} partenaire{selectedNeighbors.length > 1 ? 's' : ''} en relation
-                            {' · '}
-                            {uniqueProjects.size} projet{uniqueProjects.size > 1 ? 's' : ''} en commun
-                        </p>
+                        <>
+                            <p className="text-[10px] text-indigo-500">
+                                {selectedNeighbors.length} partenaire{selectedNeighbors.length > 1 ? 's' : ''} en relation
+                                {' · '}
+                                {uniqueProjects.size} projet{uniqueProjects.size > 1 ? 's' : ''} en commun
+                            </p>
+                            {uniqueProjects.size > 0 && (
+                                <div className="mt-0.5 max-h-20 overflow-y-auto flex flex-wrap gap-0.5">
+                                    {Array.from(uniqueProjects).map((p, i) => (
+                                        <span key={i} className="text-[8px] bg-white text-indigo-400 border border-indigo-200 rounded px-1 py-px leading-tight">
+                                            {p}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             )}
@@ -229,20 +241,31 @@ export default function PartnerGraph() {
     const canvasRef      = useRef<HTMLCanvasElement>(null)
     const containerRef   = useRef<HTMLDivElement>(null)
     const tooltipRef     = useRef<HTMLDivElement>(null)
-    const hoveredRef     = useRef<number | null>(null)
-    const selectedIdsRef = useRef<number[]>([])
-    const filterIdsRef    = useRef<Set<number> | null>(null)
-    const transformRef    = useRef({ x: 0, y: 0, scale: 1 })
-    const fitSelectionRef = useRef<(() => void) | null>(null)
+    const hoveredRef         = useRef<number | null>(null)
+    const selectedIdsRef     = useRef<number[]>([])
+    const filterIdsRef       = useRef<Set<number> | null>(null)
+    const consortiumOnlyRef  = useRef(false)
+    const transformRef       = useRef({ x: 0, y: 0, scale: 1 })
+    const fitSelectionRef    = useRef<(() => void) | null>(null)
     const [graph, setGraph]             = useState<{ nodes: Node[]; edges: Edge[] } | null>(null)
     const [hoveredId, setHoveredId]     = useState<number | null>(null)
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [topN, setTopN]               = useState(50)
     const [fullscreen, setFullscreen]   = useState(false)
+    const [consortiumListe, setConsortiumList] = useState<number[]>([])
+    const [consortiumOnly, setConsortiumOnly] = useState(false)
+
+    useEffect(() => {
+        consortiumOnlyRef.current = consortiumOnly
+        filterIdsRef.current = consortiumOnly ? new Set(consortiumListe) : null
+    }, [consortiumOnly, consortiumListe])
 
     useEffect(() => {
         Promise.all([getPartners(), getProjects(), getProjectPartners()])
-            .then(([p, proj, pp]) => setGraph(buildGraph(p, proj, pp)))
+            .then(([p, proj, pp]) => {
+                setGraph(buildGraph(p, proj, pp))
+                setConsortiumList(p.filter(partner => partner.consortium).map(partner => partner.id))
+            })
     }, [])
 
     const visibleGraph = useMemo(() => {
@@ -346,15 +369,35 @@ export default function PartnerGraph() {
             const newId = hovered?.id ?? null
             if (newId !== hoveredRef.current) handleHover(newId)
 
+            const cRect = container.getBoundingClientRect()
+            const left  = Math.min(e.clientX - cRect.left + 12, cRect.width - 200)
+            const top   = e.clientY - cRect.top - 36
+
             if (hovered) {
-                const cRect = container.getBoundingClientRect()
                 tooltip.textContent = hovered.name
                 tooltip.style.display = 'block'
-                const left = Math.min(e.clientX - cRect.left + 12, cRect.width - 160)
                 tooltip.style.left = `${left}px`
-                tooltip.style.top  = `${e.clientY - cRect.top - 32}px`
+                tooltip.style.top  = `${top}px`
             } else {
-                tooltip.style.display = 'none'
+                const threshold = 6 / transformRef.current.scale
+                const hovEdge = g.edges.find(edge => {
+                    const A = nodeById.get(edge.source), B = nodeById.get(edge.target)
+                    if (!A || !B) return false
+                    const dx = B.x - A.x, dy = B.y - A.y
+                    const lenSq = dx * dx + dy * dy
+                    if (lenSq === 0) return false
+                    const t = Math.max(0, Math.min(1, ((w.x - A.x) * dx + (w.y - A.y) * dy) / lenSq))
+                    return Math.hypot(w.x - (A.x + t * dx), w.y - (A.y + t * dy)) < threshold
+                })
+                if (hovEdge) {
+                    tooltip.innerHTML = `<span style="font-weight:600;color:#a5b4fc">${hovEdge.projects.length} projet${hovEdge.projects.length > 1 ? 's' : ''}</span><br><span style="color:#d1d5db">${hovEdge.projects.join(' · ')}</span>`
+                    tooltip.style.display = 'block'
+                    tooltip.style.left = `${left}px`
+                    tooltip.style.top  = `${top}px`
+                    canvas.style.cursor = 'pointer'
+                } else {
+                    tooltip.style.display = 'none'
+                }
             }
         }
 
@@ -452,9 +495,10 @@ export default function PartnerGraph() {
             const selNeighbors = new Set<number>()
             for (const sid of selIds) for (const nid of adjacency.get(sid) ?? []) selNeighbors.add(nid)
 
+
             const visibleNodeIds = selSet.size > 0
                 ? new Set([...selSet, ...selNeighbors])
-                : null
+                : filterIdsRef.current
 
             for (const edge of g.edges) {
                 const A = nodeById.get(edge.source), B = nodeById.get(edge.target)
@@ -622,6 +666,19 @@ export default function PartnerGraph() {
                             </button>
                         )
                     })}
+
+                    {consortiumListe.length > 0 && (
+                        <button
+                            onClick={() => setConsortiumOnly(v => !v)}
+                            className={`flex items-center gap-1.5 text-xs px-2.5 py-0.2 rounded-md border transition-colors ${
+                                consortiumOnly
+                                    ? 'bg-amber-500 text-white border-amber-500'
+                                    : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'
+                            }`}
+                        >
+                            <Users size={12} /> Consortium
+                        </button>
+                    )}
                     <span className="ml-auto text-[10px] text-gray-400">{visibleGraph?.nodes.length ?? 0} partenaires</span>
                 </div>
                 <canvas ref={canvasRef} style={{ width: '100%', flex: 1, display: 'block' }} />

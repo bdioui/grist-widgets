@@ -81,6 +81,7 @@ function Sidebar({
     onFilter: (ids: Set<number> | null) => void
 }) {
     const [orgFilter, setOrgFilter] = useState<string | null>(null)
+    const [minLinks,  setMinLinks]  = useState(2)
 
     const adjacency = useMemo(() => {
         const map = new Map<number, Set<number>>()
@@ -109,14 +110,17 @@ function Sidebar({
         return Array.from(seen.entries()).map(([name, color], i) => ({ id: i + 1, name, color }))
     }, [nodes])
 
-    const filtered = useMemo(() =>
-        orgFilter === null ? sorted : sorted.filter(n => n.partnerName === orgFilter),
-        [sorted, orgFilter]
-    )
+    const filtered = useMemo(() => {
+        return sorted.filter(n => {
+            const links = adjacency.get(n.id)?.size ?? 0
+            return (orgFilter === null || n.partnerName === orgFilter) && links >= minLinks
+        })
+    }, [sorted, orgFilter, minLinks, adjacency])
 
     useEffect(() => {
-        onFilter(orgFilter === null ? null : new Set(filtered.map(n => n.id)))
-    }, [filtered, orgFilter, onFilter])
+        const isDefault = orgFilter === null && minLinks <= 2
+        onFilter(isDefault ? null : new Set(filtered.map(n => n.id)))
+    }, [filtered, orgFilter, minLinks, onFilter])
 
     const edgeMap = useMemo(() => {
         const map = new Map<string, Edge>()
@@ -218,6 +222,19 @@ function Sidebar({
                         </button>
                     )}
                 </div>
+                <div className="flex gap-1 flex-wrap">
+                    {[1, 2, 3, 5, 10].map(n => (
+                        <button
+                            key={n}
+                            onClick={() => setMinLinks(n)}
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+                                minLinks === n ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            }`}
+                        >
+                            {n === 1 ? '1+ lien' : `${n}+ liens`}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {selectedIds.length > 0 && (
@@ -231,11 +248,22 @@ function Sidebar({
                         </button>
                     </div>
                     {selectedNeighbors && (
-                        <p className="text-[10px] text-indigo-500">
-                            {selectedNeighbors.length} collègue{selectedNeighbors.length > 1 ? 's' : ''}
-                            {' · '}
-                            {uniqueProjects.size} projet{uniqueProjects.size > 1 ? 's' : ''} en commun
-                        </p>
+                        <>
+                            <p className="text-[10px] text-indigo-500">
+                                {selectedNeighbors.length} collègue{selectedNeighbors.length > 1 ? 's' : ''}
+                                {' · '}
+                                {uniqueProjects.size} projet{uniqueProjects.size > 1 ? 's' : ''} en commun
+                            </p>
+                            {uniqueProjects.size > 0 && (
+                                <div className="mt-0.5 max-h-20 overflow-y-auto flex flex-wrap gap-0.5">
+                                    {Array.from(uniqueProjects).map((p, i) => (
+                                        <span key={i} className="text-[8px] bg-white text-indigo-400 border border-indigo-200 rounded px-1 py-px leading-tight">
+                                            {p}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             )}
@@ -419,15 +447,37 @@ export default function MemberGraph() {
             const newId = hovered?.id ?? null
             if (newId !== hoveredRef.current) handleHover(newId)
 
+            const cRect = container.getBoundingClientRect()
+            const left  = Math.min(e.clientX - cRect.left + 12, cRect.width - 200)
+            const top   = e.clientY - cRect.top - 36
+
             if (hovered) {
-                const cRect = container.getBoundingClientRect()
                 tooltip.innerHTML = `<span style="font-weight:600">${hovered.name}</span><span style="color:#9ca3af;margin-left:6px;font-weight:400">${hovered.partnerName}</span>`
                 tooltip.style.display = 'block'
-                const left = Math.min(e.clientX - cRect.left + 12, cRect.width - 160)
                 tooltip.style.left = `${left}px`
-                tooltip.style.top  = `${e.clientY - cRect.top - 32}px`
+                tooltip.style.top  = `${top}px`
             } else {
-                tooltip.style.display = 'none'
+                const threshold = 6 / transformRef.current.scale
+                const hovEdge = g.edges.find(edge => {
+                    const A = nodeById.get(edge.source), B = nodeById.get(edge.target)
+                    if (!A || !B) return false
+                    const dx = B.x - A.x, dy = B.y - A.y
+                    const lenSq = dx * dx + dy * dy
+                    if (lenSq === 0) return false
+                    const t = Math.max(0, Math.min(1, ((w.x - A.x) * dx + (w.y - A.y) * dy) / lenSq))
+                    return Math.hypot(w.x - (A.x + t * dx), w.y - (A.y + t * dy)) < threshold
+                })
+                if (hovEdge) {
+                    const A = nodeById.get(hovEdge.source)!, B = nodeById.get(hovEdge.target)!
+                    tooltip.innerHTML = `<span style="font-weight:600;color:#a5b4fc">${hovEdge.projects.length} projet${hovEdge.projects.length > 1 ? 's' : ''}</span><br><span style="color:#d1d5db">${hovEdge.projects.join(' · ')}</span>`
+                    tooltip.style.display = 'block'
+                    tooltip.style.left = `${left}px`
+                    tooltip.style.top  = `${top}px`
+                    canvas.style.cursor = 'pointer'
+                    void A; void B
+                } else {
+                    tooltip.style.display = 'none'
+                }
             }
         }
 
@@ -548,15 +598,10 @@ export default function MemberGraph() {
                     ctx.lineWidth = 2
                     ctx.strokeStyle = (srcColor ?? '#6366f1') + Math.round(op * 255).toString(16).padStart(2, '0')
                 } else {
-                    const colorA = nodeById.get(edge.source)?.color ?? '#94a3b8'
-                    const colorB = nodeById.get(edge.target)?.color ?? '#94a3b8'
-                    const op     = Math.min(0.4 + edge.weight * 0.08, 0.9)
-                    const opHex  = Math.round(op * 255).toString(16).padStart(2, '0')
+                    const edgeColor = nodeById.get(edge.source)?.color ?? '#94a3b8'
+                    const op = Math.min(0.4 + edge.weight * 0.08, 0.9)
                     ctx.lineWidth = Math.min(1 + edge.weight * 0.4, 3)
-                    const grad = ctx.createLinearGradient(A.x, A.y, B.x, B.y)
-                    grad.addColorStop(0, colorA + opHex)
-                    grad.addColorStop(1, colorB + opHex)
-                    ctx.strokeStyle = grad
+                    ctx.strokeStyle = edgeColor + Math.round(op * 255).toString(16).padStart(2, '0')
                 }
                 ctx.stroke()
             }
