@@ -565,10 +565,15 @@ export default function MemberGraph() {
                     ctx.lineWidth = 2
                     ctx.strokeStyle = (srcColor ?? '#6366f1') + Math.round(op * 255).toString(16).padStart(2, '0')
                 } else {
-                    const edgeColor = nodeById.get(edge.source)?.color ?? '#94a3b8'
-                    const op = Math.min(0.3 + edge.weight * 0.08, 0.9)
-                    ctx.lineWidth = Math.min(1 + edge.weight * 0.3, 3)
-                    ctx.strokeStyle = edgeColor + Math.round(op * 255).toString(16).padStart(2, '0')
+                    const colorA = nodeById.get(edge.source)?.color ?? '#94a3b8'
+                    const colorB = nodeById.get(edge.target)?.color ?? '#94a3b8'
+                    const op     = Math.min(0.4 + edge.weight * 0.08, 0.9)
+                    const opHex  = Math.round(op * 255).toString(16).padStart(2, '0')
+                    ctx.lineWidth = Math.min(1 + edge.weight * 0.4, 3)
+                    const grad = ctx.createLinearGradient(A.x, A.y, B.x, B.y)
+                    grad.addColorStop(0, colorA + opHex)
+                    grad.addColorStop(1, colorB + opHex)
+                    ctx.strokeStyle = grad
                 }
                 ctx.stroke()
             }
