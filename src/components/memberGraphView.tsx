@@ -326,6 +326,7 @@ export default function MemberGraph() {
     const [hoveredId, setHoveredId]     = useState<number | null>(null)
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [topN, setTopN]               = useState(20)
+    const [fullscreen, setFullscreen]   = useState(false)
 
     useEffect(() => {
         Promise.all([getMembers(), getPartners(), getProjects(), getAllProjectMembers()])
@@ -364,8 +365,8 @@ export default function MemberGraph() {
         const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
         if (!ctx) return
 
-        let W = canvas.parentElement?.offsetWidth || 500
-        const H = 420
+        let W = canvas.parentElement?.offsetWidth  || 500
+        let H = canvas.parentElement?.offsetHeight || 420
         canvas.width  = W
         canvas.height = H
         let cx = W / 2, cy = H / 2
@@ -564,8 +565,10 @@ export default function MemberGraph() {
                     ctx.lineWidth = 2
                     ctx.strokeStyle = (srcColor ?? '#6366f1') + Math.round(op * 255).toString(16).padStart(2, '0')
                 } else {
-                    ctx.lineWidth = 1.5
-                    ctx.strokeStyle = `rgba(0,0,0,${Math.min(0.08 + edge.weight * 0.12, 0.7)})`
+                    const edgeColor = nodeById.get(edge.source)?.color ?? '#94a3b8'
+                    const op = Math.min(0.06 + edge.weight * 0.06, 0.25)
+                    ctx.lineWidth = 1
+                    ctx.strokeStyle = edgeColor + Math.round(op * 255).toString(16).padStart(2, '0')
                 }
                 ctx.stroke()
             }
@@ -629,11 +632,10 @@ export default function MemberGraph() {
         let rafId: number
         const SHOW_LABELS = simNodes.length <= 150
         function loop() {
-            const newW = canvas.parentElement?.offsetWidth || 0
-            if (newW > 0 && newW !== W) {
-                W = newW; cx = W / 2
-                canvas.width = W
-            }
+            const newW = canvas.parentElement?.offsetWidth  || 0
+            const newH = canvas.parentElement?.offsetHeight || 0
+            if (newW > 0 && newW !== W) { W = newW; cx = W / 2; canvas.width  = W }
+            if (newH > 0 && newH !== H) { H = newH; cy = H / 2; canvas.height = H }
             tick()
             draw(SHOW_LABELS)
             rafId = requestAnimationFrame(loop)
@@ -651,7 +653,8 @@ export default function MemberGraph() {
     }, [visibleGraph, handleHover, handleSelect])
 
     return (
-        <div ref={containerRef} className="flex rounded-lg border border-gray-100 overflow-hidden" style={{ height: 420, position: 'relative', width: '100%' }}>
+        <div ref={containerRef} className="flex rounded-lg border border-gray-100 overflow-hidden bg-white"
+            style={{ position: fullscreen ? 'fixed' : 'relative', inset: fullscreen ? 0 : undefined, zIndex: fullscreen ? 50 : undefined, height: fullscreen ? '100dvh' : 420, width: '100%' }}>
             <div
                 ref={tooltipRef}
                 style={{
@@ -664,9 +667,10 @@ export default function MemberGraph() {
             />
             <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {([
-                    { label: '+', title: 'Zoom avant',  action: () => { const t = transformRef.current; const s = Math.min(8, t.scale * 1.25); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
-                    { label: '−', title: 'Zoom arrière', action: () => { const t = transformRef.current; const s = Math.max(0.15, t.scale * 0.8); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
-                    { label: '⌖', title: 'Réinitialiser', action: () => { transformRef.current = { x: 0, y: 0, scale: 1 } } },
+                    { label: '+',  title: 'Zoom avant',    action: () => { const t = transformRef.current; const s = Math.min(8, t.scale * 1.25); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
+                    { label: '−',  title: 'Zoom arrière',  action: () => { const t = transformRef.current; const s = Math.max(0.15, t.scale * 0.8); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
+                    { label: '⌖',  title: 'Réinitialiser', action: () => { transformRef.current = { x: 0, y: 0, scale: 1 } } },
+                    { label: fullscreen ? '✕' : '⛶', title: fullscreen ? 'Quitter le plein écran' : 'Plein écran', action: () => setFullscreen(f => !f) },
                 ] as const).map(btn => (
                     <button key={btn.label} title={btn.title} onClick={btn.action}
                         style={{ width: 28, height: 28, background: 'rgba(255,255,255,0.92)', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 16, lineHeight: 1, color: '#374151', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>

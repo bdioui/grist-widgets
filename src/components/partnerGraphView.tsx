@@ -48,7 +48,7 @@ function buildGraph(partners: Partner[], projects: Project[], projectPartners: P
 
 // ── Sidebar ────────────────────────────────────────────────────────────────
 function Sidebar({
-    nodes, edges, hoveredId, selectedIds, onHover, onSelect, onFilter,
+    nodes, edges, hoveredId, selectedIds, onHover, onSelect,
 }: {
     nodes: Node[]
     edges: Edge[]
@@ -56,10 +56,7 @@ function Sidebar({
     selectedIds: number[]
     onHover:  (id: number | null) => void
     onSelect: (ids: number[]) => void
-    onFilter: (ids: Set<number> | null) => void
 }) {
-    const [minLinks, setMinLinks] = useState(2)
-
     const adjacency = useMemo(() => {
         const map = new Map<number, Set<number>>()
         for (const edge of edges) {
@@ -80,15 +77,6 @@ function Sidebar({
         Math.max(...nodes.map(n => adjacency.get(n.id)?.size ?? 0), 1),
         [nodes, adjacency]
     )
-
-    const filtered = useMemo(() =>
-        sorted.filter(n => (adjacency.get(n.id)?.size ?? 0) >= minLinks),
-        [sorted, minLinks, adjacency]
-    )
-
-    useEffect(() => {
-        onFilter(minLinks <= 2 ? null : new Set(filtered.map(n => n.id)))
-    }, [filtered, minLinks, onFilter])
 
     const edgeMap = useMemo(() => {
         const map = new Map<string, Edge>()
@@ -131,7 +119,7 @@ function Sidebar({
         <div className="flex flex-col h-full overflow-hidden">
             <div className="px-3 pt-3 pb-2 border-b border-gray-100 flex flex-col gap-2">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-                    Partenaires · {filtered.length}{filtered.length < nodes.length ? `/${nodes.length}` : ''}
+                    Partenaires · {nodes.length}
                 </p>
                 <div className="flex items-center gap-1">
                     <SearchInput
@@ -162,19 +150,6 @@ function Sidebar({
                         </button>
                     )}
                 </div>
-                <div className="flex gap-1 flex-wrap">
-                    {[0, 2, 5, 10, 20].map(n => (
-                        <button
-                            key={n}
-                            onClick={() => setMinLinks(n)}
-                            className={`text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
-                                minLinks === n ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                            }`}
-                        >
-                            {n === 0 ? 'Tous' : `${n}+`}
-                        </button>
-                    ))}
-                </div>
             </div>
 
             {selectedIds.length > 0 && (
@@ -198,7 +173,7 @@ function Sidebar({
             )}
 
             <div className="flex-1 overflow-y-auto">
-                {filtered.map(node => {
+                {sorted.map(node => {
                     const links      = adjacency.get(node.id)?.size ?? 0
                     const isHov      = hoveredId === node.id
                     const isSel      = selectedIds.includes(node.id)
@@ -256,13 +231,14 @@ export default function PartnerGraph() {
     const tooltipRef     = useRef<HTMLDivElement>(null)
     const hoveredRef     = useRef<number | null>(null)
     const selectedIdsRef = useRef<number[]>([])
-    const filterIdsRef   = useRef<Set<number> | null>(null)
-    const transformRef   = useRef({ x: 0, y: 0, scale: 1 })
+    const filterIdsRef    = useRef<Set<number> | null>(null)
+    const transformRef    = useRef({ x: 0, y: 0, scale: 1 })
     const fitSelectionRef = useRef<(() => void) | null>(null)
     const [graph, setGraph]             = useState<{ nodes: Node[]; edges: Edge[] } | null>(null)
     const [hoveredId, setHoveredId]     = useState<number | null>(null)
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [topN, setTopN]               = useState(50)
+    const [fullscreen, setFullscreen]   = useState(false)
 
     useEffect(() => {
         Promise.all([getPartners(), getProjects(), getProjectPartners()])
@@ -285,7 +261,6 @@ export default function PartnerGraph() {
 
     const handleHover  = useCallback((id: number | null) => { hoveredRef.current = id; setHoveredId(id) }, [])
     const handleSelect = useCallback((ids: number[]) => { selectedIdsRef.current = ids; setSelectedIds(ids) }, [])
-    const handleFilter = useCallback((ids: Set<number> | null) => { filterIdsRef.current = ids }, [])
 
     useEffect(() => {
         if (selectedIds.length > 0) fitSelectionRef.current?.()
@@ -300,8 +275,8 @@ export default function PartnerGraph() {
         const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
         if (!ctx) return
 
-        let W = canvas.parentElement?.offsetWidth || 500
-        const H = 420
+        let W = canvas.parentElement?.offsetWidth  || 500
+        let H = canvas.parentElement?.offsetHeight || 420
         canvas.width  = W
         canvas.height = H
         let cx = W / 2, cy = H / 2
@@ -498,8 +473,10 @@ export default function PartnerGraph() {
                     ctx.lineWidth = 2
                     ctx.strokeStyle = (srcColor ?? '#6366f1') + Math.round(op * 255).toString(16).padStart(2, '0')
                 } else {
-                    ctx.lineWidth = 1.5
-                    ctx.strokeStyle = `rgba(0,0,0,${Math.min(0.08 + edge.weight * 0.12, 0.7)})`
+                    const edgeColor = nodeById.get(edge.source)?.color ?? '#6366f1'
+                    const op = Math.min(0.06 + edge.weight * 0.06, 0.25)
+                    ctx.lineWidth = 1
+                    ctx.strokeStyle = edgeColor + Math.round(op * 255).toString(16).padStart(2, '0')
                 }
                 ctx.stroke()
             }
@@ -563,11 +540,10 @@ export default function PartnerGraph() {
 
         let rafId: number
         function loop() {
-            const newW = canvas.parentElement?.offsetWidth || 0
-            if (newW > 0 && newW !== W) {
-                W = newW; cx = W / 2
-                canvas.width = W
-            }
+            const newW = canvas.parentElement?.offsetWidth  || 0
+            const newH = canvas.parentElement?.offsetHeight || 0
+            if (newW > 0 && newW !== W) { W = newW; cx = W / 2; canvas.width  = W }
+            if (newH > 0 && newH !== H) { H = newH; cy = H / 2; canvas.height = H }
             tick()
             draw()
             rafId = requestAnimationFrame(loop)
@@ -585,7 +561,8 @@ export default function PartnerGraph() {
     }, [visibleGraph, handleHover, handleSelect])
 
     return (
-        <div ref={containerRef} className="flex rounded-lg border border-gray-100 overflow-hidden" style={{ height: 420, position: 'relative', width: '100%' }}>
+        <div ref={containerRef} className="flex rounded-lg border border-gray-100 overflow-hidden bg-white"
+            style={{ position: fullscreen ? 'fixed' : 'relative', inset: fullscreen ? 0 : undefined, zIndex: fullscreen ? 50 : undefined, height: fullscreen ? '100dvh' : 420, width: '100%' }}>
             <div
                 ref={tooltipRef}
                 style={{
@@ -598,9 +575,10 @@ export default function PartnerGraph() {
             />
             <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {([
-                    { label: '+', title: 'Zoom avant',    action: () => { const t = transformRef.current; const s = Math.min(8, t.scale * 1.25); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
-                    { label: '−', title: 'Zoom arrière',  action: () => { const t = transformRef.current; const s = Math.max(0.15, t.scale * 0.8); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
-                    { label: '⌖', title: 'Réinitialiser', action: () => { transformRef.current = { x: 0, y: 0, scale: 1 } } },
+                    { label: '+',  title: 'Zoom avant',    action: () => { const t = transformRef.current; const s = Math.min(8, t.scale * 1.25); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
+                    { label: '−',  title: 'Zoom arrière',  action: () => { const t = transformRef.current; const s = Math.max(0.15, t.scale * 0.8); t.x = (t.x - 250) * (s / t.scale) + 250; t.y = (t.y - 210) * (s / t.scale) + 210; t.scale = s } },
+                    { label: '⌖',  title: 'Réinitialiser', action: () => { transformRef.current = { x: 0, y: 0, scale: 1 } } },
+                    { label: fullscreen ? '✕' : '⛶', title: fullscreen ? 'Quitter le plein écran' : 'Plein écran', action: () => setFullscreen(f => !f) },
                 ] as const).map(btn => (
                     <button key={btn.label} title={btn.title} onClick={btn.action}
                         style={{ width: 28, height: 28, background: 'rgba(255,255,255,0.92)', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 16, lineHeight: 1, color: '#374151', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>
@@ -617,7 +595,6 @@ export default function PartnerGraph() {
                         selectedIds={selectedIds}
                         onHover={handleHover}
                         onSelect={handleSelect}
-                        onFilter={handleFilter}
                       />
                     : <div className="flex items-center justify-center h-full text-xs text-gray-300">Chargement…</div>
                 }
