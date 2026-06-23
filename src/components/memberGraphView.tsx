@@ -81,7 +81,6 @@ function Sidebar({
     onFilter: (ids: Set<number> | null) => void
 }) {
     const [orgFilter, setOrgFilter] = useState<string | null>(null)
-    const [minLinks,  setMinLinks]  = useState(2)
 
     const adjacency = useMemo(() => {
         const map = new Map<number, Set<number>>()
@@ -110,17 +109,14 @@ function Sidebar({
         return Array.from(seen.entries()).map(([name, color], i) => ({ id: i + 1, name, color }))
     }, [nodes])
 
-    const filtered = useMemo(() => {
-        return sorted.filter(n => {
-            const links = adjacency.get(n.id)?.size ?? 0
-            return (orgFilter === null || n.partnerName === orgFilter) && links >= minLinks
-        })
-    }, [sorted, orgFilter, minLinks, adjacency])
+    const filtered = useMemo(() =>
+        orgFilter === null ? sorted : sorted.filter(n => n.partnerName === orgFilter),
+        [sorted, orgFilter]
+    )
 
     useEffect(() => {
-        const isDefault = orgFilter === null && minLinks <= 2
-        onFilter(isDefault ? null : new Set(filtered.map(n => n.id)))
-    }, [filtered, orgFilter, minLinks, onFilter])
+        onFilter(orgFilter === null ? null : new Set(filtered.map(n => n.id)))
+    }, [filtered, orgFilter, onFilter])
 
     const edgeMap = useMemo(() => {
         const map = new Map<string, Edge>()
@@ -221,19 +217,6 @@ function Sidebar({
                             ×
                         </button>
                     )}
-                </div>
-                <div className="flex gap-1 flex-wrap">
-                    {[1, 2, 3, 5, 10].map(n => (
-                        <button
-                            key={n}
-                            onClick={() => setMinLinks(n)}
-                            className={`text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
-                                minLinks === n ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                            }`}
-                        >
-                            {n === 1 ? '1+ lien' : `${n}+ liens`}
-                        </button>
-                    ))}
                 </div>
             </div>
 
