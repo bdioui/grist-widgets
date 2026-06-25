@@ -9,6 +9,11 @@ import {
     SCHEMA, TABLE_FIELDS, QUERYABLE_TABLES, traverse,
 } from '@/lib/querySchema'
 
+import {Checkbox} from '../components/ui/checkbox'
+
+
+
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type Operator =
@@ -215,8 +220,8 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
                                     onClick={() => setRootTable(t.key)}
                                     className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${
                                         rootTable === t.key
-                                            ? 'bg-indigo-500 text-white border-indigo-500'
-                                            : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-500'
+                                            ? 'bg-black text-white'
+                                            : 'border-gray-200 text-gray-500 hover:border-indigo-500 hover:text-indigo-600'
                                     }`}
                                 >
                                     {t.label}
@@ -329,7 +334,7 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
 
                         <button
                             onClick={addFilter}
-                            className="self-start text-xs text-indigo-500 hover:text-indigo-700"
+                            className="self-start text-xs text-indigo-500 hover:text-gray-600"
                         >
                             + Ajouter un filtre
                         </button>
@@ -340,19 +345,18 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
                         <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
                             Colonnes à exporter
                         </span>
-                        <div className="flex gap-4 flex-wrap">
+                        <div className="flex flex-row gap-4 flex-wrap">
                             {rootFields.map(f => (
-                                <label key={f.key} className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-                                    <input
-                                        type="checkbox"
+                                <label key={f.key} className="flex items-center gap-1.5 cursor-pointer">
+                                    <Checkbox
                                         checked={selectedFields.includes(f.key)}
-                                        onChange={() => setSelected(prev =>
+                                        onCheckedChange={() => setSelected(prev =>
                                             prev.includes(f.key)
                                                 ? prev.filter(k => k !== f.key)
                                                 : [...prev, f.key]
                                         )}
                                     />
-                                    {f.label}
+                                    <span className="text-xs text-gray-600">{f.label}</span>
                                 </label>
                             ))}
                         </div>
@@ -412,7 +416,7 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
                 <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 shrink-0">
                     <button
                         onClick={onClose}
-                        className="text-xs text-gray-400 hover:text-gray-600"
+                        className="text-xs text-gray-400 border rounded-md px-1.5 py-1.5 hover:text-indigo-600 hover:border-indigo-500"
                     >
                         Annuler
                     </button>
@@ -422,7 +426,7 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
                             downloadCSV(results, fields, rootTable)
                         }}
                         disabled={results.length === 0 || selectedFields.length === 0}
-                        className="text-xs px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="text-xs px-1.5 py-1.5 bg-black text-white rounded-md hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                         Exporter CSV · {results.length}
                     </button>

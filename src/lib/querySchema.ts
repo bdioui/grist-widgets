@@ -342,7 +342,7 @@ export const QUERYABLE_TABLES = [
     { key: 'partners' as const, label: 'Partenaires' },
     { key: 'labs' as const, label: 'Laboratoires' },
     { key: 'projects' as const, label: 'Projets' },
-    { key: 'projectCalls' as const, label: 'Appels à projets' },
+    { key: 'projectCalls' as const, label: 'Dispositifs' },
     { key: 'agreements' as const, label: 'Conventions' },
     { key: 'axes' as const, label: 'Axes' },
     { key: 'formations' as const, label: 'Formations' },
@@ -366,18 +366,4 @@ export function traverse(
             .filter(r => localVals.has(r[step.foreignKey]))
     }
     return current
-}
-
-// Retourne les IDs de la table racine qui sont connectés à au moins un
-// enregistrement de la table cible vérifiant un prédicat donné.
-export function filterByJoin<R extends { id: number }>(
-    rootRecords: R[],
-    path: RelationPath,
-    db: DB,
-    predicate: (record: Record<string, unknown>) => boolean,
-): R[] {
-    return rootRecords.filter(root => {
-        const reached = traverse([root as unknown as Record<string, unknown>], path, db)
-        return reached.some(predicate)
-    })
 }
