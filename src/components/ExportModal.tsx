@@ -10,6 +10,8 @@ import {
 } from '@/lib/querySchema'
 
 import {Checkbox} from '../components/ui/checkbox'
+import JSZip from 'jszip'
+
 
 
 
@@ -76,6 +78,34 @@ function matchesFilter(record: Record<string, unknown>, filter: Filter): boolean
         case 'after':       return String(val ?? '') > fval
         default:            return true
     }
+}
+
+async function backupDB(db: DB) {
+    const zip = new JSZip()
+    const tables: (keyof DB)[] = [
+        'members', 'partners', 'labs', 'projects', 'projectCalls',
+        'axes', 'agreements', 'formations',
+        'projectMembers', 'projectPartners', 'partnerLabs'
+    ]
+
+    for (const table of tables) {
+        const rows = db[table] as Record<string, unknown>[]
+        if (rows.length === 0) continue
+
+        const headers = Object.keys(rows[0])
+        const csv = [headers, ...rows.map(r => headers.map(h => String(r[h] ?? '')))]
+            .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+            .join('\n')
+
+        zip.file(`${table}.csv`, '\uFEFF' + csv)
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `backup_${new Date().toISOString().slice(0, 10)}.zip`
+    a.click()
+    URL.revokeObjectURL(a.href)
 }
 
 function applyFilters(
@@ -203,7 +233,13 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                     <h2 className="text-sm font-semibold text-gray-800">Requête & Export</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+                    <button
+                        onClick={() => {if(db) backupDB(db)}}
+                        className="text-xs px-1.5 py-1.5 bg-gray-100 text-black rounded-md hover:bg-indigo-300 disabled:opacity-40 hover-text-indigo-700 disabled:cursor-not-allowed transition-colors"
+                    >
+                        Exporter toute la base
+                    </button>
+                   
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-5">
