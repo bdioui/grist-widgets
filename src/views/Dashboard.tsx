@@ -858,6 +858,10 @@ export default function Dashboard() {
                 project={openProject}
                 open={!!openProject}
                 onClose={() => setOpenProject(null)}
+                onUpdated={p => {
+                    setProjects(prev => prev.map(x => x.id === p.id ? { ...x, ...p } : x))
+                    setOpenProject(p)
+                }}
             />
         )}
 
@@ -866,6 +870,10 @@ export default function Dashboard() {
                 card={openCard}
                 open={!!openCard}
                 onClose={() => setOpenCard(null)}
+                onUpdated={c => {
+                    setActionCards(prev => prev.map(x => x.id === c.id ? { ...x, ...c } : x))
+                    setOpenCard(c)
+                }}
             />
         )}
 
@@ -887,7 +895,7 @@ export default function Dashboard() {
                     </DialogTitle>
                 </DialogHeader>
                 {staffModal && (
-                    <div className="flex flex-col gap-2 mt-1">
+                    <div className="flex flex-col gap-2 mt-1 max-h-[60vh] overflow-y-auto">
                         {staffModal.assignments.length === 0 && (
                             <p className="text-sm text-muted-foreground italic">Aucun projet assigné.</p>
                         )}
@@ -897,14 +905,14 @@ export default function Dashboard() {
                                 <button
                                     key={project.id}
                                     onClick={() => { setStaffModal(null); setOpenProject(project) }}
-                                    className="flex items-start gap-3 rounded-lg border bg-card p-3 text-left hover:shadow-sm transition-shadow"
+                                    className="w-full overflow-hidden flex items-start gap-3 rounded-lg border bg-card p-3 text-left hover:shadow-sm transition-shadow"
                                 >
                                     <span
                                         className="mt-1 w-2 h-2 rounded-full shrink-0"
                                         style={{ backgroundColor: STATUS_COLORS[statusLabel] ?? '#e5e7eb' }}
                                     />
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium truncate">{project.title}</p>
+                                        <p className="text-sm font-medium break-words">{project.title}</p>
                                         <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
                                             <span className="px-1.5 py-0.5 rounded bg-muted">{statusLabel}</span>
                                             <span>{role}</span>

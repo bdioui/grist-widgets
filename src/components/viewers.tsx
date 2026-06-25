@@ -27,7 +27,7 @@ type ProjectRefData = {
     times:        TimeEntry[]
 }
 
-export function ProjectViewerSheet({ project, open, onClose }: { project: Project; open: boolean; onClose: () => void }) {
+export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { project: Project; open: boolean; onClose: () => void; onUpdated?: (p: Project) => void }) {
     const [refData, setRefData] = useState<ProjectRefData | null>(null)
 
     useEffect(() => {
@@ -77,7 +77,10 @@ export function ProjectViewerSheet({ project, open, onClose }: { project: Projec
                 open={open}
                 project={refData.projectFull}
                 onClose={onClose}
-                onUpdated={() => {}}
+                onUpdated={p => {
+                    setRefData(prev => prev ? { ...prev, projectFull: { ...prev.projectFull, ...p } } : null)
+                    onUpdated?.(p)
+                }}
                 onDeleted={() => {}}
                 onAgreementAdded={() => {}}
                 onAgreementDeleted={() => {}}
@@ -118,14 +121,14 @@ function toActionCardData(card: ActionCardFull): ActionCardData {
     }
 }
 
-export function ActionCardViewerSheet({ card, open, onClose }: { card: ActionCardFull; open: boolean; onClose: () => void }) {
+export function ActionCardViewerSheet({ card, open, onClose, onUpdated }: { card: ActionCardFull; open: boolean; onClose: () => void; onUpdated?: (c: ActionCardFull) => void }) {
     return (
         <Suspense fallback={null}>
             <ActionCardDetailSheetLazy
                 card={toActionCardData(card)}
                 open={open}
                 onClose={onClose}
-                onUpdated={() => {}}
+                onUpdated={c => onUpdated?.(c as unknown as ActionCardFull)}
                 onDeleted={() => {}}
             />
         </Suspense>

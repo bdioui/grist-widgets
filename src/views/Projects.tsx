@@ -3585,9 +3585,14 @@ export default function Projects() {
     }
 
     function handleProjectUpdated(p: Project) {
-        const call = projectCalls.find(pc => pc.id === p.project_call_id)!
-        setProjects(prev => prev.map(x => x.id === p.id ? { ...p, projectCall: call } : x))
-        setSelectedProject(prev => prev ? { ...p, projectCall: call } : null)
+        console.log('handleProjectUpdated', p)
+        const call = projectCalls.find(pc => pc.id === p.project_call_id)
+        setProjects(prev => prev.map(x => x.id === p.id ? { ...x, ...p, projectCall: call ?? x.projectCall } : x))
+        setSelectedProject(prev => {
+            const updated = prev ? { ...prev, ...p, projectCall: call ?? prev.projectCall } : null
+            console.log('setSelectedProject =>', updated)
+            return updated
+        })
     }
 
     function handleProjectDeleted(id: number) {
