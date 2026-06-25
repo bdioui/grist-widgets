@@ -1,296 +1,433 @@
-import { useEffect, useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import { Download, Loader2 } from 'lucide-react'
-import { getMembersFull, getPartners, getProjects, getFinancialAgreements } from '@/lib/api'
-import type { MemberFull, Partner, Project, FinancialAgreement } from '@/lib/types'
+import { useEffect, useState, useMemo } from 'react'
+import {
+    getMembers, getPartners, getLabs, getProjects, getProjectCalls,
+    getAxes, getFinancialAgreements, getFormations,
+    getAllProjectMembers, getProjectPartners, getPartnerLabs,
+} from '@/lib/api'
+import {
+    type DB, type QueryableTableKey, type FieldType,
+    SCHEMA, TABLE_FIELDS, QUERYABLE_TABLES, traverse,
+} from '@/lib/querySchema'
 
-// --- Config des colonnes par table ---
+// ── Types ──────────────────────────────────────────────────────────────────
 
-type Column = { key: string; label: string }
-type Row = Record<string, string>
+type Operator =
+    | 'contains' | 'equals' | 'starts_with'
+    | 'gt' | 'lt' | 'gte' | 'lte'
+    | 'is_true' | 'is_false'
+    | 'before' | 'after'
 
-type TableConfig = {
-    id: string
-    label: string
-    columns: Column[]
-    load: () => Promise<Row[]>
+type Filter = {
+    id:          string
+    targetTable: QueryableTableKey
+    field:       string
+    operator:    Operator
+    value:       string
 }
 
-function flattenMembers(members: MemberFull[]): Row[] {
-    return members.map(m => ({
-        first_name:  m.first_name,
-        last_name:   m.last_name,
-        position:    m.position,
-        email:       m.email,
-        tel:         m.tel,
-        genre:       m.genre,
-        status:      m.status,
-        partner:     m.partner?.name ?? '',
-        lab:         m.lab?.name ?? '',
-    }))
+const OPERATORS: Record<FieldType, { value: Operator; label: string }[]> = {
+    string:  [
+        { value: 'contains',    label: 'contient' },
+        { value: 'equals',      label: '=' },
+        { value: 'starts_with', label: 'commence par' },
+    ],
+    number:  [
+        { value: 'equals', label: '=' },
+        { value: 'gt',     label: '>' },
+        { value: 'lt',     label: '<' },
+        { value: 'gte',    label: '>=' },
+        { value: 'lte',    label: '<=' },
+    ],
+    boolean: [
+        { value: 'is_true',  label: 'est vrai' },
+        { value: 'is_false', label: 'est faux' },
+    ],
+    date: [
+        { value: 'equals', label: '=' },
+        { value: 'after',  label: 'après' },
+        { value: 'before', label: 'avant' },
+    ],
+    enum: [
+        { value: 'equals', label: '=' },
+    ],
 }
 
-function flattenPartners(partners: Partner[]): Row[] {
-    return partners.map(p => ({
-        name:        p.name,
-        type:        p.type,
-        description: p.description,
-        consortium:  p.consortium ? 'Oui' : 'Non',
-    }))
+// ── Moteur de filtrage ─────────────────────────────────────────────────────
+
+function matchesFilter(record: Record<string, unknown>, filter: Filter): boolean {
+    const val  = record[filter.field]
+    const fval = filter.value.trim()
+    switch (filter.operator) {
+        case 'contains':    return String(val ?? '').toLowerCase().includes(fval.toLowerCase())
+        case 'equals':      return String(val ?? '') === fval
+        case 'starts_with': return String(val ?? '').toLowerCase().startsWith(fval.toLowerCase())
+        case 'gt':          return Number(val) > Number(fval)
+        case 'lt':          return Number(val) < Number(fval)
+        case 'gte':         return Number(val) >= Number(fval)
+        case 'lte':         return Number(val) <= Number(fval)
+        case 'is_true':     return val === true || val === 1
+        case 'is_false':    return val === false || val === 0
+        case 'before':      return String(val ?? '') < fval
+        case 'after':       return String(val ?? '') > fval
+        default:            return true
+    }
 }
 
-function flattenProjects(projects: Project[]): Row[] {
-    return projects.map(p => ({
-        title:       p.title,
-        description: p.description,
-        budget:      String(p.budget),
-    }))
+function applyFilters(
+    db: DB,
+    rootTable: QueryableTableKey,
+    filters: Filter[],
+): Record<string, unknown>[] {
+    let results = db[rootTable] as Record<string, unknown>[]
+
+    for (const filter of filters) {
+        const isBool = filter.operator === 'is_true' || filter.operator === 'is_false'
+        if (!filter.field || (!filter.value && !isBool)) continue
+
+        if (filter.targetTable === rootTable) {
+            // Filtre direct sur la table racine
+            results = results.filter(r => matchesFilter(r, filter))
+        } else {
+            // Filtre croisé : traverse jusqu'à la table cible puis vérifie le prédicat
+            const path = SCHEMA[rootTable]?.[filter.targetTable]
+            if (!path) continue
+            results = results.filter(root => {
+                const reached = traverse([root], path, db)
+                return reached.some(r => matchesFilter(r, filter))
+            })
+        }
+    }
+
+    return results
 }
 
-function flattenAgreements(agreements: FinancialAgreement[]): Row[] {
-    return agreements.map(a => ({
-        title:       a.title,
-        description: a.description,
-        budget:      String(a.budget),
-        grant:       String(a.grant),
-        signed_date: a.signed_date,
-    }))
-}
+// ── Export CSV ─────────────────────────────────────────────────────────────
 
-const TABLE_CONFIGS: TableConfig[] = [
-    {
-        id: 'contacts',
-        label: 'Contacts',
-        columns: [
-            { key: 'first_name', label: 'Prénom' },
-            { key: 'last_name',  label: 'Nom' },
-            { key: 'position',   label: 'Poste' },
-            { key: 'email',      label: 'Email' },
-            { key: 'tel',        label: 'Téléphone' },
-            { key: 'genre',      label: 'Genre' },
-            { key: 'status',     label: 'Statut' },
-            { key: 'partner',    label: 'Partenaire' },
-            { key: 'lab',        label: 'Laboratoire' },
-        ],
-        load: () => getMembersFull().then(flattenMembers),
-    },
-    {
-        id: 'partenaires',
-        label: 'Partenaires',
-        columns: [
-            { key: 'name',        label: 'Nom' },
-            { key: 'type',        label: 'Type' },
-            { key: 'description', label: 'Description' },
-            { key: 'consortium',  label: 'Consortium' },
-        ],
-        load: () => getPartners().then(flattenPartners),
-    },
-    {
-        id: 'projets',
-        label: 'Projets',
-        columns: [
-            { key: 'title',       label: 'Titre' },
-            { key: 'description', label: 'Description' },
-            { key: 'budget',      label: 'Budget' },
-            { key: 'grant',       label: 'Subvention' },
-        ],
-        load: () => getProjects().then(flattenProjects),
-    },
-    {
-        id: 'conventions',
-        label: 'Conventions',
-        columns: [
-            { key: 'title',       label: 'Titre' },
-            { key: 'description', label: 'Description' },
-            { key: 'budget',      label: 'Budget' },
-            { key: 'grant',       label: 'Subvention' },
-            { key: 'signed_date', label: 'Date de signature' },
-        ],
-        load: () => getFinancialAgreements().then(flattenAgreements),
-    },
-]
-
-// --- Export CSV ---
-
-function downloadCSV(filename: string, columns: Column[], rows: Row[]) {
-    const header = columns.map(c => `"${c.label}"`).join(',')
-    const body = rows.map(row =>
-        columns.map(c => `"${(row[c.key] ?? '').replace(/"/g, '""')}"`).join(',')
-    )
-    const csv = [header, ...body].join('\n')
+function downloadCSV(
+    results: Record<string, unknown>[],
+    fields:  { key: string; label: string }[],
+    tableName: string,
+) {
+    const header = fields.map(f => f.label)
+    const rows   = results.map(r => fields.map(f => String(r[f.key] ?? '')))
+    const csv    = [header, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `export_${tableName}_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
 }
 
-// --- Panneau d'une table ---
-
-function TablePanel({ config }: { config: TableConfig }) {
-    const [rows, setRows]             = useState<Row[]>([])
-    const [loading, setLoading]       = useState(true)
-    const [selected, setSelected]     = useState<Set<string>>(
-        () => new Set(config.columns.map(c => c.key))
-    )
-
-    useEffect(() => {
-        setLoading(true)
-        config.load()
-            .then(setRows)
-            .finally(() => setLoading(false))
-    }, [config.id])
-
-    function toggleColumn(key: string) {
-        setSelected(prev => {
-            const next = new Set(prev)
-            next.has(key) ? next.delete(key) : next.add(key)
-            return next
-        })
-    }
-
-    function toggleAll() {
-        if (selected.size === config.columns.length) {
-            setSelected(new Set())
-        } else {
-            setSelected(new Set(config.columns.map(c => c.key)))
-        }
-    }
-
-    const activeColumns = config.columns.filter(c => selected.has(c.key))
-    const previewRows   = rows.slice(0, 10)
-
-    return (
-        <div className="flex flex-col gap-4">
-
-            {/* Sélection des colonnes */}
-            <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Colonnes</span>
-                    <button
-                        onClick={toggleAll}
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                        {selected.size === config.columns.length ? 'Tout désélectionner' : 'Tout sélectionner'}
-                    </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    {config.columns.map(col => (
-                        <label
-                            key={col.key}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs cursor-pointer transition-colors ${
-                                selected.has(col.key)
-                                    ? 'bg-foreground text-background border-foreground'
-                                    : 'border-border text-muted-foreground hover:border-foreground'
-                            }`}
-                        >
-                            <Checkbox
-                                checked={selected.has(col.key)}
-                                onCheckedChange={() => toggleColumn(col.key)}
-                                className="hidden"
-                            />
-                            {col.label}
-                        </label>
-                    ))}
-                </div>
-            </div>
-
-            <Separator />
-
-            {/* Preview */}
-            <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Aperçu — {rows.length} ligne{rows.length > 1 ? 's' : ''}
-                    </span>
-                    <Button
-                        size="sm"
-                        className="h-7 gap-1.5"
-                        disabled={activeColumns.length === 0 || loading}
-                        onClick={() => downloadCSV(`${config.id}.csv`, activeColumns, rows)}
-                    >
-                        <Download size={13} />
-                        Exporter CSV
-                    </Button>
-                </div>
-
-                {loading ? (
-                    <div className="flex items-center justify-center py-8 text-muted-foreground">
-                        <Loader2 size={16} className="animate-spin mr-2" /> Chargement...
-                    </div>
-                ) : activeColumns.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-8">Sélectionne au moins une colonne.</p>
-                ) : (
-                    <div className="overflow-x-auto rounded border border-border">
-                        <table className="w-full text-xs">
-                            <thead>
-                                <tr className="border-b border-border bg-muted/50">
-                                    {activeColumns.map(col => (
-                                        <th key={col.key} className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">
-                                            {col.label}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {previewRows.map((row, i) => (
-                                    <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30">
-                                        {activeColumns.map(col => (
-                                            <td key={col.key} className="px-3 py-2 max-w-[200px] truncate">
-                                                {row[col.key] || <span className="text-muted-foreground italic">—</span>}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {rows.length > 10 && (
-                            <p className="text-xs text-muted-foreground text-center py-2 border-t border-border">
-                                + {rows.length - 10} ligne{rows.length - 10 > 1 ? 's' : ''} non affichées
-                            </p>
-                        )}
-                    </div>
-                )}
-            </div>
-        </div>
-    )
-}
-
-// --- Modal principal ---
+// ── Composant ──────────────────────────────────────────────────────────────
 
 export default function ExportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-    return (
-        <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
-            <DialogContent className="!max-w-3xl max-h-[80vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Exporter les données</DialogTitle>
-                </DialogHeader>
+    const [db, setDb]                   = useState<DB | null>(null)
+    const [rootTable, setRootTable]     = useState<QueryableTableKey>('members')
+    const [filters, setFilters]         = useState<Filter[]>([])
+    const [selectedFields, setSelected] = useState<string[]>([])
 
-                <Tabs defaultValue="contacts" className="flex flex-col gap-4">
-                    <TabsList className="flex flex-row w-fit bg-muted p-1 rounded-lg">
-                        {TABLE_CONFIGS.map(t => (
-                            <TabsTrigger
-                                key={t.id}
-                                value={t.id}
-                                className="rounded-md px-4 py-1.5 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=inactive]:text-muted-foreground"
-                            >
-                                {t.label}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                    {TABLE_CONFIGS.map(t => (
-                        <TabsContent key={t.id} value={t.id}>
-                            <TablePanel config={t} />
-                        </TabsContent>
-                    ))}
-                </Tabs>
-            </DialogContent>
-        </Dialog>
+    // Chargement unique de toutes les tables
+    useEffect(() => {
+        Promise.all([
+            getMembers(), getPartners(), getLabs(), getProjects(),
+            getProjectCalls(), getAxes(), getFinancialAgreements(), getFormations(),
+            getAllProjectMembers(), getProjectPartners(), getPartnerLabs(),
+        ]).then(([members, partners, labs, projects, projectCalls, axes,
+                  agreements, formations, projectMembers, projectPartners, partnerLabs]) => {
+            setDb({ members, partners, labs, projects, projectCalls, axes,
+                    agreements, formations, projectMembers, projectPartners, partnerLabs })
+        })
+    }, [])
+
+    // Reset filtres et colonnes quand on change de table racine
+    useEffect(() => {
+        setFilters([])
+        setSelected((TABLE_FIELDS[rootTable] ?? []).map(f => f.key))
+    }, [rootTable])
+
+    const rootFields = TABLE_FIELDS[rootTable] ?? []
+
+    // Tables joignables depuis la table racine (pour le select de filtre)
+    const joinableTables = useMemo(() => [
+        QUERYABLE_TABLES.find(t => t.key === rootTable)!,
+        ...QUERYABLE_TABLES.filter(t => t.key !== rootTable && SCHEMA[rootTable]?.[t.key]),
+    ], [rootTable])
+
+    // Résultats calculés à chaque changement de filtre
+    const results = useMemo(() =>
+        db ? applyFilters(db, rootTable, filters) : [],
+    [db, rootTable, filters])
+
+    // ── Handlers filtres ──────────────────────────────────────────────────
+
+    function addFilter() {
+        const firstField = TABLE_FIELDS[rootTable]?.[0]
+        if (!firstField) return
+        setFilters(prev => [...prev, {
+            id:          crypto.randomUUID(),
+            targetTable: rootTable,
+            field:       firstField.key,
+            operator:    OPERATORS[firstField.type][0].value,
+            value:       '',
+        }])
+    }
+
+    function updateFilter(id: string, patch: Partial<Filter>) {
+        setFilters(prev => prev.map(f => f.id === id ? { ...f, ...patch } : f))
+    }
+
+    function removeFilter(id: string) {
+        setFilters(prev => prev.filter(f => f.id !== id))
+    }
+
+    if (!open) return null
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+            onClick={onClose}
+        >
+            <div
+                className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <h2 className="text-sm font-semibold text-gray-800">Requête & Export</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-5">
+
+                    {/* Table racine */}
+                    <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                            Table racine
+                        </span>
+                        <div className="flex gap-2 flex-wrap">
+                            {QUERYABLE_TABLES.map(t => (
+                                <button
+                                    key={t.key}
+                                    onClick={() => setRootTable(t.key)}
+                                    className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${
+                                        rootTable === t.key
+                                            ? 'bg-indigo-500 text-white border-indigo-500'
+                                            : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-500'
+                                    }`}
+                                >
+                                    {t.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Filtres */}
+                    <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                            Filtres
+                        </span>
+
+                        {filters.map(filter => {
+                            const targetFields  = TABLE_FIELDS[filter.targetTable] ?? []
+                            const currentField  = targetFields.find(f => f.key === filter.field)
+                            const ops           = currentField ? OPERATORS[currentField.type] : []
+                            const isBool        = currentField?.type === 'boolean'
+                            const isEnum        = currentField?.type === 'enum'
+
+                            return (
+                                <div key={filter.id} className="flex items-center gap-2 flex-wrap">
+
+                                    {/* Table cible */}
+                                    <select
+                                        value={filter.targetTable}
+                                        onChange={e => {
+                                            const tbl       = e.target.value as QueryableTableKey
+                                            const firstField = TABLE_FIELDS[tbl]?.[0]
+                                            updateFilter(filter.id, {
+                                                targetTable: tbl,
+                                                field:       firstField?.key ?? '',
+                                                operator:    firstField ? OPERATORS[firstField.type][0].value : 'contains',
+                                                value:       '',
+                                            })
+                                        }}
+                                        className="text-xs border border-gray-200 rounded px-2 py-1.5 text-gray-700 bg-white"
+                                    >
+                                        {joinableTables.map(t => (
+                                            <option key={t.key} value={t.key}>{t.label}</option>
+                                        ))}
+                                    </select>
+
+                                    {/* Champ */}
+                                    <select
+                                        value={filter.field}
+                                        onChange={e => {
+                                            const field = targetFields.find(f => f.key === e.target.value)
+                                            updateFilter(filter.id, {
+                                                field:    e.target.value,
+                                                operator: field ? OPERATORS[field.type][0].value : 'contains',
+                                                value:    '',
+                                            })
+                                        }}
+                                        className="text-xs border border-gray-200 rounded px-2 py-1.5 text-gray-700 bg-white"
+                                    >
+                                        {targetFields.map(f => (
+                                            <option key={f.key} value={f.key}>{f.label}</option>
+                                        ))}
+                                    </select>
+
+                                    {/* Opérateur */}
+                                    <select
+                                        value={filter.operator}
+                                        onChange={e => updateFilter(filter.id, { operator: e.target.value as Operator })}
+                                        className="text-xs border border-gray-200 rounded px-2 py-1.5 text-gray-700 bg-white"
+                                    >
+                                        {ops.map(op => (
+                                            <option key={op.value} value={op.value}>{op.label}</option>
+                                        ))}
+                                    </select>
+
+                                    {/* Valeur — masquée pour les booléens */}
+                                    {!isBool && (
+                                        isEnum && currentField?.values?.length ? (
+                                            <select
+                                                value={filter.value}
+                                                onChange={e => updateFilter(filter.id, { value: e.target.value })}
+                                                className="text-xs border border-gray-200 rounded px-2 py-1.5 text-gray-700 bg-white flex-1 min-w-32"
+                                            >
+                                                <option value="">— choisir —</option>
+                                                {currentField.values.map(v => (
+                                                    <option key={v} value={v}>{v}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <input
+                                                type={
+                                                    currentField?.type === 'date'   ? 'date'   :
+                                                    currentField?.type === 'number' ? 'number' : 'text'
+                                                }
+                                                value={filter.value}
+                                                onChange={e => updateFilter(filter.id, { value: e.target.value })}
+                                                placeholder="valeur…"
+                                                className="text-xs border border-gray-200 rounded px-2 py-1.5 text-gray-700 flex-1 min-w-32"
+                                            />
+                                        )
+                                    )}
+
+                                    <button
+                                        onClick={() => removeFilter(filter.id)}
+                                        className="text-gray-300 hover:text-red-400 text-sm leading-none shrink-0"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            )
+                        })}
+
+                        <button
+                            onClick={addFilter}
+                            className="self-start text-xs text-indigo-500 hover:text-indigo-700"
+                        >
+                            + Ajouter un filtre
+                        </button>
+                    </div>
+
+                    {/* Colonnes à exporter */}
+                    <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                            Colonnes à exporter
+                        </span>
+                        <div className="flex gap-4 flex-wrap">
+                            {rootFields.map(f => (
+                                <label key={f.key} className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedFields.includes(f.key)}
+                                        onChange={() => setSelected(prev =>
+                                            prev.includes(f.key)
+                                                ? prev.filter(k => k !== f.key)
+                                                : [...prev, f.key]
+                                        )}
+                                    />
+                                    {f.label}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Aperçu des résultats */}
+                    <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                            Résultats · {results.length}
+                        </span>
+
+                        {!db ? (
+                            <p className="text-xs text-gray-300">Chargement…</p>
+                        ) : results.length === 0 ? (
+                            <p className="text-xs text-gray-300">Aucun résultat</p>
+                        ) : (
+                            <div className="overflow-x-auto rounded border border-gray-100">
+                                <table className="text-xs w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            {rootFields
+                                                .filter(f => selectedFields.includes(f.key))
+                                                .map(f => (
+                                                    <th key={f.key} className="text-left px-3 py-2 text-gray-400 font-medium whitespace-nowrap">
+                                                        {f.label}
+                                                    </th>
+                                                ))
+                                            }
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {results.slice(0, 50).map((row, i) => (
+                                            <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                                                {rootFields
+                                                    .filter(f => selectedFields.includes(f.key))
+                                                    .map(f => (
+                                                        <td key={f.key} className="px-3 py-1.5 text-gray-600 whitespace-nowrap">
+                                                            {String(row[f.key] ?? '—')}
+                                                        </td>
+                                                    ))
+                                                }
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {results.length > 50 && (
+                                    <p className="text-[10px] text-gray-400 px-3 py-2 border-t border-gray-50">
+                                        Aperçu limité à 50 lignes — l'export contiendra les {results.length} résultats.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 shrink-0">
+                    <button
+                        onClick={onClose}
+                        className="text-xs text-gray-400 hover:text-gray-600"
+                    >
+                        Annuler
+                    </button>
+                    <button
+                        onClick={() => {
+                            const fields = rootFields.filter(f => selectedFields.includes(f.key))
+                            downloadCSV(results, fields, rootTable)
+                        }}
+                        disabled={results.length === 0 || selectedFields.length === 0}
+                        className="text-xs px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                        Exporter CSV · {results.length}
+                    </button>
+                </div>
+            </div>
+        </div>
     )
 }
