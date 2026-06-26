@@ -514,7 +514,7 @@ function MemberQuickCreateForm({ partners, role, onSaved, onCancel }: {
     }
 
 type MapProps = {
-    lon: number, 
+    lon: number
     lat: number
 }
 
@@ -543,7 +543,7 @@ export function MiniMap({ coords }: { coords: MapProps }) {
     )
 }
 
-const AddressAutocomplete = ({ location, setLocation, setCoords, onSelect } : { location: string, setLocation: (value: string) => void, setCoords: (value: MapProps) => void, onSelect: (fullAddress: string, lat: number, lon: number) => void}) => {
+const AddressAutocomplete = ({ location, setLocation, setCoords, onSelect } : { location: string, setLocation: (value: string) => void, setCoords: (value: MapProps | null) => void, onSelect: (fullAddress: string, lat: number, lon: number) => void}) => {
   
   
   const [query, setQuery] = useState('');
@@ -692,7 +692,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
 
     // Ajout Adress 
     const [location, setLocation] = useState('')
-    const [coords, setCoords] = useState<MapProps> ({lon:-1.6777857135744565, lat:48.115879903608615})
+    const [coords, setCoords] = useState<MapProps | null>(null)
 
     // Togglers des section
     const [toDoExtended, setToDoExtended] = useState(true)
@@ -804,17 +804,18 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
             setAllProjects(p)
             setAllAgreements(agr)
             setComments(comments)
-            console.log('[ActionCard] full_address:', card.full_address, 'lat:', card.lat, 'lon:', card.lon)
             setLocation(card.full_address ?? '')
-            if (card.lat != null && card.lon != null) {
-                setCoords({ lat: card.lat, lon: card.lon })
-            }
+            setCoords(
+                card.lat != null && card.lon != null
+                    ? { lat: card.lat, lon: card.lon }
+                    : null
+            )
             // Visibilité initiale selon le contenu chargé
             setShowTodo(tl.length > 0)
             setShowMembers(ml.length > 0)
             setShowAgreements(al.length > 0)
             setShowProjects(pl.length > 0)
-            setshowLocation(pl.length > 0)
+            setshowLocation(!!card.full_address)
         }).catch(err => console.error('[ActionCard] Promise.all failed:', err))
         .finally(() => setLoading(false))
     }, [open, card.id])
@@ -1732,9 +1733,9 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                 }}
                                             />
 
-                                            <MiniMap 
-                                                coords={coords}
-                                            />
+                                            {coords !== null && (
+                                                <MiniMap coords={coords} />
+                                            )}
 
                                         <Separator/>
                                         </>
