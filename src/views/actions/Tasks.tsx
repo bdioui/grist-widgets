@@ -48,8 +48,11 @@ function toCardData(card: ActionCardFull): ActionCardData {
             last_name:  card.owner.last_name,
             position:   card.owner.position,
         },
-        start_date: card.start_date || undefined,
-        end_date:   card.end_date   || undefined,
+        start_date:   card.start_date   || undefined,
+        end_date:     card.end_date     || undefined,
+        full_address: card.full_address || undefined,
+        lat:          card.lat          ?? undefined,
+        lon:          card.lon          ?? undefined,
     }
 }
 
