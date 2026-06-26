@@ -815,7 +815,8 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
             setShowAgreements(al.length > 0)
             setShowProjects(pl.length > 0)
             setshowLocation(pl.length > 0)
-        }).finally(() => setLoading(false))
+        }).catch(err => console.error('[ActionCard] Promise.all failed:', err))
+        .finally(() => setLoading(false))
     }, [open, card.id])
 
     function setDraftField<K extends keyof ActionCardData>(key: K, value: ActionCardData[K]) {
