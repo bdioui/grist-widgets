@@ -1719,6 +1719,20 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                 <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setLocationExtended(true)}><EyeClosed /></Button>
                                             )}
                                         </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="xs"
+                                            className="text-muted-foreground hover:text-destructive"
+                                            onClick={async () => {
+                                                await updateActionCard(card.id, { full_address: '', lat: null, lon: null })
+                                                onUpdated({ ...card, full_address: '', lat: null, lon: null })
+                                                setLocation('')
+                                                setCoords(null)
+                                                setshowLocation(false)
+                                            }}
+                                        >
+                                            <Trash2 size={14} />
+                                        </Button>
                                     </div>
 
                                     {locationExtended && (
