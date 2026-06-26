@@ -804,6 +804,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
             setAllProjects(p)
             setAllAgreements(agr)
             setComments(comments)
+            console.log('[ActionCard] full_address:', card.full_address, 'lat:', card.lat, 'lon:', card.lon)
             setLocation(card.full_address ?? '')
             if (card.lat != null && card.lon != null) {
                 setCoords({ lat: card.lat, lon: card.lon })
@@ -1734,7 +1735,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                 coords={coords}
                                             />
 
-                                            
+                                        <Separator/>
                                         </>
                                     )}
                             </section>
