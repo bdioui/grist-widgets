@@ -526,6 +526,8 @@ function ProjectSheet({ open, onClose, onSaved, projectCalls, statuses, defaultC
     const [budget,      setBudget]      = useState('')
     const [callId,      setCallId]      = useState<number>(0)
     const [statusId,    setStatusId]    = useState<number>(0)
+    const [startDate, setStartDate]      = useState<string | null>(null)
+    const [endDate, setEndDate]      = useState<string | null>(null)
     const [submitting,  setSubmitting]  = useState(false)
     const [error,       setError]       = useState<string | null>(null)
 
@@ -541,7 +543,7 @@ function ProjectSheet({ open, onClose, onSaved, projectCalls, statuses, defaultC
         if (!title.trim() || !callId) { setError('Titre et dispositif sont obligatoires.'); return }
         setSubmitting(true)
         try {
-            const p = await addProject({ title, description, budget: Number(budget) || 0, project_call_id: callId, status_id: statusId, start_date: '', end_date: '' })
+            const p = await addProject({ title, description, budget: Number(budget) || 0, project_call_id: callId, status_id: statusId, start_date: startDate || "", end_date: endDate || ""})
             onSaved(p)
             onClose()
         } catch (e) {
@@ -567,28 +569,41 @@ function ProjectSheet({ open, onClose, onSaved, projectCalls, statuses, defaultC
                         <Label>Description</Label>
                         <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Description du projet..." />
                     </div>
-                    <div className="flex gap-4">
-                        <div className="flex flex-col gap-1.5 flex-1">
-                            <Label>Dispositif *</Label>
-                            <Select value={callId ? String(callId) : ''} onValueChange={v => setCallId(Number(v))}>
-                                <SelectTrigger><SelectValue placeholder="Choisir un AAP" /></SelectTrigger>
-                                <SelectContent>
-                                    {projectCalls.map(pc => <SelectItem key={pc.id} value={String(pc.id)}>{pc.title}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        {projectStatuses.length > 0 && (
-                            <div className="flex flex-col gap-1.5 flex-1">
-                                <Label>Statut</Label>
-                                <Select value={statusId ? String(statusId) : ''} onValueChange={v => setStatusId(Number(v))}>
-                                    <SelectTrigger><SelectValue placeholder="Statut" /></SelectTrigger>
-                                    <SelectContent>
-                                        {projectStatuses.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.label}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        )}
+
+                    <div className="flex flex-col gap-1.5">
+                        <Label>Dispositif *</Label>
+                        <Select value={callId ? String(callId) : ''} onValueChange={v => setCallId(Number(v))}>
+                            <SelectTrigger><SelectValue placeholder="Choisir un AAP" /></SelectTrigger>
+                            <SelectContent>
+                                {projectCalls.map(pc => <SelectItem key={pc.id} value={String(pc.id)}>{pc.title}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
                     </div>
+                    
+                    
+                    {projectStatuses.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                        <Label>Statut</Label>
+                        <Select value={statusId ? String(statusId) : ''} onValueChange={v => setStatusId(Number(v))}>
+                            <SelectTrigger><SelectValue placeholder="Statut" /></SelectTrigger>
+                            <SelectContent>
+                                {projectStatuses.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.label}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    )}
+
+                     <div className="flex gap-2">
+                        <div className="flex flex-col gap-1 flex-1">
+                            <Label className="text-xs text-muted-foreground">Début</Label>
+                            <Input type="date" onChange={e => setStartDate(e.target.value)} className="h-8 text-xs" />
+                        </div>
+                        <div className="flex flex-col gap-1 flex-1">
+                            <Label className="text-xs text-muted-foreground">Fin</Label>
+                            <Input type="date" onChange={e => setEndDate(e.target.value)} className="h-8 text-xs" />
+                        </div>
+                    </div>
+                    
                     <div className="flex flex-col gap-1.5">
                         <Label>Budget total (€)</Label>
                         <Input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="0" />
@@ -1654,9 +1669,14 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
         if (!draft || !project) return
         setSaving(true)
         try {
-            await updateProject(project.id, { title: draft.title, description: draft.description, budget: draft.budget, project_call_id: draft.project_call_id, status_id: draft.status_id, start_date: draft.start_date, end_date: draft.end_date })
+            const patch = { title: draft.title, description: draft.description, budget: draft.budget, project_call_id: draft.project_call_id, status_id: draft.status_id, start_date: draft.start_date, end_date: draft.end_date }
+            console.log('[saveProject] patch envoyé à Grist :', patch)
+            await updateProject(project.id, patch)
+            console.log('[saveProject] succès')
             onUpdated(draft)
             setEditing(false)
+        } catch (err) {
+            console.error('[saveProject] erreur Grist :', err)
         } finally {
             setSaving(false)
         }
@@ -2228,10 +2248,10 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     <Textarea value={draft.description ?? ''} onChange={e => setDraft(d => d ? { ...d, description: e.target.value } : d)} rows={3} placeholder="Description du projet…" className="text-xs resize-none" />
                                 </div>
                                 <div className="flex gap-2 pt-1">
-                                    <Button size="sm" variant="ghost" className="h-7 text-xs flex-1" onClick={() => { setEditing(false); setDraft({ ...project }) }}>
+                                    <Button size="sm" variant="ghost" className="h-7 text-xs flex-1 rounded-md" onClick={() => { setEditing(false); setDraft({ ...project }) }}>
                                         <X size={12} className="mr-1" />Annuler
                                     </Button>
-                                    <Button size="sm" className="h-7 text-xs flex-1" onClick={saveProject} disabled={saving}>
+                                    <Button size="sm" className="h-7 text-xs flex-1 rounded-md" onClick={saveProject} disabled={saving}>
                                         <Check size={12} className="mr-1" />{saving ? '…' : 'Enregistrer'}
                                     </Button>
                                 </div>

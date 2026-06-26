@@ -905,7 +905,7 @@ export default function Dashboard() {
                                 <button
                                     key={project.id}
                                     onClick={() => { setStaffModal(null); setOpenProject(project) }}
-                                    className="w-full overflow-hidden flex items-start gap-3 rounded-lg border bg-card p-3 text-left hover:shadow-sm transition-shadow"
+                                    className="w-full h-auto flex items-start gap-3 rounded-lg border bg-card p-3 text-left hover:shadow-sm transition-shadow"
                                 >
                                     <span
                                         className="mt-1 w-2 h-2 rounded-full shrink-0"
