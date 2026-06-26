@@ -43,6 +43,7 @@ const EMPTY_FORM: ActionCardCreateForm = {
     members: [],
     project_id: null,
     todo_title: '', todo_items: [],
+    
 }
 
 // --- Recherche membre avec suggestions ---

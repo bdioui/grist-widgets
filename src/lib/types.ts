@@ -206,6 +206,9 @@ export type ActionCard = {
     description: string
     start_date: string
     end_date: string
+    full_address?: string
+    lat?: number | null
+    lon?: number | null
 }
 
 export type Comment = {

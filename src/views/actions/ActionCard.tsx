@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,11 +8,12 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Field, FieldLabel } from '@/components/ui/field'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown, File, Folder, Users, MessageCircle, Eye, EyeClosed, Calendar } from 'lucide-react'
+import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown, File, Folder, Users, MessageCircle, Eye, EyeClosed, Calendar, MapPinned } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import {
@@ -41,6 +42,8 @@ const MEMBER_STATUSES = [
     'Enseignant-chercheur', 'Chercheur', 'Ingénieur', 'Doctorant',
     'Post-doc', 'BIATSS', 'Autre',
 ]
+import { MapContainer, TileLayer, Marker, useMap} from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
 
 // --- Types exportés (utilisés par Categories, DraggableCard, etc.) ---
 
@@ -67,6 +70,9 @@ export type ActionCardData = {
     owner?: Owner
     start_date?: string
     end_date?: string
+    full_address?: string
+    lon?: number | null
+    lat?: number | null
 }
 
 // --- Helpers ---
@@ -501,6 +507,147 @@ function MemberQuickCreateForm({ partners, role, onSaved, onCancel }: {
     )
 }
 
+ type GeoFeature = {
+        id: string
+        properties: { label: string }
+        geometry: { coordinates: [number, number] }
+    }
+
+type MapProps = {
+    lon: number, 
+    lat: number
+}
+
+function MapUpdater({ coords }: { coords: MapProps }) {
+    const map = useMap()
+    useEffect(() => {
+        map.setView([coords.lat, coords.lon], 14)
+    }, [coords.lat, coords.lon])
+    return null
+}
+
+export function MiniMap({ coords }: { coords: MapProps }) {
+    return (
+        <MapContainer
+            center={[coords.lat, coords.lon]}
+            zoom={14}
+            style={{ height: '200px', width: '100%' }}
+            scrollWheelZoom={false}
+            dragging={false}
+            className='rounded-md'
+        >
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <Marker position={[coords.lat, coords.lon]} />
+            <MapUpdater coords={coords} />
+        </MapContainer>
+    )
+}
+
+const AddressAutocomplete = ({ location, setLocation, setCoords, onSelect } : { location: string, setLocation: (value: string) => void, setCoords: (value: MapProps) => void, onSelect: (fullAddress: string, lat: number, lon: number) => void}) => {
+  
+  
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<GeoFeature[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+
+  // Gestion du clic en dehors pour fermer la liste
+  useEffect(() => {
+    function handleClickOutside(event: Event) {
+        if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+            setShowSuggestions(false)
+        }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [wrapperRef]);
+
+  // Appel API avec debounce (attente de 300ms après la frappe)
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (query.length > 2) {
+        fetch(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(query)}&limit=5`)
+          .then(res => res.json())
+          .then(data => {
+            setSuggestions(data.features || []);
+            setShowSuggestions(true);
+          })
+          .catch(err => console.error("Erreur API BAN:", err));
+      } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [query]);
+
+  const handleSelect = (feature : GeoFeature) => {
+    const [lon, lat] = feature.geometry.coordinates;
+    const fullAddress = feature.properties.label;
+    setQuery(fullAddress);
+    setLocation(fullAddress); // Met à jour l'état parent
+    setCoords({lon:lon, lat:lat});
+    setShowSuggestions(false);
+    onSelect(fullAddress, lat, lon)
+  };
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+      <Field>
+        <FieldLabel htmlFor="input-field-address">Adresse</FieldLabel>
+        <Input
+          id="input-field-address"
+          type="text"
+          value={query || location}
+          placeholder="Rechercher une adresse"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setLocation(e.target.value);
+          }}
+          onFocus={() => query.length > 2 && setShowSuggestions(true)}
+        />
+      </Field>
+
+      {/* Liste des suggestions */}
+      {showSuggestions && suggestions.length > 0 && (
+        <ul style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          zIndex: 99999,
+          backgroundColor: 'white',
+          border: '1px solid #ddd',
+          maxHeight: '200px',
+          overflowY: 'auto',
+          listStyle: 'none',
+          padding: 0,
+          margin: 0
+        }}>
+          {suggestions.map((feature) => (
+            <li
+              key={feature.id}
+              onClick={() => handleSelect(feature)}
+              style={{
+                padding: '10px',
+                cursor: 'pointer',
+                borderBottom: '1px solid #eee',
+                fontSize: '0.9rem'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}
+            >
+              {feature.properties.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
 type MemberLink    = MemberActionCard    & { member: Member }
 type ProjectLink   = ProjectActionCard   & { project: Project }
 type AgreementLink = AgreementActionCard & { agreement: FinancialAgreement }
@@ -543,6 +690,9 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     const [newListTitle, setNewListTitle] = useState('')
     const [showNewList, setShowNewList]   = useState(false)
 
+    // Ajout Adress 
+    const [location, setLocation] = useState('')
+    const [coords, setCoords] = useState<MapProps> ({lon:-1.6777857135744565, lat:48.115879903608615})
 
     // Togglers des section
     const [toDoExtended, setToDoExtended] = useState(true)
@@ -551,6 +701,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     const [projectsExtended, setProjectsExtended] = useState(true)
     const [agreementsExtended, setAgreementsExtended] = useState(true)
     const [commentsExtended, setCommentsExtended] = useState(true)
+    const [locationExtended, setLocationExtended] = useState(true)
 
 
     // Commentaires
@@ -621,6 +772,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     const [showMembers, setShowMembers] = useState(false)
     const [showAgreements, setShowAgreements] = useState(false)
     const [showProjects, setShowProjects] = useState(false)
+    const [showLocation, setshowLocation] = useState(false)
     
     useEffect(() => {
         if (!open) return
@@ -652,11 +804,16 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
             setAllProjects(p)
             setAllAgreements(agr)
             setComments(comments)
+            setLocation(card.full_address ?? '')
+            if (card.lat != null && card.lon != null) {
+                setCoords({ lat: card.lat, lon: card.lon })
+            }
             // Visibilité initiale selon le contenu chargé
             setShowTodo(tl.length > 0)
             setShowMembers(ml.length > 0)
             setShowAgreements(al.length > 0)
             setShowProjects(pl.length > 0)
+            setshowLocation(pl.length > 0)
         }).finally(() => setLoading(false))
     }, [open, card.id])
 
@@ -672,6 +829,9 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
             end_date:    draft.end_date ?? '',
             status_id:   draft.status.id,
             category_id: draft.category.id,
+            full_address: draft.full_address ?? '',
+            lon: draft.lon ?? 0,  
+            lat: draft.lat ?? 0,  
         }
         await updateActionCard(card.id, patch)
 
@@ -1046,6 +1206,13 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                             <DropdownMenuItem onClick={() => setShowAgreements(true)}>
                                             <File />
                                             Conventions
+                                            </DropdownMenuItem>
+                                        )}
+
+                                        {!showLocation && (
+                                            <DropdownMenuItem onClick={() => setshowLocation(true)}>
+                                            <MapPinned />
+                                            Localisation
                                             </DropdownMenuItem>
                                         )}
                                         
@@ -1537,6 +1704,41 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                 </>
                         )}
 
+                        {/* Localisation */}
+                        {showLocation && (
+                            <section className="flex flex-col gap-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className='flex row items-center'>
+                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Localisation</p>
+                                            {locationExtended ? (
+                                                <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setLocationExtended(false)}><Eye /></Button>
+                                            ) : (
+                                                <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setLocationExtended(true)}><EyeClosed /></Button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {locationExtended && (
+                                        <>
+                                            <AddressAutocomplete 
+                                                location={location} 
+                                                setLocation={setLocation} 
+                                                setCoords = {setCoords}
+                                                onSelect={async (address, lat, lon) => {
+                                                    await updateActionCard(card.id, { full_address: address, lat, lon })
+                                                    onUpdated({ ...card, full_address: address, lat, lon })
+                                                }}
+                                            />
+
+                                            <MiniMap 
+                                                coords={coords}
+                                            />
+
+                                            
+                                        </>
+                                    )}
+                            </section>
+                        )}
 
                         
 

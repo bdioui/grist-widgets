@@ -308,7 +308,7 @@ function MemberFormSheet(props: MemberFormSheetProps) {
             <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1" onClick={props.onClose}>Annuler</Button>
                 <Button
-                    className="flex-1"
+                    className="flex-1 bg-black"
                     onClick={handleSave}
                     disabled={saving || !form.first_name.trim() || !form.last_name.trim()}
                 >

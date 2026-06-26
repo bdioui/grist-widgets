@@ -1174,6 +1174,10 @@ export type ActionCardCreateForm = {
     // To-do
     todo_title: string
     todo_items: string[]
+    // Location
+    full_address?: string
+    lon?: number | null
+    lat?: number | null
 }
 
 export async function createActionCardFull(form: ActionCardCreateForm): Promise<ActionCardFull> {
@@ -1190,6 +1194,9 @@ export async function createActionCardFull(form: ActionCardCreateForm): Promise<
             description: form.description,
             start_date: form.start_date,
             end_date: form.end_date,
+            full_address: form.full_address,
+            lat: form.lat,
+            lon: form.lon
         }
         mockActionCards.push(card)
 
@@ -1254,7 +1261,7 @@ export async function createActionCardFull(form: ActionCardCreateForm): Promise<
 
 export async function updateActionCard(
     id: number,
-    patch: Partial<Pick<ActionCard, 'category_id' | 'status_id' | 'owner_id' | 'title' | 'description' | 'color' | 'start_date' | 'end_date'>>
+    patch: Partial<Pick<ActionCard, 'category_id' | 'status_id' | 'owner_id' | 'title' | 'description' | 'color' | 'start_date' | 'end_date' | 'full_address' | 'lat' | 'lon'>>
 ): Promise<void> {
     if (USE_MOCK) return // pas de persistance en mode mock
     await updateRecord(T.action_card, id, patch)

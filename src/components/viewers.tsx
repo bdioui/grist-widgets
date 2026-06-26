@@ -118,6 +118,9 @@ function toActionCardData(card: ActionCardFull): ActionCardData {
             : undefined,
         start_date: card.start_date,
         end_date: card.end_date,
+        full_address: card.full_address,
+        lat: card.lat,
+        lon: card.lon,
     }
 }
 

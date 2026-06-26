@@ -122,6 +122,9 @@ export function normalizeActionCards(rows: Record<string, unknown>[]): ActionCar
         description: str(r.description),
         start_date: str(r.start_date),
         end_date: str(r.end_date),
+        full_address: str(r.full_address),
+        lat: nullable(r.lat),
+        lon: nullable(r.lon),
     }))
 }
 
