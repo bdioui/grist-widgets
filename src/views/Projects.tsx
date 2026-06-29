@@ -2298,8 +2298,11 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             onSelect={(kpi) => { setSelectedKpi(kpi) }}
                             getLabel={kpi => kpi.label}
                             placeholder="Rechercher un indicateur..."
+                            groupBy={kpi => ({ primary: kpi.dimension })}
                             value={selectedKpi?.label}
                         />
+
+                        
 
                         {kpis.map(kpi => {
                             const entries = kpiEntries
@@ -2311,10 +2314,10 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             return (
                                 <div key={kpi.id} onClick={() => setSelectedKpi(kpi)} className="flex flex-col gap-1.5 rounded-lg border border-border px-3 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors">
                                     <div className="flex items-center justify-between gap-2">
-                                        <span className="text-xs font-medium">{kpi.label}</span>
+                                        <span className="text-xs font-medium"><Badge className='rounded-md mr-2' variant="secondary">{kpi.dimension}</Badge> {kpi.label}</span>
                                         {latest && (
                                             <span className="text-sm font-semibold tabular-nums shrink-0">
-                                                {total} <span className="text-xs font-normal text-muted-foreground">{kpi.unit}</span>
+                                                {total} <span className="text-xs font-normal text-muted-foreground">{kpi.unit}</span> 
                                             </span>
                                         )}
                                     </div>
