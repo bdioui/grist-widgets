@@ -13,6 +13,8 @@ import MemberGraph from '../components/memberGraphView'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import CalendarHeatmap, { type ReactCalendarHeatmapValue } from 'react-calendar-heatmap'
+import 'react-calendar-heatmap/dist/styles.css'
 
 // --- Helpers ---
 
@@ -132,6 +134,8 @@ function ActionAlert({ card, daysLeft, onOpen }: {
 // --- Vue principale ---
 
 export default function Dashboard() {
+
+    const currentYear = new Date().getFullYear()
     const [loading, setLoading] = useState(true)
 
     const [program,        setProgram]        = useState<Program | null>(null)
@@ -150,6 +154,7 @@ export default function Dashboard() {
     const [budgetDetails,     setBudgetDetails]     = useState<BudgetDetail[]>([])
     const [editingFeeRate,    setEditingFeeRate]    = useState(false)
     const [feeRateDraft,      setFeeRateDraft]      = useState('')
+    const [heatYear, setHeatYear] = useState(currentYear)
 
     async function saveFeeRate() {
         if (!program) return
@@ -210,6 +215,57 @@ export default function Dashboard() {
     const totalBudget          = projects.reduce((s, p) => s + p.budget, 0)
     const totalExpanses        = expanses.reduce((s, e) => s + e.amount, 0)
     const totalReversements    = expanses.filter(e => e.agreement_id != null).reduce((s, e) => s + e.amount, 0)
+
+    // - Heat Map - [...{date : 'YYYY-DD-MM', count : number}]
+
+    function getDatesBetween(startDate: Date, endDate: Date) {
+        // Validate inputs
+        if (!(startDate instanceof Date) || !(endDate instanceof Date)) {
+            throw new Error("Invalid date objects");
+        }
+        
+        // Normalize to midnight to avoid time zone issues
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(0, 0, 0, 0);
+
+        const dates = [];
+        const currentDate = new Date(start); // Create a copy
+
+        while (currentDate <= end) {
+            dates.push(new Date(currentDate)); // Push a copy
+            currentDate.setDate(currentDate.getDate() + 1); // Increment by 1 day
+        }
+        
+        return dates;
+        }
+
+    const validProjects = projects.filter(p => p.start_date && p.end_date)
+
+    const heatmapValues = (() => {
+        if (validProjects.length === 0) return []
+
+        const yearStart = new Date(`${heatYear}-01-01`)
+        const yearEnd   = new Date(`${heatYear}-12-31`)
+        const dates = getDatesBetween(yearStart, yearEnd)
+        const dateMap = new Map<string, { date: Date, count: number }>()
+
+        dates.forEach(date => {
+            const key = date.toISOString().split('T')[0]
+            if (!dateMap.has(key)) dateMap.set(key, { date, count: 0 })
+            validProjects.forEach(p => {
+                if (date >= new Date(p.start_date) && date <= new Date(p.end_date)) {
+                    dateMap.get(key)!.count++
+                }
+            })
+        })
+
+        return Array.from(dateMap.values()).map(({ date, count }) => ({
+            date: date.toISOString().split('T')[0],
+            count,
+        }))
+    })()
 
 
 
@@ -445,65 +501,66 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
 
                 {/* ── Courbe cumulative des dépenses ── */}
-            {expanses.length > 0 && (() => {
-                // Grouper par année
-                const byYear = new Map<string, number>()
-                expanses.forEach(e => {
-                    const year = e.purchase_date?.slice(0, 4)
-                    if (!year || year < '2000') return
-                    byYear.set(year, (byYear.get(year) ?? 0) + e.amount)
-                })
-                const sortedYears = [...byYear.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-                if (sortedYears.length === 0) return null
-
-                // Points cumulatifs — un par année, plus un point à 0 en début
-                let cum = 0
-                const points = [
-                    { year: '', cum: 0, amount: 0 },
-                    ...sortedYears.map(([year, amount]) => {
-                        cum += amount
-                        return { year, amount, cum }
+                {expanses.length > 0 && (() => {
+                    // Grouper par année
+                    const byYear = new Map<string, number>()
+                    expanses.forEach(e => {
+                        const year = e.purchase_date?.slice(0, 4)
+                        if (!year || year < '2000') return
+                        byYear.set(year, (byYear.get(year) ?? 0) + e.amount)
                     })
-                ]
-                const maxCum = points[points.length - 1].cum
+                    const sortedYears = [...byYear.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+                    if (sortedYears.length === 0) return null
 
-                // Paramètres SVG
-                const W = 560, H = 120, ML = 48, MB = 22, MT = 8, MR = 12
-                const iW = W - ML - MR, iH = H - MT - MB
-                const xOf = (i: number) => ML + (i / Math.max(points.length - 1, 1)) * iW
-                const yOf = (v: number) => MT + iH - (v / maxCum) * iH
+                    // Points cumulatifs — un par année, plus un point à 0 en début
+                    let cum = 0
+                    const points = [
+                        { year: '', cum: 0, amount: 0 },
+                        ...sortedYears.map(([year, amount]) => {
+                            cum += amount
+                            return { year, amount, cum }
+                        })
+                    ]
+                    const maxCum = points[points.length - 1].cum
 
-                const linePts = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(p.cum).toFixed(1)}`).join(' ')
-                const areaPath = `${linePts} L${xOf(points.length - 1).toFixed(1)},${(MT + iH).toFixed(1)} L${xOf(0).toFixed(1)},${(MT + iH).toFixed(1)} Z`
-                const yTicks = [0, 0.5, 1].map(f => ({ value: maxCum * f, y: yOf(maxCum * f) }))
+                    // Paramètres SVG
+                    const W = 560, H = 120, ML = 48, MB = 22, MT = 8, MR = 12
+                    const iW = W - ML - MR, iH = H - MT - MB
+                    const xOf = (i: number) => ML + (i / Math.max(points.length - 1, 1)) * iW
+                    const yOf = (v: number) => MT + iH - (v / maxCum) * iH
 
-                return (
-                    <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium">Progression cumulée des dépenses</p>
-                            <span className="text-xs text-muted-foreground tabular-nums">Total : {fmt(maxCum)}</span>
+                    const linePts = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(p.cum).toFixed(1)}`).join(' ')
+                    const areaPath = `${linePts} L${xOf(points.length - 1).toFixed(1)},${(MT + iH).toFixed(1)} L${xOf(0).toFixed(1)},${(MT + iH).toFixed(1)} Z`
+                    const yTicks = [0, 0.5, 1].map(f => ({ value: maxCum * f, y: yOf(maxCum * f) }))
+
+                    return (
+                        <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium">Progression cumulée des dépenses</p>
+                                <span className="text-xs text-muted-foreground tabular-nums">Total : {fmt(maxCum)}</span>
+                            </div>
+                            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 140 }}>
+                                {yTicks.map(({ value, y }) => (
+                                    <g key={value}>
+                                        <line x1={ML} y1={y} x2={W - MR} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+                                        <text x={ML - 4} y={y + 3.5} textAnchor="end" fontSize="9" fill="#9ca3af">{fmt(value)}</text>
+                                    </g>
+                                ))}
+                                <path d={areaPath} fill="#3b82f6" fillOpacity="0.1" />
+                                <path d={linePts} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                                {points.map((p, i) => p.year && (
+                                    <g key={p.year}>
+                                        <circle cx={xOf(i)} cy={yOf(p.cum)} r="4" fill="white" stroke="#3b82f6" strokeWidth="2" />
+                                        <text x={xOf(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{p.year}</text>
+                                        <text x={xOf(i)} y={yOf(p.cum) - 8} textAnchor="middle" fontSize="9" fill="#3b82f6" fontWeight="600">{fmt(p.cum)}</text>
+                                    </g>
+                                ))}
+                                <line x1={ML} y1={MT + iH} x2={W - MR} y2={MT + iH} stroke="#e5e7eb" strokeWidth="1" />
+                            </svg>
                         </div>
-                        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 140 }}>
-                            {yTicks.map(({ value, y }) => (
-                                <g key={value}>
-                                    <line x1={ML} y1={y} x2={W - MR} y2={y} stroke="#e5e7eb" strokeWidth="1" />
-                                    <text x={ML - 4} y={y + 3.5} textAnchor="end" fontSize="9" fill="#9ca3af">{fmt(value)}</text>
-                                </g>
-                            ))}
-                            <path d={areaPath} fill="#3b82f6" fillOpacity="0.1" />
-                            <path d={linePts} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-                            {points.map((p, i) => p.year && (
-                                <g key={p.year}>
-                                    <circle cx={xOf(i)} cy={yOf(p.cum)} r="4" fill="white" stroke="#3b82f6" strokeWidth="2" />
-                                    <text x={xOf(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{p.year}</text>
-                                    <text x={xOf(i)} y={yOf(p.cum) - 8} textAnchor="middle" fontSize="9" fill="#3b82f6" fontWeight="600">{fmt(p.cum)}</text>
-                                </g>
-                            ))}
-                            <line x1={ML} y1={MT + iH} x2={W - MR} y2={MT + iH} stroke="#e5e7eb" strokeWidth="1" />
-                        </svg>
-                    </div>
-                )
-            })()}
+                    )
+                })()}
+
 
                 {/* Consommation budgétaire par catégorie */}
                 <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
@@ -604,6 +661,41 @@ export default function Dashboard() {
                             )
                         })()
                     }
+                </div>
+
+                <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
+                    <style>{`
+                        .react-calendar-heatmap .color-empty        { fill: oklch(94.6% 0.033 307.174); }
+                        .react-calendar-heatmap .color-scale-1      { fill: oklch(90.2% 0.063 306.703); }
+                        .react-calendar-heatmap .color-scale-2      { fill: oklch(82.7% 0.119 306.383); }
+                        .react-calendar-heatmap .color-scale-3      { fill: oklch(71.4% 0.203 305.504); }
+                        .react-calendar-heatmap .color-scale-4      { fill: oklch(55.8% 0.288 302.321); }
+                    `}</style>
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">Heat Map projet</p>
+                        <div className="flex items-center gap-1">
+                            <button onClick={() => setHeatYear(y => y - 1)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">‹</button>
+                            <span className="text-xs font-medium tabular-nums w-10 text-center">{heatYear}</span>
+                            <button onClick={() => setHeatYear(y => y + 1)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">›</button>
+                        </div>
+                    </div>
+                    <CalendarHeatmap
+                        startDate={new Date(`${heatYear}-01-01`)}
+                        endDate={new Date(`${heatYear}-12-31`)}
+                        values={heatmapValues}
+                        classForValue={(() => {
+                            const max = Math.max(1, ...heatmapValues.map(v => v.count))
+                            return (value: ReactCalendarHeatmapValue<string> | undefined) => {
+                                const count = (value as any)?.count as number | undefined
+                                if (!count) return 'color-empty'
+                                const ratio = count / max
+                                if (ratio < 0.25) return 'color-scale-1'
+                                if (ratio < 0.5)  return 'color-scale-2'
+                                if (ratio < 0.75) return 'color-scale-3'
+                                return 'color-scale-4'
+                            }
+                        })()}
+                    />
                 </div>
 
                 {/* Top partenaires — camembert */}

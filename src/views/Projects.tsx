@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar'
-import { format, parse, startOfWeek, getDay } from 'date-fns'
-import { fr } from 'date-fns/locale'
-import 'react-big-calendar/lib/css/react-big-calendar.css'
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from '@dnd-kit/core'
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
+import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { Gantt, type Task as GanttTask, ViewMode as GanttViewMode } from 'gantt-task-react'
+import 'gantt-task-react/dist/index.css'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,7 +20,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, CalendarDays, LayoutGrid, Table2, Paperclip, Milestone, Receipt, EllipsisIcon } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, LayoutGrid, Table2, Paperclip, Receipt, EllipsisIcon, Building2, BarChart2, BookOpen, GraduationCap, ScrollText, ChartGantt } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { ActionCardDetailSheet } from '@/views/actions/ActionCard'
@@ -45,21 +47,15 @@ import {
     getProjectAttachments, addProjectAttachment, deleteProjectAttachment,
     getExpanses, getSupliers, updateExpanse,
     getBudgetCategories, getBudgetDetails,
+    getPublicationsByProject, addPublication, updatePublication, deletePublication,
+    getPublicationMembersByProject, addPublicationMember, deletePublicationMember,
+    getLabs,
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
-
-// --- Calendrier ---
-
-const calendarLocalizer = dateFnsLocalizer({
-    format,
-    parse,
-    startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 1 }),
-    getDay,
-    locales: { fr },
-})
+import { ScrollableTabBar } from '@/components/ScrollableTabBar'
 
 // --- Couleurs de statut ---
 
@@ -88,7 +84,7 @@ const ROLES = [
     'Equipe - Observateur',
 ]
 
-const ROLE_ORDER = ['Porteur', 'Intervenant', , 'Participant', 'Prospect', 'Equipe - Lead', 'Equipe - Contributeur', 'Equipe - Consultant', 'Equipe - Observateur']
+const ROLE_ORDER = ['Porteur', 'Prospect', 'Equipe - Lead', 'Equipe - Contributeur', 'Equipe - Consultant', 'Equipe - Observateur', 'Intervenant', , 'Participant']
 
 const STATUS_ORDER = ["En cours", "Suspendu", "En attente", "Terminé",]
 
@@ -1503,10 +1499,60 @@ export type ProjectDetailSheetProps = {
     allFormations: Formation[]
 }
 
+type detailViewMode = 'overview' | 'participants' | 'partners' | 'kpis' | 'publications' | 'formations' | 'tasks' | 'conventions' | 'budget' | 'files'
+
+function SortableTab({ mode, label, icon, isActive, isEmpty, onActivate, onRemove }: {
+    mode: detailViewMode
+    label: string
+    icon: React.ReactNode
+    isActive: boolean
+    isEmpty: boolean
+    onActivate: () => void
+    onRemove: () => void
+}) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mode })
+    const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+    return (
+        <button
+            ref={setNodeRef}
+            style={style}
+            {...attributes}
+            {...listeners}
+            onClick={onActivate}
+            className={`relative flex items-center gap-1.5 px-3 py-2 text-sm z-10 transition-colors duration-300 text-xs whitespace-nowrap cursor-pointer active:cursor-grabbing ${isActive ? 'text-bold' : 'text-black'}`}
+        >
+            <span className="relative z-20 flex items-center gap-1.5">
+                {icon}{label}
+                {isEmpty && (
+                    <span
+                        role="button"
+                        onClick={e => { e.stopPropagation(); onRemove() }}
+                        className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors leading-none"
+                    >
+                        <X size={10} />
+                    </span>
+                )}
+            </span>
+            {isActive && (
+                <motion.div layoutId="activeDetailProjectTab" className="absolute inset-0 border-b-2 border-black z-10" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />
+            )}
+        </button>
+    )
+}
+
 export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses, members, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
+    const [publications, setPublications] = useState<Publication[]>([])
+    const [publicationMembers, setPublicationMembers] = useState<PublicationMember[]>([])
+    const [allLabs, setAllLabs] = useState<Lab[]>([])
+    const [editingPublication, setEditingPublication] = useState<Publication | null>(null)
+    const [showPublicationForm, setShowPublicationForm] = useState(false)
+    const [pubDraft, setPubDraft] = useState<Omit<Publication, 'id' | 'project_id'>>({ title: '', lab_id: null, subject: '', journal: '', year: '', doi: '' })
+    const [pubAuthorIds, setPubAuthorIds] = useState<number[]>([])
+    const [pubSaving, setPubSaving] = useState(false)
+    const [pubError, setPubError] = useState<string | null>(null)
     const [loading,      setLoading]      = useState(false)
     const [editing,      setEditing]      = useState(false)
     const [draft,        setDraft]        = useState<Project | null>(null)
@@ -1554,8 +1600,45 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [showLinkAgreement, setShowLinkAgreement] = useState(false)
     const [allAgreementsForLink, setAllAgreementsForLink] = useState<AgreementFull[]>([])
     const [loadingLinkAgreements, setLoadingLinkAgreements] = useState(false)
-    type detailViewMode = 'overview' | 'tasks' | 'files' | 'timeline' | 'budget'
+    type TabDef = { mode: detailViewMode; label: string; icon: React.ReactNode }
+    const ALL_OPTIONAL_TABS: TabDef[] = [
+        { mode: 'participants', label: 'Participants',  icon: <Users size={13} /> },
+        { mode: 'partners',     label: 'Partenaires',  icon: <Building2 size={13} /> },
+        { mode: 'kpis',         label: 'Indicateurs',  icon: <BarChart2 size={13} /> },
+        { mode: 'tasks',        label: 'Actions',      icon: <ListChecks size={13} /> },
+        { mode: 'budget',       label: 'Dépenses',       icon: <Receipt size={13} /> },
+        { mode: 'conventions',  label: 'Conventions',  icon: <ScrollText size={13} /> },
+        { mode: 'publications', label: 'Publications', icon: <BookOpen size={13} /> },
+        { mode: 'formations',   label: 'Formations',   icon: <GraduationCap size={13} /> },
+        { mode: 'files',        label: 'Documents',    icon: <Paperclip size={13} /> },
+    ]
+
     const [detailViewMode, setDetailViewMode] = useState<detailViewMode>('overview')
+    const [activeOptionalTabs, setActiveOptionalTabs] = useState<detailViewMode[]>([])
+
+    function addOptionalTab(mode: detailViewMode) {
+        setActiveOptionalTabs(prev => prev.includes(mode) ? prev : [...prev, mode])
+    }
+    function removeOptionalTab(mode: detailViewMode) {
+        setActiveOptionalTabs(prev => prev.filter(m => m !== mode))
+        if (detailViewMode === mode) setDetailViewMode('overview')
+    }
+
+    const tabSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+    function handleTabDragEnd(event: DragEndEvent) {
+        const { active, over } = event
+        if (!over || active.id === over.id) return
+        setActiveOptionalTabs(prev => {
+            const oldIndex = prev.indexOf(active.id as detailViewMode)
+            const newIndex = prev.indexOf(over.id as detailViewMode)
+            return arrayMove(prev, oldIndex, newIndex)
+        })
+    }
+
+    useEffect(() => {
+        if (!project) return
+        localStorage.setItem(`tabs_project_${project.id}`, JSON.stringify(activeOptionalTabs))
+    }, [activeOptionalTabs, project?.id])
 
     useEffect(() => {
         if (!open || !project) return
@@ -1591,8 +1674,11 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
             getSupliers(),
             getBudgetCategories(),
             getBudgetDetails(),
+            getPublicationsByProject(project.id),
+            getPublicationMembersByProject(project.id),
+            getLabs(),
         ])
-            .then(([agreements, members, kpis, kpiEntries, pp, ms, acs, formations, formationLinks, attachments, expanses, suppliers, cats, details]) => {
+            .then(([agreements, members, kpis, kpiEntries, pp, ms, acs, formations, formationLinks, attachments, expanses, suppliers, cats, details, pubs, pubMembers, labs]) => {
                 setAgreements(agreements as AgreementFull[])
                 setProjectMembers(members)
                 setKpis(kpis)
@@ -1613,6 +1699,25 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                 setExpanseSuppliers(suppliers as Supplier[])
                 setBudgetCategories(cats as BudgetCategory[])
                 setBudgetDetails(details as BudgetDetail[])
+                setPublications(pubs as Publication[])
+                setPublicationMembers(pubMembers as PublicationMember[])
+                setAllLabs(labs as Lab[])
+
+                // Auto-affichage des onglets si données existantes
+                const stored = JSON.parse(localStorage.getItem(`tabs_project_${project.id}`) ?? '[]') as detailViewMode[]
+                const projectMembersData = members as ProjectMember[]
+                const projectPartnersData = (pp as ProjectPartner[]).filter(p => p.project_id === project.id)
+                const autoShow: detailViewMode[] = []
+                if (projectMembersData.length > 0) autoShow.push('participants')
+                if (projectPartnersData.length > 0) autoShow.push('partners')
+                if ((kpiEntries as KpiEntry[]).length > 0) autoShow.push('kpis')
+                if ((acs as ActionCardFull[]).length > 0) autoShow.push('tasks')
+                if ((expanses as Expanse[]).filter(e => e.project_id === project.id).length > 0) autoShow.push('budget')
+                if ((agreements as AgreementFull[]).length > 0) autoShow.push('conventions')
+                if ((pubs as Publication[]).length > 0) autoShow.push('publications')
+                if ((formations as Formation[]).length > 0) autoShow.push('formations')
+                if ((attachments as ProjectAttachment[]).length > 0) autoShow.push('files')
+                setActiveOptionalTabs([...new Set([...stored, ...autoShow])])
             })
             .finally(() => setLoading(false))
     }, [open, project?.id ?? 0])
@@ -1837,34 +1942,71 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                 </SheetHeader>
 
                 {(
-                    <div className="px-6 pt-3 shrink-0 flex gap-3 border-b items-center" >
-                        <div className="py-0 px-2 flex relative">
-                            {([
-                                { mode: 'overview',  label: 'Général',         icon: <LayoutGrid size={13} /> },
-                                { mode: 'tasks',     label: 'Actions',          icon: <ListChecks size={13} /> },
-                                { mode: 'timeline',  label: 'Jalons',           icon: <Milestone size={13} /> },
-                                { mode: 'budget',    label: 'Budget',           icon: <Receipt size={13} /> },
-                                { mode: 'files',     label: 'Documents',   icon: <Paperclip size={13} /> },
-                                ] as { mode: detailViewMode; label: string; icon: React.ReactNode }[]).map(({ mode, label, icon }) => (
-                                    <button
-                                        key={mode}
-                                        onClick={() => setDetailViewMode(mode)}
-                                        className={`relative flex items-center gap-1.5 px-4 py-2 rounded-full text-sm z-10 transition-colors duration-300 text-xs ${detailViewMode === mode ? 'text-bold' : 'text-black'}`}
-                                    >
-                                        <span className="relative z-20 flex items-center gap-1.5">
-                                            {icon}{label}
-                                        </span>
-                                        {detailViewMode === mode && (
-                                            <motion.div
-                                                layoutId="activeDetailProjectTab"
-                                                className="absolute inset-0 border-b-2 border-black z-10"
-                                                transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                                            />
-                                        )}
-                                    </button>
-                                ))}
+                    <div className="px-4 pt-3 shrink-0 border-b">
+                        <ScrollableTabBar>
+                            {/* Général — toujours visible */}
+                            {([ { mode: 'overview' as detailViewMode, label: 'Général', icon: <LayoutGrid size={13} /> }]).map(({ mode, label, icon }) => (
+                                <button
+                                    key={mode}
+                                    onClick={() => setDetailViewMode(mode)}
+                                    className={`relative flex items-center gap-1.5 px-3 py-2 text-sm z-10 transition-colors duration-300 text-xs whitespace-nowrap ${detailViewMode === mode ? 'text-bold' : 'text-black'}`}
+                                >
+                                    <span className="relative z-20 flex items-center gap-1.5">{icon}{label}</span>
+                                    {detailViewMode === mode && (
+                                        <motion.div layoutId="activeDetailProjectTab" className="absolute inset-0 border-b-2 border-black z-10" transition={{ type: "spring", stiffness: 380, damping: 30 }} />
+                                    )}
+                                </button>
+                            ))}
 
-                        </div>
+                            {/* Onglets optionnels actifs — drag & drop */}
+                            <DndContext sensors={tabSensors} collisionDetection={closestCenter} onDragEnd={handleTabDragEnd} modifiers={[restrictToHorizontalAxis]}>
+                                <SortableContext items={activeOptionalTabs} strategy={horizontalListSortingStrategy}>
+                                    {ALL_OPTIONAL_TABS.filter(t => activeOptionalTabs.includes(t.mode))
+                                        .sort((a, b) => activeOptionalTabs.indexOf(a.mode) - activeOptionalTabs.indexOf(b.mode))
+                                        .map(({ mode, label, icon }) => {
+                                            const isEmpty =
+                                                (mode === 'participants' && projectMembers.length === 0)  ||
+                                                (mode === 'partners'     && projectPartners.length === 0) ||
+                                                (mode === 'kpis'         && kpiEntries.length === 0)      ||
+                                                (mode === 'tasks'        && actionCards.length === 0)     ||
+                                                (mode === 'budget'       && projectExpanses.length === 0) ||
+                                                (mode === 'conventions'  && agreements.length === 0)      ||
+                                                (mode === 'publications' && publications.length === 0)     ||
+                                                (mode === 'formations'   && formations.length === 0)       ||
+                                                (mode === 'files'        && attachments.length === 0)
+                                            return (
+                                                <SortableTab
+                                                    key={mode}
+                                                    mode={mode}
+                                                    label={label}
+                                                    icon={icon}
+                                                    isActive={detailViewMode === mode}
+                                                    isEmpty={isEmpty}
+                                                    onActivate={() => setDetailViewMode(mode)}
+                                                    onRemove={() => removeOptionalTab(mode)}
+                                                />
+                                            )
+                                        })}
+                                </SortableContext>
+                            </DndContext>
+
+                            {ALL_OPTIONAL_TABS.filter(t => !activeOptionalTabs.includes(t.mode)).length > 0 && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors whitespace-nowrap shrink-0 ml-1">
+                                            <Plus size={12} />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start" className="text-xs">
+                                        {ALL_OPTIONAL_TABS.filter(t => !activeOptionalTabs.includes(t.mode)).map(({ mode, label, icon }) => (
+                                            <DropdownMenuItem key={mode} onClick={() => { addOptionalTab(mode); setDetailViewMode(mode) }} className="flex items-center gap-2 text-xs">
+                                                {icon}{label}
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
+                        </ScrollableTabBar>
                     </div>
                 )}
 
@@ -1872,10 +2014,168 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
 
                     {/* ── GÉNÉRAL ─────────────────────────────── */}
                     {detailViewMode === "overview" && (
-                        <div className={expanded ? "grid grid-cols-3 gap-5 items-start" : "flex flex-col gap-6"}>
+                        <div className="flex flex-col gap-6">
+
+                    {/* Informations projet */}
+                    <section className="flex flex-col gap-3 bg-white border border-border rounded-xl p-4">
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Informations</p>
+                            {!editing && (
+                                <Button size="icon-sm" variant="ghost" className="h-6 w-6 rounded-md" onClick={() => { setEditing(true); setDetailViewMode('overview') }}>
+                                    <Pencil size={11} />
+                                </Button>
+                            )}
+                        </div>
+                        {editing && draft ? (
+                            <div className="flex flex-col gap-2.5">
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Titre</Label>
+                                    <Input value={draft.title} onChange={e => setDraft(d => d ? { ...d, title: e.target.value } : d)} className="h-8 text-xs" />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Statut</Label>
+                                    <Select value={String(draft.status_id)} onValueChange={v => setDraft(d => d ? { ...d, status_id: Number(v) } : d)}>
+                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{statuses.filter(s => s.context === 'project').map(s => <SelectItem key={s.id} value={String(s.id)}>{s.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Dispositif</Label>
+                                    <Select value={String(draft.project_call_id)} onValueChange={v => setDraft(d => d ? { ...d, project_call_id: Number(v) } : d)}>
+                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{projectCalls.map(pc => <SelectItem key={pc.id} value={String(pc.id)}>{pc.title}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="flex flex-col gap-1 flex-1">
+                                        <Label className="text-xs text-muted-foreground">Début</Label>
+                                        <Input type="date" value={draft.start_date ?? ''} onChange={e => setDraft(d => d ? { ...d, start_date: e.target.value } : d)} className="h-8 text-xs" />
+                                    </div>
+                                    <div className="flex flex-col gap-1 flex-1">
+                                        <Label className="text-xs text-muted-foreground">Fin</Label>
+                                        <Input type="date" value={draft.end_date ?? ''} onChange={e => setDraft(d => d ? { ...d, end_date: e.target.value } : d)} className="h-8 text-xs" />
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Budget (€)</Label>
+                                    <Input type="number" value={draft.budget} onChange={e => setDraft(d => d ? { ...d, budget: Number(e.target.value) } : d)} className="h-8 text-xs" />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-xs text-muted-foreground">Description</Label>
+                                    <Textarea value={draft.description ?? ''} onChange={e => setDraft(d => d ? { ...d, description: e.target.value } : d)} rows={3} placeholder="Description du projet…" className="text-xs resize-none" />
+                                </div>
+                                <div className="flex gap-2 pt-1">
+                                    <Button size="sm" variant="ghost" className="h-7 text-xs flex-1 rounded-md" onClick={() => { setEditing(false); setDraft({ ...project }) }}>
+                                        <X size={12} className="mr-1" />Annuler
+                                    </Button>
+                                    <Button size="sm" className="h-7 text-xs flex-1 rounded-md" onClick={saveProject} disabled={saving}>
+                                        <Check size={12} className="mr-1" />{saving ? '…' : 'Enregistrer'}
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-2 text-xs">
+                                <div className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">Statut</span><span>{pStatus?.label}</span></div>
+                                <div className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">Dispositif</span><span className="text-right truncate">{project.projectCall.title}</span></div>
+                                <div className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">Axe</span><span className="text-right">{project.projectCall.axis.name}</span></div>
+                                {(project.start_date || project.end_date) && (
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground shrink-0">Période</span>
+                                        <span className="text-right">{project.start_date ? formatDate(project.start_date) : '—'} → {project.end_date ? formatDate(project.end_date) : '—'}</span>
+                                    </div>
+                                )}
+                                {project.budget > 0 && (
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground shrink-0">Budget</span>
+                                        <span className="font-medium">{fmt(project.budget)}</span>
+                                    </div>
+                                )}
+                                {totalGrant > 0 && (
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground shrink-0">Subventions</span>
+                                        <span className="font-medium">{fmt(totalGrant)}</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Jalons */}
+                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Jalons</p>
+                            </div>
+                            {!showAddMilestone && !editingMilestone && (
+                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddMilestone(true)}>
+                                    <Plus size={11} />Ajouter
+                                </Button>
+                            )}
+                        </div>
+
+                        <div className="relative">
+                                {milestones.length === 0 && !showAddMilestone && (
+                                    <p className="text-xs text-muted-foreground italic">Aucun jalon</p>
+                                )}
+
+                                {milestones.length > 0 && (
+                                    <div className="absolute left-[5px] top-2 bottom-6 w-px bg-border" />
+                                )}
+
+                                {milestones
+                                    .slice()
+                                    .sort((a, b) => a.due_date.localeCompare(b.due_date))
+                                    .map(m =>
+                                        editingMilestone?.id === m.id ? (
+                                            <div key={m.id} className="pl-6 mb-3">
+                                                <MilestoneForm
+                                                    statuses={statuses}
+                                                    initial={m}
+                                                    onSaved={async (fields) => {
+                                                        await updateProjectMilestone(m.id, fields)
+                                                        setMilestones(prev => prev.map(x => x.id === m.id ? { ...m, ...fields } : x))
+                                                        setEditingMilestone(null)
+                                                    }}
+                                                    onCancel={() => setEditingMilestone(null)}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <MilestoneRow
+                                                key={m.id}
+                                                milestone={m}
+                                                statuses={statuses}
+                                                onEdit={() => setEditingMilestone(m)}
+                                                onDelete={async () => {
+                                                    await deleteProjectMilestone(m.id)
+                                                    setMilestones(prev => prev.filter(x => x.id !== m.id))
+                                                }}
+                                            />
+                                        )
+                                    )}
+
+                                {showAddMilestone && (
+                                    <MilestoneForm
+                                        statuses={statuses}
+                                        onSaved={async (fields) => {
+                                            const ms = await addProjectMilestone(project.id, fields)
+                                            setMilestones(prev => [...prev, ms])
+                                            setShowAddMilestone(false)
+                                        }}
+                                        onCancel={() => setShowAddMilestone(false)}
+                                    />
+                                )}
+                        </div>
+                    </section>
+
+                        </div>
+                    )}{/* fin overview */}
+
+                    {/* ── PARTICIPANTS ─────────────────────────── */}
+                    {detailViewMode === "participants" && (
+                        <div className="flex flex-col gap-6">
 
                     {/* Participants */}
-                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-2 row-start-1' : 'order-2'}`}>
+                    <section className="flex flex-col gap-3 bg-white border border-border rounded-xl p-4">
                         <div className="flex items-center justify-between group/header">
                             <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants {projectMembers.length > 0 && ( <span>({projectMembers.length})</span>)}</p>
@@ -2034,8 +2334,15 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                         )}
                     </section>
 
-                    {/* Partenaires */}
-                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-2 row-start-2' : 'order-3'}`}>
+                        </div>
+                    )}{/* fin participants */}
+
+                    {/* ── PARTENAIRES ──────────────────────────── */}
+                    {detailViewMode === "partners" && (
+                        <div className="flex flex-col gap-6">
+
+                    {/* Partenaires (standalone) */}
+                    <section className="flex flex-col gap-3 bg-white border border-border rounded-xl p-4">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Partenaires</p>
@@ -2051,240 +2358,107 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                 </div>
                             )}
                         </div>
-
                         <div className="flex flex-col gap-2">
-                                {projectPartners.length === 0 && !showAddPartner && !showCreatePartner && (
-                                    <p className="text-xs text-muted-foreground italic">Aucun partenaire</p>
-                                )}
-                                {showAddPartner && (
+                            {projectPartners.length === 0 && !showAddPartner && !showCreatePartner && (
+                                <p className="text-xs text-muted-foreground italic">Aucun partenaire</p>
+                            )}
+                            {showAddPartner && (
+                                <ProjectPartnerForm
+                                    partners={partners.filter(p => !projectPartners.some(pp => pp.partner_id === p.id))}
+                                    onSaved={async (partnerId, role, amount, label) => {
+                                        const pp = await addProjectPartner(project.id, partnerId, role, amount, label)
+                                        const partner = partners.find(p => p.id === partnerId)!
+                                        setProjectPartners(prev => [...prev, { ...pp, partner }])
+                                        setShowAddPartner(false)
+                                    }}
+                                    onCancel={() => setShowAddPartner(false)}
+                                />
+                            )}
+                            {showCreatePartner && (
+                                <PartnerQuickCreateForm
+                                    projectRole={PARTNER_ROLES[0]}
+                                    onSaved={async partner => {
+                                        onPartnerCreated?.(partner)
+                                        const pp = await addProjectPartner(project.id, partner.id, PARTNER_ROLES[0], null, null)
+                                        setProjectPartners(prev => [...prev, { ...pp, partner }])
+                                        setShowCreatePartner(false)
+                                    }}
+                                    onCancel={() => setShowCreatePartner(false)}
+                                />
+                            )}
+                            {projectPartners.map(pp => (
+                                editingPartnerId === pp.id ? (
                                     <ProjectPartnerForm
-                                        partners={partners.filter(p => !projectPartners.some(pp => pp.partner_id === p.id))}
+                                        key={pp.id}
+                                        partners={partners}
+                                        initial={pp}
                                         onSaved={async (partnerId, role, amount, label) => {
-                                            const pp = await addProjectPartner(project.id, partnerId, role, amount, label)
+                                            await updateProjectPartner(pp.id, { partner_id: partnerId, role, amount: amount ?? null, label: label ?? null })
                                             const partner = partners.find(p => p.id === partnerId)!
-                                            setProjectPartners(prev => [...prev, { ...pp, partner }])
-                                            setShowAddPartner(false)
+                                            setProjectPartners(prev => prev.map(x => x.id === pp.id ? { ...x, partner_id: partnerId, role, amount, label, partner } : x))
+                                            setEditingPartnerId(null)
                                         }}
-                                        onCancel={() => setShowAddPartner(false)}
+                                        onCancel={() => setEditingPartnerId(null)}
                                     />
-                                )}
-                                {showCreatePartner && (
-                                    <PartnerQuickCreateForm
-                                        projectRole={PARTNER_ROLES[0]}
-                                        onSaved={async partner => {
-                                            onPartnerCreated?.(partner)
-                                            const pp = await addProjectPartner(project.id, partner.id, PARTNER_ROLES[0], null, null)
-                                            setProjectPartners(prev => [...prev, { ...pp, partner }])
-                                            setShowCreatePartner(false)
-                                        }}
-                                        onCancel={() => setShowCreatePartner(false)}
-                                    />
-                                )}
-                                {projectPartners.map(pp => (
-                                    editingPartnerId === pp.id ? (
-                                        <ProjectPartnerForm
-                                            key={pp.id}
-                                            partners={partners}
-                                            initial={pp}
-                                            onSaved={async (partnerId, role, amount, label) => {
-                                                await updateProjectPartner(pp.id, { partner_id: partnerId, role, amount: amount ?? null, label: label ?? null })
-                                                const partner = partners.find(p => p.id === partnerId)!
-                                                setProjectPartners(prev => prev.map(x => x.id === pp.id ? { ...x, partner_id: partnerId, role, amount, label, partner } : x))
-                                                setEditingPartnerId(null)
-                                            }}
-                                            onCancel={() => setEditingPartnerId(null)}
-                                        />
-                                    ) : (
-                                        <div key={pp.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-muted/40 group cursor-pointer hover:bg-muted/70" onClick={() => {
-                                            const partnerMembers = members.filter(m => m.partner_id === pp.partner_id)
-                                            const partnerAgreements = agreements.filter(a => a.partner_id === pp.partner_id)
-                                            setSelectedPartner({ ...pp.partner, members: partnerMembers, agreements: partnerAgreements, projects: project ? [project] : [] })
-                                        }}>
-                                            <div className="flex flex-col items-start gap-2 min-w-0">
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                         <span
-                                                            className="shrink-0 text-xs px-2.5 py-0.5 rounded-full border border-border truncate max-w-[150px]"
-                                                            style={pp.partner.color ? { backgroundColor: pp.partner.color } : {}}
-                                                        >
-                                                            {pp.partner.name}
-                                                        </span>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{pp.partner.name}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-
-                                                <span className="text-xs text-muted-foreground">{pp.role}</span>
-                                                {pp.amount !== null && (
-                                                    <span className="text-xs font-medium text-foreground">
-                                                        {pp.amount.toLocaleString('fr-FR')} €
-                                                        {pp.label && <span className="font-normal text-muted-foreground ml-1">· {pp.label}</span>}
+                                ) : (
+                                    <div key={pp.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-muted/40 group cursor-pointer hover:bg-muted/70" onClick={() => {
+                                        const partnerMembers = members.filter(m => m.partner_id === pp.partner_id)
+                                        const partnerAgreements = agreements.filter(a => a.partner_id === pp.partner_id)
+                                        setSelectedPartner({ ...pp.partner, members: partnerMembers, agreements: partnerAgreements, projects: project ? [project] : [] })
+                                    }}>
+                                        <div className="flex flex-col items-start gap-2 min-w-0">
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                     <span
+                                                        className="shrink-0 text-xs px-2.5 py-0.5 rounded-full border border-border truncate max-w-[150px]"
+                                                        style={pp.partner.color ? { backgroundColor: pp.partner.color } : {}}
+                                                    >
+                                                        {pp.partner.name}
                                                     </span>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0 ml-2">
-                                                <div className="h-5 w-5 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-foreground"
-                                                    onClick={e => { e.stopPropagation(); setEditingPartnerId(pp.id) }}>
-                                                    <Pencil size={11} />
-                                                </div>
-                                                <div
-                                                    className="h-5 w-5 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-destructive"
-                                                    onClick={e => {
-                                                        e.stopPropagation()
-                                                        removeProjectPartner(pp.id)
-                                                        setProjectPartners(prev => prev.filter(x => x.id !== pp.id))
-                                                    }}
-                                                >
-                                                    <X size={11} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )
-                                ))}
-                        </div>
-                    </section>
-
-                    {/* Actions récentes */}
-                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-2 row-start-3' : 'order-4'}`}>
-                        <div className="flex items-center justify-between">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Actions récentes</p>
-                            {actionCards.length > 0 && (
-                                <button className="text-xs text-muted-foreground hover:text-foreground transition-colors" onClick={() => setDetailViewMode('tasks')}>
-                                    Voir tout →
-                                </button>
-                            )}
-                        </div>
-                        {actionCards.length === 0 ? (
-                            <p className="text-xs text-muted-foreground italic">Aucune fiche action rattachée</p>
-                        ) : (
-                            <div className="flex flex-col gap-1.5">
-                                {[...actionCards]
-                                    .sort((a, b) => (b.end_date ?? '').localeCompare(a.end_date ?? ''))
-                                    .slice(0, 5)
-                                    .map(card => {
-                                         const categoryColor = card.category.parent?.color ?? card.category.color ?? null
-                                        return (
-                                        <div
-                                            key={card.id}
-                                            className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-muted/40 group cursor-pointer hover:bg-muted/70 transition-colors"
-                                            onClick={() => setSelectedActionCard(card)}
-                                        >
-                                            {categoryColor && (
-                                                <div className="w-1.5 h-8 rounded-full shrink-0" style={{ backgroundColor: categoryColor }} />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>{pp.partner.name}</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                            <span className="text-xs text-muted-foreground">{pp.role}</span>
+                                            {pp.amount !== null && (
+                                                <span className="text-xs font-medium text-foreground">
+                                                    {pp.amount.toLocaleString('fr-FR')} €
+                                                    {pp.label && <span className="font-normal text-muted-foreground ml-1">· {pp.label}</span>}
+                                                </span>
                                             )}
-                                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                                                <span className="text-sm font-medium truncate">{card.title}</span>
-                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                    <span>{card.category.parent ? `${card.category.parent.title} · ` : ''}{card.category.title}</span>
-                                                    {card.end_date && <span>→ {formatDate(card.end_date)}</span>}
-                                                </div>
+                                        </div>
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0 ml-2">
+                                            <div className="h-5 w-5 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-foreground"
+                                                onClick={e => { e.stopPropagation(); setEditingPartnerId(pp.id) }}>
+                                                <Pencil size={11} />
                                             </div>
-                                            <span
-                                                className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border text-black"
-                                                style={{ backgroundColor: PROJECT_STATUS_COLORS[card.status.label] ?? '#f3f4f6' }}
-                                            >
-                                                {card.status.label}
-                                            </span>
                                             <div
-                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
-                                                onClick={e => { e.stopPropagation(); handleUnlinkCard(card.linkId) }}
+                                                className="h-5 w-5 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-destructive"
+                                                onClick={e => {
+                                                    e.stopPropagation()
+                                                    removeProjectPartner(pp.id)
+                                                    setProjectPartners(prev => prev.filter(x => x.id !== pp.id))
+                                                }}
                                             >
-                                                <X size={13} />
+                                                <X size={11} />
                                             </div>
                                         </div>
-                                    )})
-                                }
-                            </div>
-                        )}
+                                    </div>
+                                )
+                            ))}
+                        </div>
                     </section>
 
-                    {/* Informations projet */}
-                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-1 row-start-1' : 'order-1'}`}>
-                        <div className="flex items-center justify-between">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Informations</p>
-                            {!editing && (
-                                <Button size="icon-sm" variant="ghost" className="h-6 w-6 rounded-md" onClick={() => { setEditing(true); setDetailViewMode('overview') }}>
-                                    <Pencil size={11} />
-                                </Button>
-                            )}
                         </div>
-                        {editing && draft ? (
-                            <div className="flex flex-col gap-2.5">
-                                <div className="flex flex-col gap-1">
-                                    <Label className="text-xs text-muted-foreground">Titre</Label>
-                                    <Input value={draft.title} onChange={e => setDraft(d => d ? { ...d, title: e.target.value } : d)} className="h-8 text-xs" />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                    <Label className="text-xs text-muted-foreground">Statut</Label>
-                                    <Select value={String(draft.status_id)} onValueChange={v => setDraft(d => d ? { ...d, status_id: Number(v) } : d)}>
-                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{statuses.filter(s => s.context === 'project').map(s => <SelectItem key={s.id} value={String(s.id)}>{s.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                    <Label className="text-xs text-muted-foreground">Dispositif</Label>
-                                    <Select value={String(draft.project_call_id)} onValueChange={v => setDraft(d => d ? { ...d, project_call_id: Number(v) } : d)}>
-                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{projectCalls.map(pc => <SelectItem key={pc.id} value={String(pc.id)}>{pc.title}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="flex gap-2">
-                                    <div className="flex flex-col gap-1 flex-1">
-                                        <Label className="text-xs text-muted-foreground">Début</Label>
-                                        <Input type="date" value={draft.start_date ?? ''} onChange={e => setDraft(d => d ? { ...d, start_date: e.target.value } : d)} className="h-8 text-xs" />
-                                    </div>
-                                    <div className="flex flex-col gap-1 flex-1">
-                                        <Label className="text-xs text-muted-foreground">Fin</Label>
-                                        <Input type="date" value={draft.end_date ?? ''} onChange={e => setDraft(d => d ? { ...d, end_date: e.target.value } : d)} className="h-8 text-xs" />
-                                    </div>
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                    <Label className="text-xs text-muted-foreground">Budget (€)</Label>
-                                    <Input type="number" value={draft.budget} onChange={e => setDraft(d => d ? { ...d, budget: Number(e.target.value) } : d)} className="h-8 text-xs" />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                    <Label className="text-xs text-muted-foreground">Description</Label>
-                                    <Textarea value={draft.description ?? ''} onChange={e => setDraft(d => d ? { ...d, description: e.target.value } : d)} rows={3} placeholder="Description du projet…" className="text-xs resize-none" />
-                                </div>
-                                <div className="flex gap-2 pt-1">
-                                    <Button size="sm" variant="ghost" className="h-7 text-xs flex-1 rounded-md" onClick={() => { setEditing(false); setDraft({ ...project }) }}>
-                                        <X size={12} className="mr-1" />Annuler
-                                    </Button>
-                                    <Button size="sm" className="h-7 text-xs flex-1 rounded-md" onClick={saveProject} disabled={saving}>
-                                        <Check size={12} className="mr-1" />{saving ? '…' : 'Enregistrer'}
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col gap-2 text-xs">
-                                <div className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">Statut</span><span>{pStatus?.label}</span></div>
-                                <div className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">Dispositif</span><span className="text-right truncate">{project.projectCall.title}</span></div>
-                                <div className="flex justify-between gap-2"><span className="text-muted-foreground shrink-0">Axe</span><span className="text-right">{project.projectCall.axis.name}</span></div>
-                                {(project.start_date || project.end_date) && (
-                                    <div className="flex justify-between gap-2">
-                                        <span className="text-muted-foreground shrink-0">Période</span>
-                                        <span className="text-right">{project.start_date ? formatDate(project.start_date) : '—'} → {project.end_date ? formatDate(project.end_date) : '—'}</span>
-                                    </div>
-                                )}
-                                {project.budget > 0 && (
-                                    <div className="flex justify-between gap-2">
-                                        <span className="text-muted-foreground shrink-0">Budget</span>
-                                        <span className="font-medium">{fmt(project.budget)}</span>
-                                    </div>
-                                )}
-                                {totalGrant > 0 && (
-                                    <div className="flex justify-between gap-2">
-                                        <span className="text-muted-foreground shrink-0">Subventions</span>
-                                        <span className="font-medium">{fmt(totalGrant)}</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </section>
+                    )}{/* fin partners */}
+
+                    {/* ── KPIs / INDICATEURS ───────────────────── */}
+                    {detailViewMode === "kpis" && (
+                        <div className="flex flex-col gap-6">
 
                     {/* KPIs / Indicateurs */}
-                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-1 row-start-3' : 'order-6'}`}>
+                    <section className="flex flex-col gap-3 bg-white border border-border rounded-xl p-4">
                         <div className="flex items-center gap-2">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Indicateurs</p>
                         </div>
@@ -2326,8 +2500,164 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                         })}
                     </section>
 
+                        </div>
+                    )}{/* fin kpis */}
+
+                    {/* ── PUBLICATIONS ─────────────────────────── */}
+                    {detailViewMode === "publications" && (
+                        <div className="flex flex-col gap-6">
+
+                    {/* Publications */}
+                    <section className="flex flex-col gap-3 bg-white border border-border rounded-xl p-4">
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Publications</p>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setShowPublicationForm(true); setEditingPublication(null); setPubDraft({ title: '', lab_id: null, subject: '', journal: '', year: '', doi: '' }); setPubAuthorIds([]); setPubError(null) }}>
+                                <Plus size={14} />
+                            </Button>
+                        </div>
+
+                        {publications.length === 0 && !showPublicationForm && (
+                            <p className="text-xs text-muted-foreground italic">Aucune publication</p>
+                        )}
+
+                        {showPublicationForm && (
+                            <div className="flex flex-col gap-2 rounded-lg border border-border p-3 bg-muted/30">
+                                <input className="text-xs border rounded px-2 py-1 w-full" placeholder="Titre *" value={pubDraft.title} onChange={e => setPubDraft(p => ({ ...p, title: e.target.value }))} />
+                                <div>
+                                    <p className="text-[11px] text-muted-foreground mb-1">Auteurs</p>
+                                    <SearchInput
+                                        data={members}
+                                        getLabel={m => `${m.first_name} ${m.last_name}`}
+                                        onSelect={m => setPubAuthorIds(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id])}
+                                        placeholder="Ajouter un auteur..."
+                                        selectedIds={pubAuthorIds}
+                                        groupBy={m => ({ primary: partners.find(p => p.id === m.partner_id)?.name ?? 'Autre' })}
+                                    />
+                                    {pubAuthorIds.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                            {pubAuthorIds.map(id => {
+                                                const m = members.find(m => m.id === id)
+                                                return m ? (
+                                                    <span key={id} className="flex items-center gap-1 text-[11px] bg-muted rounded px-1.5 py-0.5">
+                                                        {m.first_name} {m.last_name}
+                                                        <button onClick={() => setPubAuthorIds(prev => prev.filter(i => i !== id))} className="text-muted-foreground hover:text-destructive">×</button>
+                                                    </span>
+                                                ) : null
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <p className="text-[11px] text-muted-foreground mb-1">Laboratoire</p>
+                                    <SearchInput
+                                        data={allLabs}
+                                        getLabel={l => l.name}
+                                        onSelect={l => setPubDraft(p => ({ ...p, lab_id: l.id }))}
+                                        placeholder="Sélectionner un laboratoire..."
+                                        value={allLabs.find(l => l.id === pubDraft.lab_id)?.name}
+                                    />
+                                </div>
+                                <input className="text-xs border rounded px-2 py-1 w-full" placeholder="Sujet / mots-clés" value={pubDraft.subject} onChange={e => setPubDraft(p => ({ ...p, subject: e.target.value }))} />
+                                <input className="text-xs border rounded px-2 py-1 w-full" placeholder="Revue / conférence" value={pubDraft.journal} onChange={e => setPubDraft(p => ({ ...p, journal: e.target.value }))} />
+                                <div className="flex gap-2">
+                                    <input className="text-xs border rounded px-2 py-1 w-20" placeholder="Année" value={pubDraft.year} onChange={e => setPubDraft(p => ({ ...p, year: e.target.value }))} />
+                                    <input className="text-xs border rounded px-2 py-1 flex-1" placeholder="DOI / URL" value={pubDraft.doi} onChange={e => setPubDraft(p => ({ ...p, doi: e.target.value }))} />
+                                </div>
+                                {pubError && <p className="text-xs text-destructive">{pubError}</p>}
+                                <div className="flex gap-2 justify-end">
+                                    <Button variant="ghost" size="sm" disabled={pubSaving} onClick={() => { setShowPublicationForm(false); setEditingPublication(null); setPubError(null) }}>Annuler</Button>
+                                    <Button size="sm" disabled={!pubDraft.title.trim() || pubSaving} onClick={async () => {
+                                        setPubSaving(true)
+                                        setPubError(null)
+                                        try {
+                                            if (editingPublication) {
+                                                await updatePublication(editingPublication.id, pubDraft)
+                                                setPublications(prev => prev.map(p => p.id === editingPublication.id ? { ...p, ...pubDraft } : p))
+                                                const existing = publicationMembers.filter(pm => pm.publication_id === editingPublication.id)
+                                                const toDelete = existing.filter(pm => !pubAuthorIds.includes(pm.member_id))
+                                                const toAdd = pubAuthorIds.filter(id => !existing.find(pm => pm.member_id === id))
+                                                await Promise.all(toDelete.map(pm => deletePublicationMember(pm.id)))
+                                                const added = await Promise.all(toAdd.map(id => addPublicationMember(editingPublication.id, id)))
+                                                setPublicationMembers(prev => [
+                                                    ...prev.filter(pm => !toDelete.find(d => d.id === pm.id)),
+                                                    ...added,
+                                                ])
+                                            } else {
+                                                const pub = await addPublication({ project_id: project!.id, ...pubDraft })
+                                                setPublications(prev => [...prev, pub])
+                                                const added = await Promise.all(pubAuthorIds.map(id => addPublicationMember(pub.id, id)))
+                                                setPublicationMembers(prev => [...prev, ...added])
+                                            }
+                                            setShowPublicationForm(false)
+                                            setEditingPublication(null)
+                                            setPubError(null)
+                                        } catch (err) {
+                                            console.error('[Publication] save error:', err)
+                                            setPubError('Erreur lors de l\'enregistrement. Vérifiez que les tables Grist existent.')
+                                        } finally {
+                                            setPubSaving(false)
+                                        }
+                                    }}>
+                                        <Check size={13} className="mr-1" />{pubSaving ? 'Enregistrement…' : editingPublication ? 'Modifier' : 'Ajouter'}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
+                        {publications.map(pub => {
+                            const authors = publicationMembers
+                                .filter(pm => pm.publication_id === pub.id)
+                                .map(pm => members.find(m => m.id === pm.member_id))
+                                .filter(Boolean)
+                            const lab = allLabs.find(l => l.id === pub.lab_id)
+                            return (
+                                <div key={pub.id} className="flex flex-col gap-1 group rounded-lg border border-border px-3 py-2.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <span className="text-xs font-medium leading-snug">{pub.title}</span>
+                                        <div className="flex gap-3 mt-1 shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground transition-opacity">
+                                            <Button variant="ghost" size="icon" className="h-3 w-3" onClick={() => {
+                                                setEditingPublication(pub)
+                                                setPubDraft({ title: pub.title, lab_id: pub.lab_id, subject: pub.subject, journal: pub.journal, year: pub.year, doi: pub.doi })
+                                                setPubAuthorIds(publicationMembers.filter(pm => pm.publication_id === pub.id).map(pm => pm.member_id))
+                                                setShowPublicationForm(true)
+                                            }}>
+                                                <Pencil size={8} />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-3 w-3 hover:text-destructive" onClick={async () => {
+                                                await deletePublication(pub.id)
+                                                setPublications(prev => prev.filter(p => p.id !== pub.id))
+                                                setPublicationMembers(prev => prev.filter(pm => pm.publication_id !== pub.id))
+                                            }}>
+                                                <Trash2 size={8} />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    {authors.length > 0 && (
+                                        <span className="text-[11px] text-muted-foreground">
+                                            {authors.map(m => `${m!.first_name} ${m!.last_name}`).join(', ')}
+                                        </span>
+                                    )}
+                                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                                        {lab && <span>{lab.name}</span>}
+                                        {pub.journal && <span>· {pub.journal}</span>}
+                                        {pub.year && <span>· {pub.year}</span>}
+                                    </div>
+                                    {pub.subject && <span className="text-[11px] text-muted-foreground italic">{pub.subject}</span>}
+                                    {pub.doi && <a href={pub.doi.startsWith('http') ? pub.doi : `https://doi.org/${pub.doi}`} target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-500 hover:underline truncate">{pub.doi}</a>}
+                                </div>
+                            )
+                        })}
+                    </section>
+
+                        </div>
+                    )}{/* fin publications */}
+
+                    {/* ── FORMATIONS ───────────────────────────── */}
+                    {detailViewMode === "formations" && (
+                        <div className="flex flex-col gap-6">
+
                     {/* Formations */}
-                    <section className={`flex flex-col gap-3 bg-white border border-border rounded-xl p-4 ${expanded ? 'col-span-1 row-start-2' : 'order-5'}`}>
+                    <section className="flex flex-col gap-3 bg-white border border-border rounded-xl p-4">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Formations</p>
                         <div className="flex flex-col gap-2">
                             <SearchInput
@@ -2405,7 +2735,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     </section>
 
                         </div>
-                    )}{/* fin overview */}
+                    )}{/* fin formations */}
 
                     {/* ── ACTIONS ─────────────────────────────── */}
                     {detailViewMode === "tasks" && (
@@ -2590,79 +2920,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     )}{/* fin files */}
 
                     {/* ── JALONS ──────────────────────────────── */}
-                    {detailViewMode === "timeline" && (
-                        <div className="flex flex-col gap-6">
-
-                    {/* Jalons */}
-                    <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Jalons</p>
-                            </div>
-                            {!showAddMilestone && !editingMilestone && (
-                                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md" onClick={() => setShowAddMilestone(true)}>
-                                    <Plus size={11} />Ajouter
-                                </Button>
-                            )}
-                        </div>
-
-                        <div className="relative">
-                                {milestones.length === 0 && !showAddMilestone && (
-                                    <p className="text-xs text-muted-foreground italic">Aucun jalon</p>
-                                )}
-
-                                {milestones.length > 0 && (
-                                    <div className="absolute left-[5px] top-2 bottom-6 w-px bg-border" />
-                                )}
-
-                                {milestones
-                                    .slice()
-                                    .sort((a, b) => a.due_date.localeCompare(b.due_date))
-                                    .map(m =>
-                                        editingMilestone?.id === m.id ? (
-                                            <div key={m.id} className="pl-6 mb-3">
-                                                <MilestoneForm
-                                                    statuses={statuses}
-                                                    initial={m}
-                                                    onSaved={async (fields) => {
-                                                        await updateProjectMilestone(m.id, fields)
-                                                        setMilestones(prev => prev.map(x => x.id === m.id ? { ...m, ...fields } : x))
-                                                        setEditingMilestone(null)
-                                                    }}
-                                                    onCancel={() => setEditingMilestone(null)}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <MilestoneRow
-                                                key={m.id}
-                                                milestone={m}
-                                                statuses={statuses}
-                                                onEdit={() => setEditingMilestone(m)}
-                                                onDelete={async () => {
-                                                    await deleteProjectMilestone(m.id)
-                                                    setMilestones(prev => prev.filter(x => x.id !== m.id))
-                                                }}
-                                            />
-                                        )
-                                    )}
-
-                                {showAddMilestone && (
-                                    <MilestoneForm
-                                        statuses={statuses}
-                                        onSaved={async (fields) => {
-                                            const ms = await addProjectMilestone(project.id, fields)
-                                            setMilestones(prev => [...prev, ms])
-                                            setShowAddMilestone(false)
-                                        }}
-                                        onCancel={() => setShowAddMilestone(false)}
-                                    />
-                                )}
-                        </div>
-                    </section>
-
-                        </div>
-                    )}{/* fin timeline */}
-
                     {/* ── BUDGET ──────────────────────────────── */}
                     {detailViewMode === "budget" && (
                         <div className="flex flex-col gap-6">
@@ -2793,6 +3050,13 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             </>
                         )}
                     </section>
+
+                        </div>
+                    )}{/* fin budget */}
+
+                    {/* ── CONVENTIONS ─────────────────────────── */}
+                    {detailViewMode === "conventions" && (
+                        <div className="flex flex-col gap-6">
 
                     {/* Conventions */}
                      <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
@@ -2925,9 +3189,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                         )}
                     </section>
 
-
                         </div>
-                    )}{/* fin budget */}
+                    )}{/* fin conventions */}
 
                 </div>
             </SheetContent>
@@ -3507,7 +3770,8 @@ export default function Projects() {
 
     type ViewMode = 'cards' | 'table' | 'calendar'
     const [viewMode, setViewMode] = useState<ViewMode>('cards')
-    const [calendarDate, setCalendarDate] = useState(new Date())
+    const [ganttYear, setGanttYear] = useState(new Date().getFullYear())
+    const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>(GanttViewMode.Month)
 
     type SortKey = 'title' | 'call' | 'axis' | 'status' | 'budget' | 'start_date' | 'end_date'
     const [sortKey,  setSortKey]  = useState<SortKey>('title')
@@ -3672,7 +3936,7 @@ export default function Projects() {
                     {([
                         { mode: 'cards',    label: 'Cartes',    icon: <LayoutGrid size={13} /> },
                         { mode: 'table',    label: 'Tableau',   icon: <Table2 size={13} /> },
-                        { mode: 'calendar', label: 'Calendrier',icon: <CalendarDays size={13} /> },
+                        { mode: 'calendar', label: 'Gantt',icon: <ChartGantt size={13} /> },
                     ] as { mode: ViewMode; label: string; icon: React.ReactNode }[]).map(({ mode, label, icon }) => (
                         <button
                             key={mode}
@@ -4104,7 +4368,7 @@ export default function Projects() {
                                             Statut <SortIcon col="status" />
                                         </TableHead>
                                         <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort('budget')}>
-                                            Budget <SortIcon col="budget" />
+                                            Dépenses <SortIcon col="budget" />
                                         </TableHead>
                                         <TableHead className="text-right">Subvention</TableHead>
                                         <TableHead className="cursor-pointer select-none" onClick={() => handleSort('start_date')}>
@@ -4242,89 +4506,145 @@ export default function Projects() {
 
             {/* Vue Calendrier */}
             {viewMode === 'calendar' && (() => {
-                const statusMap = new Map(statuses.map(s => [s.id, s]))
-
-                const withDates = filteredProjects.filter(p => p.start_date && p.end_date)
                 const withoutDates = filteredProjects.filter(p => !p.start_date || !p.end_date)
 
-                type ProjectCalEvent = {
-                    id: number
-                    title: string
-                    start: Date
-                    end: Date
-                    resource: ProjectFull
-                }
-
-                const events: ProjectCalEvent[] = withDates.map(p => ({
-                    id: p.id,
-                    title: p.title,
-                    start: new Date(p.start_date),
-                    end: new Date(p.end_date),
-                    resource: p,
-                }))
+                // Projets qui chevauchent l'année sélectionnée
+                const yearStart = new Date(ganttYear, 0, 1)
+                const yearEnd   = new Date(ganttYear, 11, 31)
+                const ganttTasks: GanttTask[] = filteredProjects
+                    .filter(p => {
+                        if (!p.start_date || !p.end_date) return false
+                        const s = new Date(p.start_date)
+                        const e = new Date(p.end_date)
+                        return s < e && s <= yearEnd && e >= yearStart
+                    })
+                    .map(p => {
+                        const status = statuses.find(s => s.id === p.status_id)
+                        const bg = PROJECT_STATUS_COLORS[status?.label ?? ''] ?? '#dbeafe'
+                        return {
+                            id:       String(p.id),
+                            name:     p.title,
+                            start:    new Date(p.start_date),
+                            end:      new Date(p.end_date),
+                            progress: 0,
+                            type:     'task' as const,
+                            styles: {
+                                backgroundColor:         bg,
+                                backgroundSelectedColor: bg,
+                                progressColor:           bg,
+                                progressSelectedColor:   bg,
+                            },
+                        }
+                    })
 
                 return (
                     <div className="flex-1 overflow-auto p-6 flex flex-col gap-4">
-                        {withoutDates.length > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                                {withoutDates.length} projet{withoutDates.length > 1 ? 's' : ''} sans date non affiché{withoutDates.length > 1 ? 's' : ''}
-                            </p>
-                        )}
-                        {loading ? (
-                            <div className="flex flex-col gap-3">
-                                <div className="h-8 w-48 bg-muted animate-pulse rounded" />
-                                <div className="h-[700px] w-full bg-muted animate-pulse rounded" />
+
+                        {/* Contrôles */}
+                        <div className="flex items-center justify-between flex-wrap gap-3 shrink-0">
+                            {/* Navigation année */}
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" className="rounded-md h-7 w-7 p-0" onClick={() => setGanttYear(y => y - 1)}>‹</Button>
+                                <span className="text-sm font-medium tabular-nums w-12 text-center">{ganttYear}</span>
+                                <Button variant="outline" size="sm" className="rounded-md h-7 w-7 p-0" onClick={() => setGanttYear(y => y + 1)}>›</Button>
                             </div>
+
+                            {/* Granularité */}
+                            <div className="flex items-center gap-1 bg-muted rounded-full p-1">
+                                {([
+                                    { mode: GanttViewMode.Month, label: 'Mois' },
+                                    { mode: GanttViewMode.Week,  label: 'Semaine' },
+                                    { mode: GanttViewMode.Day,   label: 'Jour' },
+                                ] as { mode: GanttViewMode; label: string }[]).map(({ mode, label }) => (
+                                    <button
+                                        key={mode}
+                                        onClick={() => setGanttViewMode(mode)}
+                                        className={`px-3 py-1 rounded-full text-xs transition-colors ${ganttViewMode === mode ? 'bg-white shadow text-black font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {withoutDates.length > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    {withoutDates.length} projet{withoutDates.length > 1 ? 's' : ''} sans date masqué{withoutDates.length > 1 ? 's' : ''}
+                                </p>
+                            )}
+                        </div>
+
+                        {loading ? (
+                            <div className="flex flex-col gap-2">
+                                {[1,2,3,4,5].map(i => <div key={i} className="h-10 w-full bg-muted animate-pulse rounded" />)}
+                            </div>
+                        ) : ganttTasks.length === 0 ? (
+                            <p className="text-sm text-muted-foreground italic">Aucun projet sur {ganttYear}.</p>
                         ) : (
-                            <div style={{ height: 820 }}>
-                                <BigCalendar
-                                    localizer={calendarLocalizer}
-                                    events={events}
-                                    defaultView="month"
-                                    views={['month']}
-                                    culture="fr"
-                                    date={calendarDate}
-                                    onNavigate={date => setCalendarDate(date)}
-                                    messages={{
-                                        today:           "Aujourd'hui",
-                                        previous:        'Précédent',
-                                        next:            'Suivant',
-                                        month:           'Mois',
-                                        week:            'Semaine',
-                                        day:             'Jour',
-                                        agenda:          'Agenda',
-                                        noEventsInRange: 'Aucun projet sur cette période.',
-                                        showMore:        (count: number) => `+${count} de plus`,
-                                    }}
-                                    formats={{
-                                        monthHeaderFormat: (date: Date) =>
-                                            date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
-                                    }}
-                                    popup
-                                    startAccessor="start"
-                                    endAccessor="end"
-                                    onSelectEvent={event => {
-                                        setSelectedProject(event.resource as ProjectFull)
-                                        setDetailOpen(true)
-                                    }}
-                                    eventPropGetter={event => {
-                                        const p = event.resource as ProjectFull
-                                        const status = statusMap.get(p.status_id)
-                                        const bg = PROJECT_STATUS_COLORS[status?.label ?? ''] ?? '#e5e7eb'
-                                        return {
-                                            style: {
-                                                backgroundColor: bg,
-                                                borderColor:     bg,
-                                                color:           '#2d2d2d',
-                                                borderRadius:    '4px',
-                                                fontSize:        '11px',
-                                                padding:         '1px 4px',
-                                                lineHeight:      '1.3',
-                                                minHeight:       '16px',
-                                            },
-                                        }
-                                    }}
-                                />
+                            <div className="gantt-dark-labels">
+                            <style>{`
+                                .gantt-dark-labels text { fill: #1e293b !important; }
+                                .gantt-task-row { cursor: pointer; transition: background 150ms; }
+                                .gantt-task-row:hover { background: #f8fafc; }
+                                .gantt-task-row:hover .gantt-task-title { color: #0f172a !important; }
+                            `}</style>
+                            <Gantt
+                                tasks={ganttTasks}
+                                viewMode={ganttViewMode}
+                                locale="fr"
+                                listCellWidth="200px"
+                                columnWidth={ganttViewMode === GanttViewMode.Month ? 80 : ganttViewMode === GanttViewMode.Week ? 60 : 60}
+                                rowHeight={40}
+                                fontSize="12px"
+                                headerHeight={50}
+                                barCornerRadius={15}
+                                TaskListHeader={({ headerHeight, fontFamily, fontSize }) => (
+                                    <div style={{ fontFamily, fontSize, display: 'table', borderBottom: '#e6e4e4 1px solid', borderTop: '#e6e4e4 1px solid', borderLeft: '#e6e4e4 1px solid' }}>
+                                        <div style={{ display: 'table-row', height: headerHeight - 2 }}>
+                                            <div style={{ display: 'table-cell', minWidth: '260px', verticalAlign: 'middle', paddingLeft: 12, fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Projet</div>
+                                        </div>
+                                    </div>
+                                )}
+                                TaskListTable={({ tasks, rowHeight, rowWidth, fontFamily, fontSize, locale }) => (
+                                    <div style={{ fontFamily, fontSize, display: 'table', borderLeft: '#e6e4e4 1px solid', borderBottom: '#e6e4e4 1px solid' }}>
+                                        {tasks.map(t => {
+                                            const fmt = (d: Date) => d.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' })
+                                            return (
+                                                <div key={t.id} className="gantt-task-row" style={{ display: 'table-row', height: rowHeight, borderBottom: '1px solid #f1f5f9' }}>
+                                                    <div style={{ display: 'table-cell', minWidth: rowWidth, maxWidth: rowWidth, verticalAlign: 'middle', paddingLeft: 12, paddingRight: 8, overflow: 'hidden' }}>
+                                                        <div className="gantt-task-title" style={{ fontWeight: 500, color: '#1e293b', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
+                                                        <div style={{ color: '#94a3b8', fontSize: '10px', marginTop: 1 }}>{fmt(t.start)} → {fmt(t.end)}</div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                                TooltipContent={({ task }) => {
+                                    const p = filteredProjects.find(p => String(p.id) === task.id)
+                                    if (!p) return null
+                                    const status = statuses.find(s => s.id === p.status_id)
+                                    const participantCount = allProjectMembers.filter(m => m.project_id === p.id).length
+                                    const partnerCount = new Set(allAgreements.filter(a => a.project_id === p.id).map(a => a.partner_id)).size
+                                    const fmt = (d: Date) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+                                    return (
+                                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: 220, maxWidth: 300, fontFamily: 'inherit' }}>
+                                            <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b', marginBottom: 6, lineHeight: 1.3 }}>{p.title}</div>
+                                            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{fmt(task.start)} → {fmt(task.end)}</div>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                                {status && (
+                                                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: PROJECT_STATUS_COLORS[status.label] ?? '#f1f5f9', color: '#475569', fontWeight: 500 }}>{status.label}</span>
+                                                )}
+                                                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#f1f5f9', color: '#475569' }}> {participantCount} participant{participantCount !== 1 ? 's' : ''}</span>
+                                                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#f1f5f9', color: '#475569' }}> {partnerCount} partenaire{partnerCount !== 1 ? 's' : ''}</span>
+                                            </div>
+                                        </div>
+                                    )
+                                }}
+                                onDoubleClick={task => {
+                                    const p = filteredProjects.find(p => String(p.id) === task.id)
+                                    if (p) { setSelectedProject(p); setDetailOpen(true) }
+                                }}
+                            />
                             </div>
                         )}
                     </div>

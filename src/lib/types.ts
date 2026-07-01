@@ -362,6 +362,23 @@ export type Supplier = {
     siret: string
 }
 
+export type Publication = {
+    id: number
+    project_id: number
+    title: string
+    lab_id: number | null
+    subject: string
+    journal: string
+    year: string
+    doi: string
+}
+
+export type PublicationMember = {
+    id: number
+    publication_id: number
+    member_id: number
+}
+
 export type Expanse = {
     id: number
     title: string

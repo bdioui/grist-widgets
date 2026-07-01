@@ -10,7 +10,8 @@ import {
     mockProjectPartners, mockProjectMilestones,
     mockTimeEntry,
     mockFormations, mockProjectFormations, mockProjectAttachments,
-    mockProgram, mockExpanses, mockSuppliers
+    mockProgram, mockExpanses, mockSuppliers,
+    mockPublications, mockPublicationMembers,
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -25,7 +26,8 @@ import {
     normalizeKpiEntries, normalizeProjectPartners, normalizeProjectMilestones,
     normalizeTimeEntry,
     normalizeFormations, normalizeProjectFormations, normalizeProjectAttachments,
-    normalizeProgram, normalizeExpanse, normalizeSuplier
+    normalizeProgram, normalizeExpanse, normalizeSuplier,
+    normalizePublications, normalizePublicationMembers,
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -38,7 +40,9 @@ import type {
     TimeEntry, Formation, ProjectFormation, ProjectAttachment,
     Program,
     Expanse,
-    Supplier
+    Supplier,
+    Publication,
+    PublicationMember,
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -83,7 +87,9 @@ const T = {
     program: 'Program',
     expanse: 'Expanse',
     expanse_suplier: 'Expanse_suplier',
-    supplier: 'Supplier'
+    supplier: 'Supplier',
+    publication: 'Publication',
+    publication_member: 'Publication_member',
 }
 
 // --- Tables de référence ---
@@ -1466,4 +1472,73 @@ export async function deleteProjectAttachment(id: number): Promise<void> {
         return
     }
     await deleteRecord(T.project_attachment, id)
+}
+
+// --- Publications ---
+
+export async function getPublicationsByProject(projectId: number): Promise<Publication[]> {
+    if (USE_MOCK) return mockPublications.filter(p => p.project_id === projectId)
+    const rows = await fetchTable(T.publication)
+    return normalizePublications(rows).filter(p => p.project_id === projectId)
+}
+
+export async function addPublication(fields: Omit<Publication, 'id'>): Promise<Publication> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockPublications.map(p => p.id)) + 1
+        const pub: Publication = { id, ...fields }
+        mockPublications.push(pub)
+        return pub
+    }
+    const id = await addRecord(T.publication, fields)
+    return { id, ...fields }
+}
+
+export async function updatePublication(id: number, patch: Partial<Omit<Publication, 'id'>>): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockPublications.findIndex(p => p.id === id)
+        if (i !== -1) mockPublications[i] = { ...mockPublications[i], ...patch }
+        return
+    }
+    await updateRecord(T.publication, id, patch)
+}
+
+export async function deletePublication(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockPublications.findIndex(p => p.id === id)
+        if (i !== -1) mockPublications.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.publication, id)
+}
+
+// --- Publication members ---
+
+export async function getPublicationMembersByProject(projectId: number): Promise<PublicationMember[]> {
+    if (USE_MOCK) {
+        const pubIds = new Set(mockPublications.filter(p => p.project_id === projectId).map(p => p.id))
+        return mockPublicationMembers.filter(pm => pubIds.has(pm.publication_id))
+    }
+    const rows = await fetchTable(T.publication_member)
+    return normalizePublicationMembers(rows)
+}
+
+export async function addPublicationMember(publicationId: number, memberId: number): Promise<PublicationMember> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockPublicationMembers.map(pm => pm.id)) + 1
+        const pm: PublicationMember = { id, publication_id: publicationId, member_id: memberId }
+        mockPublicationMembers.push(pm)
+        return pm
+    }
+    const fields = { publication_id: publicationId, member_id: memberId }
+    const id = await addRecord(T.publication_member, fields)
+    return { id, ...fields }
+}
+
+export async function deletePublicationMember(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockPublicationMembers.findIndex(pm => pm.id === id)
+        if (i !== -1) mockPublicationMembers.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.publication_member, id)
 }

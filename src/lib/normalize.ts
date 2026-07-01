@@ -23,6 +23,8 @@ import type {
     Program,
     Expanse,
     Supplier,
+    Publication,
+    PublicationMember,
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -559,5 +561,26 @@ export function normalizeExpanse(rows: Record<string, unknown>[]): Expanse[] {
         purchase_date: str(r.purchase_date),
         delivery_date: str(r.delivery_date),
         status: str(r.status)
+    }))
+}
+
+export function normalizePublications(rows: Record<string, unknown>[]): Publication[] {
+    return rows.map(r => ({
+        id:         num(r.id),
+        project_id: num(r.project_id),
+        title:      str(r.title),
+        lab_id:     nullable(r.lab_id),
+        subject:    str(r.subject),
+        journal:    str(r.journal),
+        year:       str(r.year),
+        doi:        str(r.doi),
+    }))
+}
+
+export function normalizePublicationMembers(rows: Record<string, unknown>[]): PublicationMember[] {
+    return rows.map(r => ({
+        id:             num(r.id),
+        publication_id: num(r.publication_id),
+        member_id:      num(r.member_id),
     }))
 }

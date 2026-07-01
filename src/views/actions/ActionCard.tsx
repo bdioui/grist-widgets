@@ -1,4 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
+import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown, File, Folder, Users, MessageCircle, Eye, EyeClosed, Calendar, MapPinned } from 'lucide-react'
+import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown, Users, MessageCircle, Calendar, LayoutGrid, ListTodo, Building2, ScrollText, MapPin, MessageSquare, Maximize2, Minimize2 } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import {
@@ -37,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import SearchInput from '@/components/SearchInput'
+import { ScrollableTabBar } from '@/components/ScrollableTabBar'
 
 const MEMBER_STATUSES = [
     'Enseignant-chercheur', 'Chercheur', 'Ingénieur', 'Doctorant',
@@ -652,8 +658,46 @@ type MemberLink    = MemberActionCard    & { member: Member }
 type ProjectLink   = ProjectActionCard   & { project: Project }
 type AgreementLink = AgreementActionCard & { agreement: FinancialAgreement }
 
+type acDetailViewMode = 'overview' | 'todos' | 'participants' | 'projects' | 'agreements' | 'location' | 'comments'
+
+function SortableTabAC({ mode, label, icon, isActive, isEmpty, onActivate, onRemove }: {
+    mode: acDetailViewMode
+    label: string
+    icon: React.ReactNode
+    isActive: boolean
+    isEmpty: boolean
+    onActivate: () => void
+    onRemove: () => void
+}) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mode })
+    const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+    return (
+        <button
+            ref={setNodeRef}
+            style={style}
+            {...attributes}
+            {...listeners}
+            onClick={onActivate}
+            className={`relative flex items-center gap-1.5 px-3 py-2 text-sm z-10 transition-colors duration-300 text-xs whitespace-nowrap cursor-pointer active:cursor-grabbing ${isActive ? 'font-semibold' : 'text-black'}`}
+        >
+            <span className="relative z-20 flex items-center gap-1.5">
+                {icon}{label}
+                {isEmpty && (
+                    <span role="button" onClick={e => { e.stopPropagation(); onRemove() }} className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors leading-none">
+                        <X size={10} />
+                    </span>
+                )}
+            </span>
+            {isActive && (
+                <motion.div layoutId="activeACTab" className="absolute inset-0 border-b-2 border-black z-10" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />
+            )}
+        </button>
+    )
+}
+
 export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: DetailSheetProps) {
     const [loading, setLoading] = useState(true)
+    const [expanded, setExpanded] = useState(false)
 
     // Données associées
     const [memberLinks,    setMemberLinks]    = useState<MemberLink[]>([])
@@ -695,14 +739,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     const [coords, setCoords] = useState<MapProps | null>(null)
 
     // Togglers des section
-    const [toDoExtended, setToDoExtended] = useState(true)
-    const [membersExtended,  setMembersExtended]  = useState(true)
     const [showCreateMember, setShowCreateMember] = useState(false)
-    const [projectsExtended, setProjectsExtended] = useState(true)
-    const [agreementsExtended, setAgreementsExtended] = useState(true)
-    const [commentsExtended, setCommentsExtended] = useState(true)
-    const [locationExtended, setLocationExtended] = useState(true)
-
 
     // Commentaires
     const currentUser = useCurrentUser()
@@ -767,13 +804,44 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
         )
     }
 
-    // Visibilité des sections de Sheet 
-    const [showTodo, setShowTodo] = useState(false)
-    const [showMembers, setShowMembers] = useState(false)
-    const [showAgreements, setShowAgreements] = useState(false)
-    const [showProjects, setShowProjects] = useState(false)
     const [showLocation, setshowLocation] = useState(false)
-    
+
+    // --- Tab navigation ---
+    const ALL_AC_OPTIONAL_TABS: { mode: acDetailViewMode; label: string; icon: React.ReactNode }[] = [
+        { mode: 'todos',        label: 'Tâches',       icon: <ListTodo size={13} /> },
+        { mode: 'participants', label: 'Participants',  icon: <Users size={13} /> },
+        { mode: 'projects',     label: 'Projets',      icon: <Building2 size={13} /> },
+        { mode: 'agreements',   label: 'Conventions',  icon: <ScrollText size={13} /> },
+        { mode: 'location',     label: 'Localisation', icon: <MapPin size={13} /> },
+        { mode: 'comments',     label: 'Commentaires', icon: <MessageSquare size={13} /> },
+    ]
+
+    const [acTab, setAcTab] = useState<acDetailViewMode>('overview')
+    const [activeACTabs, setActiveACTabs] = useState<acDetailViewMode[]>([])
+
+    function addACTab(mode: acDetailViewMode) {
+        setActiveACTabs(prev => prev.includes(mode) ? prev : [...prev, mode])
+    }
+    function removeACTab(mode: acDetailViewMode) {
+        setActiveACTabs(prev => prev.filter(m => m !== mode))
+        if (acTab === mode) setAcTab('overview')
+    }
+
+    const acTabSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+    function handleACTabDragEnd(event: DragEndEvent) {
+        const { active, over } = event
+        if (!over || active.id === over.id) return
+        setActiveACTabs(prev => {
+            const oldIndex = prev.indexOf(active.id as acDetailViewMode)
+            const newIndex = prev.indexOf(over.id as acDetailViewMode)
+            return arrayMove(prev, oldIndex, newIndex)
+        })
+    }
+
+    useEffect(() => {
+        localStorage.setItem(`tabs_actioncard_${card.id}`, JSON.stringify(activeACTabs))
+    }, [activeACTabs, card.id])
+
     useEffect(() => {
         if (!open) return
         setDraft(card)
@@ -810,12 +878,17 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                     ? { lat: card.lat, lon: card.lon }
                     : null
             )
-            // Visibilité initiale selon le contenu chargé
-            setShowTodo(tl.length > 0)
-            setShowMembers(ml.length > 0)
-            setShowAgreements(al.length > 0)
-            setShowProjects(pl.length > 0)
             setshowLocation(!!card.full_address)
+            // Tab navigation auto-show
+            const stored = JSON.parse(localStorage.getItem(`tabs_actioncard_${card.id}`) ?? '[]') as acDetailViewMode[]
+            const autoShow: acDetailViewMode[] = []
+            if (tl.length > 0) autoShow.push('todos')
+            if (ml.length > 0) autoShow.push('participants')
+            if (pl.length > 0) autoShow.push('projects')
+            if (al.length > 0) autoShow.push('agreements')
+            if (card.full_address) autoShow.push('location')
+            if ((comments as CommentFull[]).length > 0) autoShow.push('comments')
+            setActiveACTabs([...new Set([...stored, ...autoShow])])
         }).catch(err => console.error('[ActionCard] Promise.all failed:', err))
         .finally(() => setLoading(false))
     }, [open, card.id])
@@ -1012,7 +1085,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
 
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) { setConfirming(false); onClose() } }}>
-            <SheetContent side="right" showCloseButton={false} className="!w-[580px] flex flex-col gap-0 p-0">
+            <SheetContent side="right" showCloseButton={false} className={`${expanded ? '!w-screen !max-w-none' : '!w-[580px]'} flex flex-col gap-0 p-0 transition-all duration-300`}>
                 <SheetHeader className="px-6 py-4 border-b flex flex-row items-center justify-between">
                     <SheetTitle className="flex-1 min-w-0 text-base truncate">
                         {editing ? (
@@ -1024,6 +1097,9 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                         ) : draft.title}
                     </SheetTitle>
                     <div className="flex items-center gap-2 shrink-0">
+                        <Button className="rounded-md" size="sm" variant="ghost" onClick={() => setExpanded(e => !e)}>
+                            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                        </Button>
                         {confirming ? (
                             <>
                                 <span className="text-xs text-destructive">Supprimer ?</span>
@@ -1050,6 +1126,67 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                     </div>
                 </SheetHeader>
 
+                {/* Tab nav */}
+                <div className="px-4 pt-3 shrink-0 border-b">
+                    <ScrollableTabBar>
+                        {/* Général — fixe */}
+                        <button
+                            onClick={() => setAcTab('overview')}
+                            className={`relative flex items-center gap-1.5 px-3 py-2 text-sm z-10 transition-colors text-xs whitespace-nowrap cursor-pointer ${acTab === 'overview' ? 'font-semibold' : 'text-black'}`}
+                        >
+                            <span className="relative z-20 flex items-center gap-1.5"><LayoutGrid size={13} />Général</span>
+                            {acTab === 'overview' && <motion.div layoutId="activeACTab" className="absolute inset-0 border-b-2 border-black z-10" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+                        </button>
+
+                        {/* Onglets optionnels actifs */}
+                        <DndContext sensors={acTabSensors} collisionDetection={closestCenter} onDragEnd={handleACTabDragEnd} modifiers={[restrictToHorizontalAxis]}>
+                            <SortableContext items={activeACTabs} strategy={horizontalListSortingStrategy}>
+                                {ALL_AC_OPTIONAL_TABS.filter(t => activeACTabs.includes(t.mode))
+                                    .sort((a, b) => activeACTabs.indexOf(a.mode) - activeACTabs.indexOf(b.mode))
+                                    .map(({ mode, label, icon }) => {
+                                        const isEmpty =
+                                            (mode === 'todos'        && todoLists.length === 0)    ||
+                                            (mode === 'participants' && memberLinks.length === 0)   ||
+                                            (mode === 'projects'     && projectLinks.length === 0)  ||
+                                            (mode === 'agreements'   && agreementLinks.length === 0)||
+                                            (mode === 'location'     && !showLocation)              ||
+                                            (mode === 'comments'     && comments.length === 0)
+                                        return (
+                                            <SortableTabAC
+                                                key={mode}
+                                                mode={mode}
+                                                label={label}
+                                                icon={icon}
+                                                isActive={acTab === mode}
+                                                isEmpty={isEmpty}
+                                                onActivate={() => setAcTab(mode)}
+                                                onRemove={() => removeACTab(mode)}
+                                            />
+                                        )
+                                    })}
+                            </SortableContext>
+                        </DndContext>
+
+                        {/* Bouton + */}
+                        {ALL_AC_OPTIONAL_TABS.filter(t => !activeACTabs.includes(t.mode)).length > 0 && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors whitespace-nowrap shrink-0 ml-1">
+                                        <Plus size={12} />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="text-xs">
+                                    {ALL_AC_OPTIONAL_TABS.filter(t => !activeACTabs.includes(t.mode)).map(({ mode, label, icon }) => (
+                                        <DropdownMenuItem key={mode} onClick={() => { addACTab(mode); setAcTab(mode) }} className="flex items-center gap-2 text-xs">
+                                            {icon}{label}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+                    </ScrollableTabBar>
+                </div>
+
                 {loading ? (
                     <div className="flex flex-col gap-3 p-6">
                         {[1,2,3,4].map(i => <Skeleton key={i} className="h-10 w-full" />)}
@@ -1057,6 +1194,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                 ) : (
                     <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
 
+                        {acTab === 'overview' && (<>
                         {/* Statut + catégorie */}
                         <div className="flex flex-wrap items-center gap-2 rounded-xl">
                             <Badge variant="secondary" className="rounded-xl" style={{ backgroundColor: statusColor }}>
@@ -1169,78 +1307,13 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                             
                         )}
 
-                        <Separator />
-                        {(!showTodo || !showMembers || !showProjects || !showAgreements) && (
-                            <>
-                            <div>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline"><Plus /> Section</Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                        {!showTodo && (
-                                            <>
-                                                <DropdownMenuItem onClick={() => setShowTodo(true)}>
-                                                <ListChecks />
-                                                To do
-                                                </DropdownMenuItem>
-                                            </>
-                                        )}
-
-                                        {!showMembers && (
-                                            <>
-                                            <DropdownMenuItem onClick={() => setShowMembers(true)}>
-                                            <Users />
-                                            Participants
-                                            </DropdownMenuItem>
-                                            </>
-                                        )}
-
-                                        {!showProjects && (
-                                            <>
-                                            <DropdownMenuItem onClick={() => setShowProjects(true)}>
-                                                <Folder />
-                                                Projets
-                                            </DropdownMenuItem>
-                                            </>
-                                        )}
-                                        
-                                        {!showAgreements && (
-                                            <DropdownMenuItem onClick={() => setShowAgreements(true)}>
-                                            <File />
-                                            Conventions
-                                            </DropdownMenuItem>
-                                        )}
-
-                                        {!showLocation && (
-                                            <DropdownMenuItem onClick={() => setshowLocation(true)}>
-                                            <MapPinned />
-                                            Localisation
-                                            </DropdownMenuItem>
-                                        )}
-                                        
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
-                            </>
-                        )}
-                        
+                        </>)}
 
                         {/* To-do lists */}
-                        { showTodo && (
-                            <>
+                        {acTab === 'todos' && (
                             <section className="flex flex-col gap-4">
                                 <div className="flex items-center justify-between">
-                                    <div className='flex row items-center'>
-                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">To-do </p>
-                                        {toDoExtended ? (
-                                             <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={()=> setToDoExtended(false)}><Eye/></Button>
-                                        ) : 
-                                             <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setToDoExtended(true)}><EyeClosed/></Button>
-                                        }
-                                       
-                                    </div>
-                                    
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tâches</p>
                                     <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowNewList(v => !v)}>
                                         <Plus size={11} />Nouvelle liste
                                     </Button>
@@ -1262,49 +1335,35 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                 )}
 
                                 {todoLists.length > 0 ? (
-                                    toDoExtended && (
-                                        
-                                        <div className="flex flex-col gap-5">
-                                            {todoLists.map(list => (
-                                                <TodoSection
-                                                    key={list.id}
-                                                    list={list}
-                                                    onToggle={toggleTodo}
-                                                    onDeleteItem={deleteTodoItem}
-                                                    onAddItem={addTodoItem}
-                                                    onDeleteList={deleteList}
-                                                    onDueDateChange={updateDueDate}
-                                                />
-                                            ))}
-                                        </div>
-                                    )
-                                    
+                                    <div className="flex flex-col gap-5">
+                                        {todoLists.map(list => (
+                                            <TodoSection
+                                                key={list.id}
+                                                list={list}
+                                                onToggle={toggleTodo}
+                                                onDeleteItem={deleteTodoItem}
+                                                onAddItem={addTodoItem}
+                                                onDeleteList={deleteList}
+                                                onDueDateChange={updateDueDate}
+                                            />
+                                        ))}
+                                    </div>
                                 ) : (
                                     !showNewList && (
                                         <p className="text-xs text-muted-foreground italic">Aucune liste de tâches</p>
                                     )
                                 )}
                             </section>
-                            <Separator />
-                            </>
                         )}
                         
 
                         {/* Participants */}
-                        { showMembers && (
-                            <>
+                        {acTab === 'participants' && (
                             <section className="flex flex-col gap-3">
                                 <div className="flex items-center justify-between">
-                                    <div className='flex row items-center'>
-                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
-                                        {membersExtended ? (
-                                            <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setMembersExtended(false)}><Eye /></Button>
-                                        ) : (
-                                            <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setMembersExtended(true)}><EyeClosed /></Button>
-                                        )}
-                                    </div>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
                                     <div className="flex items-center gap-1">
-                                        {membersExtended && selectedLinks.length > 0 && (
+                                        {selectedLinks.length > 0 && (
                                             <>
                                                 <span className="text-xs text-muted-foreground mr-1">{selectedLinks.length} sélectionné{selectedLinks.length > 1 ? 's' : ''}</span>
                                                 <Tooltip>
@@ -1333,7 +1392,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                 </Tooltip>
                                             </>
                                         )}
-                                        {membersExtended && !showCreateMember && (
+                                        {!showCreateMember && (
                                             <Button variant="ghost" size="sm" className="h-6 text-xs gap-1"
                                                 onClick={() => setShowCreateMember(true)}>
                                                 <Plus size={11} />Nouveau contact
@@ -1342,7 +1401,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                     </div>
                                 </div>
 
-                                {membersExtended && memberLinks.length > 0 && (
+                                {memberLinks.length > 0 && (
                                     <div>
                                         <Table className="text-xs">
                                             <TableHeader>
@@ -1466,7 +1525,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                     </div>
                                 )}
 
-                                {membersExtended && showCreateMember && (
+                                {showCreateMember && (
                                     <MemberQuickCreateForm
                                         partners={allPartners}
                                         role={roleToAdd}
@@ -1479,7 +1538,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                     />
                                 )}
 
-                                {membersExtended && !showCreateMember && availableMembers.length > 0 && (
+                                {!showCreateMember && availableMembers.length > 0 && (
                                     <div className="flex gap-2">
                                         <MemberSearchInput
                                             members={availableMembers}
@@ -1495,27 +1554,17 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                     </div>
                                 )}
                             </section>
-                            <Separator />
-                            </>
                         )}
                         
 
                         
 
                         {/* Projets liés */}
-                        { showProjects && (
-                            <>
+                        {acTab === 'projects' && (
                             <section className="flex flex-col gap-3">
-                                <div className='flex row items-center'>
-                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Projets liés</p>
-                                    {projectsExtended ? (
-                                        <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setProjectsExtended(false)}><Eye /></Button>
-                                    ) : (
-                                        <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setProjectsExtended(true)}><EyeClosed /></Button>
-                                    )}
-                                </div>
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Projets liés</p>
 
-                                {projectsExtended && projectLinks.length > 0 && (
+                                {projectLinks.length > 0 && (
                                     <div className="flex flex-col gap-1">
                                         {projectLinks.map(l => (
                                             <Popover key={l.id}>
@@ -1553,7 +1602,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                     </div>
                                 )}
 
-                                {projectsExtended && availableProjects.length > 0 && (
+                                {availableProjects.length > 0 && (
                                     <div className="flex gap-2">
                                         <Select value={projectToAdd} onValueChange={setProjectToAdd}>
                                             <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue placeholder="Lier un projet" /></SelectTrigger>
@@ -1567,29 +1616,17 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                     </div>
                                 )}
                             </section>
-                            <Separator />
-                            </>
                         )}
                        
 
                         
 
                         {/* Conventions liées */}
-                        { showAgreements && (
-                                <>
+                        {acTab === 'agreements' && (
                                 <section className="flex flex-col gap-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className='flex row items-center'>
-                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Conventions liées</p>
-                                            {agreementsExtended ? (
-                                                <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setAgreementsExtended(false)}><Eye /></Button>
-                                            ) : (
-                                                <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setAgreementsExtended(true)}><EyeClosed /></Button>
-                                            )}
-                                        </div>
-                                    </div>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Conventions liées</p>
 
-                                    {agreementsExtended && agreementLinks.length > 0 && (
+                                    {agreementLinks.length > 0 && (
                                         <div className="flex flex-col gap-1">
                                             {agreementLinks.map(l => {
                                                 const agrPartner = partnerMap.get(l.agreement.partner_id)
@@ -1686,7 +1723,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                         </div>
                                     )}
 
-                                    {agreementsExtended && availableAgreements.length > 0 && (
+                                    {availableAgreements.length > 0 && (
                                         <AgreementSearchInput
                                             agreements={availableAgreements}
                                             partners={allPartners}
@@ -1695,7 +1732,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                         />
                                     )}
 
-                                    {agreementsExtended && availableAgreements.length === 0 && agreementLinks.length === 0 && (
+                                    {availableAgreements.length === 0 && agreementLinks.length === 0 && (
                                         <p className="text-xs text-muted-foreground italic">
                                             {linkedProjectIds.length > 0
                                                 ? 'Toutes les conventions des projets liés ont été rattachées'
@@ -1703,22 +1740,13 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                         </p>
                                     )}
                                 </section>
-                                <Separator/>
-                                </>
                         )}
 
                         {/* Localisation */}
-                        {showLocation && (
+                        {acTab === 'location' && (
                             <section className="flex flex-col gap-3">
                                     <div className="flex items-center justify-between">
-                                        <div className='flex row items-center'>
-                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Localisation</p>
-                                            {locationExtended ? (
-                                                <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setLocationExtended(false)}><Eye /></Button>
-                                            ) : (
-                                                <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setLocationExtended(true)}><EyeClosed /></Button>
-                                            )}
-                                        </div>
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Localisation</p>
                                         <Button
                                             variant="ghost"
                                             size="xs"
@@ -1735,41 +1763,28 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                         </Button>
                                     </div>
 
-                                    {locationExtended && (
-                                        <>
-                                            <AddressAutocomplete 
-                                                location={location} 
-                                                setLocation={setLocation} 
-                                                setCoords = {setCoords}
-                                                onSelect={async (address, lat, lon) => {
-                                                    await updateActionCard(card.id, { full_address: address, lat, lon })
-                                                    onUpdated({ ...card, full_address: address, lat, lon })
-                                                }}
-                                            />
+                                    <AddressAutocomplete
+                                        location={location}
+                                        setLocation={setLocation}
+                                        setCoords = {setCoords}
+                                        onSelect={async (address, lat, lon) => {
+                                            await updateActionCard(card.id, { full_address: address, lat, lon })
+                                            onUpdated({ ...card, full_address: address, lat, lon })
+                                        }}
+                                    />
 
-                                            {coords !== null && (
-                                                <MiniMap coords={coords} />
-                                            )}
-
-                                        <Separator/>
-                                        </>
+                                    {coords !== null && (
+                                        <MiniMap coords={coords} />
                                     )}
                             </section>
                         )}
 
                         
 
-                        <section className="flex flex-col gap-3">
-                            <div className='flex row items-center'>
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Commentaires</p>
-                                {commentsExtended ? (
-                                    <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setCommentsExtended(false)}><Eye /></Button>
-                                ) : (
-                                    <Button variant="outline" size="xs" className="ml-2 rounded-md" onClick={() => setCommentsExtended(true)}><EyeClosed /></Button>
-                                )}
-                            </div>
+                        {acTab === 'comments' && <section className="flex flex-col gap-3">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Commentaires</p>
                             {/* Nouveau commentaire */}
-                            {commentsExtended && <div className="flex gap-2 mt-1">
+                            <div className="flex gap-2 mt-1">
                                 <Textarea
                                     value={newComment}
                                     onChange={e => setNewComment(e.target.value)}
@@ -1784,9 +1799,9 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                 >
                                     <Check size={13} />
                                 </Button>
-                            </div>}
+                            </div>
 
-                            {commentsExtended && <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-2">
                                 {comments.map(comment => {
                                     console.log('currentUser email:', currentUser?.email)
                                     console.log('comment owner email:', comment.owner.email)
@@ -1872,8 +1887,8 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                     )
                                 }
                                 )}
-                            </div>}
-                        </section>
+                            </div>
+                        </section>}
 
                     </div>
                 )}
