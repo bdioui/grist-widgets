@@ -665,11 +665,17 @@ export default function Dashboard() {
 
                 <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
                     <style>{`
-                        .react-calendar-heatmap .color-empty        { fill: oklch(94.6% 0.033 307.174); }
-                        .react-calendar-heatmap .color-scale-1      { fill: oklch(90.2% 0.063 306.703); }
-                        .react-calendar-heatmap .color-scale-2      { fill: oklch(82.7% 0.119 306.383); }
-                        .react-calendar-heatmap .color-scale-3      { fill: oklch(71.4% 0.203 305.504); }
-                        .react-calendar-heatmap .color-scale-4      { fill: oklch(55.8% 0.288 302.321); }
+                        .react-calendar-heatmap .color-empty    { fill: #f5f3ff; }
+                        .react-calendar-heatmap .color-scale-1  { fill: #ede9fe; }
+                        .react-calendar-heatmap .color-scale-2  { fill: #ddd6fe; }
+                        .react-calendar-heatmap .color-scale-3  { fill: #c4b5fd; }
+                        .react-calendar-heatmap .color-scale-4  { fill: #a78bfa; }
+                        .react-calendar-heatmap .color-scale-5  { fill: #8b5cf6; }
+                        .react-calendar-heatmap .color-scale-6  { fill: #7c3aed; }
+                        .react-calendar-heatmap .color-scale-7  { fill: #6d28d9; }
+                        .react-calendar-heatmap .color-scale-8  { fill: #5b21b6; }
+                        .react-calendar-heatmap .color-scale-9  { fill: #4c1d95; }
+                        .react-calendar-heatmap .color-scale-10 { fill: #2e1065; }
                     `}</style>
                     <div className="flex items-center justify-between">
                         <p className="text-sm font-medium">Heat Map projet</p>
@@ -689,10 +695,16 @@ export default function Dashboard() {
                                 const count = (value as any)?.count as number | undefined
                                 if (!count) return 'color-empty'
                                 const ratio = count / max
-                                if (ratio < 0.25) return 'color-scale-1'
-                                if (ratio < 0.5)  return 'color-scale-2'
-                                if (ratio < 0.75) return 'color-scale-3'
-                                return 'color-scale-4'
+                                if (ratio < 0.10) return 'color-scale-1'
+                                if (ratio < 0.20) return 'color-scale-2'
+                                if (ratio < 0.30) return 'color-scale-3'
+                                if (ratio < 0.40) return 'color-scale-4'
+                                if (ratio < 0.50) return 'color-scale-5'
+                                if (ratio < 0.60) return 'color-scale-6'
+                                if (ratio < 0.70) return 'color-scale-7'
+                                if (ratio < 0.80) return 'color-scale-8'
+                                if (ratio < 0.90) return 'color-scale-9'
+                                return 'color-scale-10'
                             }
                         })()}
                     />
