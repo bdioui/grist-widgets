@@ -1370,6 +1370,11 @@ export async function getProjectMilestones(projectId: number): Promise<ProjectMi
         .filter(m => m.project_id === projectId)
 }
 
+export async function getAllProjectMilestones(): Promise<ProjectMilestone[]> {
+    if (USE_MOCK) return [...mockProjectMilestones]
+    return normalizeProjectMilestones(await fetchTable(T.project_milestone))
+}
+
 export async function addProjectMilestone(projectId: number, fields: Omit<ProjectMilestone, 'id' | 'project_id'>): Promise<ProjectMilestone> {
     if (USE_MOCK) {
         const milestone: ProjectMilestone = {
