@@ -47,13 +47,6 @@ import type {
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
-// Grist Date columns store values as Unix timestamps (seconds since epoch)
-function isoToGristDate(iso: string): number | null {
-    if (!iso) return null
-    const d = new Date(iso)
-    return isNaN(d.getTime()) ? null : Math.floor(d.getTime() / 1000)
-}
-
 // --- IDs des tables Grist (Grist capitalise automatiquement la 1ère lettre) ---
 // Si vos tables ont un ID différent, modifiez uniquement ici.
 const T = {
@@ -507,7 +500,7 @@ export async function addToDoItemToList(listId: number, content: string, due_dat
         return item
     }
     const fields: Record<string, unknown> = { list_id: listId, content, status_id: 8 }
-    if (due_date) fields.due_date = isoToGristDate(due_date)
+    if (due_date) fields.due_date = due_date
     const id = await addRecord(T.to_do_item, fields)
     return { id, list_id: listId, content, status_id: 8, start_date: '', end_time: '', due_date }
 }

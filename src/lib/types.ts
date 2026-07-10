@@ -286,8 +286,8 @@ export type ToDoItem = {
     list_id: number
     content: string
     status_id: number
-    start_date: string
-    end_time: string
+    start_date?: string
+    end_time?: string
     due_date: string
 }
 
