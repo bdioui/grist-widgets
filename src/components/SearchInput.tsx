@@ -20,6 +20,8 @@ type SearchInputProps<T extends { id: number }> = {
     orderBy?: string
     dropdownClassName?: string
     selectedIds?: number[]
+    inline?: boolean
+    dropdownUp?: boolean
 }
 
 export default function SearchInput<T extends { id: number }>({
@@ -34,6 +36,8 @@ export default function SearchInput<T extends { id: number }>({
     orderBy,
     dropdownClassName,
     selectedIds,
+    inline = false,
+    dropdownUp = false,
 }: SearchInputProps<T>) {
     const [query,   setQuery]   = useState('')
     const [open,    setOpen]    = useState(false)
@@ -73,18 +77,28 @@ export default function SearchInput<T extends { id: number }>({
         }
     }
 
+    const showResults = inline ? sorted.length > 0 : (open && sorted.length > 0)
+
     return (
         <div className="relative flex-1">
             <Input
                 value={displayValue}
                 onChange={e => { setQuery(e.target.value); setOpen(true) }}
                 onFocus={() => { setFocused(true); setQuery(''); setOpen(true) }}
-                onBlur={() => setTimeout(() => { setOpen(false); setFocused(false); setQuery('') }, 150)}
+                onBlur={inline ? undefined : () => setTimeout(() => { setOpen(false); setFocused(false); setQuery('') }, 150)}
+                onKeyDown={e => e.stopPropagation()}
                 placeholder={placeholder}
                 className="h-8 text-xs"
             />
-            {open && sorted.length > 0 && (
-                <div className={`absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden${dropdownClassName ? ` ${dropdownClassName}` : ''}`}>
+            {showResults && (
+                <div
+                    className={inline
+                        ? `w-full${dropdownClassName ? ` ${dropdownClassName}` : ''}`
+                        : `absolute z-50 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden${dropdownUp ? ' bottom-full mb-1' : ' mt-1'}${dropdownClassName ? ` ${dropdownClassName}` : ''}`
+                    }
+                    onPointerMove={e => e.stopPropagation()}
+                    onPointerLeave={e => e.stopPropagation()}
+                >
                     <ul className="max-h-60 overflow-y-auto py-1">
                         {sorted.map((item, i) => {
                             const meta = groupBy ? groupBy(item) : null

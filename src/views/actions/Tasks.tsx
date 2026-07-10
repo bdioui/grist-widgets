@@ -210,7 +210,14 @@ export default function Tasks() {
             getAllAxisActionCards(),
             getAllMemberActionCards(),
         ]).then(([data, statuses, axes, members, partners, categories, axLinks, memLinks]) => {
-            setCards(data.map(toCardData))
+            const memberMap = new Map(members.map(m => [m.id, m]))
+            setCards(data.map(card => ({
+                ...toCardData(card),
+                responsables: memLinks
+                    .filter(l => l.action_card_id === card.id && l.role === 'Responsable')
+                    .map(l => memberMap.get(l.member_id))
+                    .filter(Boolean) as import('./ActionCard').Owner[],
+            })))
             setStatuses(statuses.filter(s => s.context === 'action_card'))
             setAllAxes(axes)
             setAllMembers(members)
@@ -233,12 +240,12 @@ export default function Tasks() {
             if (!selectedAxeIds.some(id => cardAxes.includes(id))) return false
         }
         if (myCardsOnly && currentUser) {
-            if (card.owner?.id !== currentUser.id) return false
+            const cardResp = memberLinks.filter(l => l.action_card_id === card.id && l.role === 'Responsable').map(l => l.member_id)
+            if (!cardResp.includes(currentUser.id)) return false
         }
         if (selectedMemberIds.length > 0) {
-            const cardMembers = memberLinks.filter(l => l.action_card_id === card.id).map(l => l.member_id)
-            const isOwner = card.owner && selectedMemberIds.includes(card.owner.id)
-            if (!isOwner && !selectedMemberIds.some(id => cardMembers.includes(id))) return false
+            const cardResp = memberLinks.filter(l => l.action_card_id === card.id && l.role === 'Responsable').map(l => l.member_id)
+            if (!selectedMemberIds.some(id => cardResp.includes(id))) return false
         }
         if (selectedCategoryIds.length > 0) {
             if (!selectedCategoryIds.includes(card.category.id)) return false

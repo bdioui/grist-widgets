@@ -39,7 +39,7 @@ import {
     getProjectPartners, addProjectPartner, removeProjectPartner, updateProjectPartner,
     getProjectMilestones, addProjectMilestone, updateProjectMilestone, deleteProjectMilestone,
     getActionCardsByProject, linkActionCardToProject, removeProjectFromCard,
-    getActionCardsFull, createActionCardFull, updateProjectMember, getCategories,
+    getActionCardsFull, createActionCardFull, updateProjectMember, updateProjectMemberParticipationStatus, getCategories,
     addMember, addPartner,
     getTimeEntries, addTimeEntry, removeTimeEntry, updateTimeEntry,
     getAllProjectMembers,
@@ -55,6 +55,7 @@ import { type ProjectCall, type Project, type FinancialAgreement, type Axis, typ
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
+import MemberSearchInput from '@/components/MemberSearchInput'
 import { ScrollableTabBar } from '@/components/ScrollableTabBar'
 
 // --- Couleurs de statut ---
@@ -954,68 +955,6 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
 
 // --- Composant recherche membre avec suggestions ---
 
-type MemberSearchInputProps = {
-    members: Member[]
-    partners: Partner[]
-    onSelect: (member: Member) => void
-}
-
-function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputProps) {
-    const [query, setQuery]   = useState('')
-    const [open, setOpen]     = useState(false)
-    const partnerMap = new Map(partners.map(p => [p.id, p]))
-
-    const filtered = query.trim().length === 0 ? members : members.filter(m => {
-        const full = `${m.first_name} ${m.last_name}`.toLowerCase()
-        const partner = partnerMap.get(m.partner_id)?.name.toLowerCase() ?? ''
-        return full.includes(query.toLowerCase()) || partner.includes(query.toLowerCase())
-    })
-
-    function select(m: Member) {
-        onSelect(m)
-        setQuery('')
-        setOpen(false)
-    }
-
-    return (
-        <div className="relative flex-1">
-            <Input
-                value={query}
-                onChange={e => { setQuery(e.target.value); setOpen(true) }}
-                onFocus={() => setOpen(true)}
-                onBlur={() => setTimeout(() => setOpen(false), 150)}
-                placeholder="Ajouter un membre..."
-                className="h-8 text-xs"
-            />
-            {open && filtered.length > 0 && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden">
-                    <ul className="max-h-48 overflow-y-auto py-1">
-                        {filtered.map(m => {
-                            const partner = partnerMap.get(m.partner_id)
-                            return (
-                                <li
-                                    key={m.id}
-                                    onMouseDown={() => select(m)}
-                                    className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted"
-                                >
-                                    <span>{m.first_name} {m.last_name}</span>
-                                    {partner && (
-                                        <span
-                                            className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
-                                            style={partner.color ? { backgroundColor: partner.color } : {}}
-                                        >
-                                            {partner.name}
-                                        </span>
-                                    )}
-                                </li>
-                            )
-                        })}
-                    </ul>
-                </div>
-            )}
-        </div>
-    )
-}
 // --- Formulaire ajout partenaire projet ---
 
 type ProjectPartnerFormProps = {
@@ -1602,7 +1541,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [loadingLinkAgreements, setLoadingLinkAgreements] = useState(false)
     type TabDef = { mode: detailViewMode; label: string; icon: React.ReactNode }
     const ALL_OPTIONAL_TABS: TabDef[] = [
-        { mode: 'participants', label: 'Participants',  icon: <Users size={13} /> },
+        { mode: 'participants', label: 'Membres',  icon: <Users size={13} /> },
         { mode: 'partners',     label: 'Partenaires',  icon: <Building2 size={13} /> },
         { mode: 'kpis',         label: 'Indicateurs',  icon: <BarChart2 size={13} /> },
         { mode: 'tasks',        label: 'Actions',      icon: <ListChecks size={13} /> },
@@ -1848,10 +1787,17 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
         setEditingRolePmId(null)
     }
 
+    async function handleParticipationStatusChange(pmId: number, statusId: number | null) {
+        await updateProjectMemberParticipationStatus(pmId, statusId)
+        setProjectMembers(prev => prev.map(pm => pm.id === pmId ? { ...pm, participation_status_id: statusId ?? undefined } : pm))
+    }
+
     if (!project) return null
 
     const linkedMemberIds = projectMembers.map(pm => pm.member_id)
     const availableMembers = members.filter(m => !linkedMemberIds.includes(m.id))
+    const participationStatuses = statuses.filter(s => s.context === 'participation')
+    const hasParticipants = projectMembers.some(pm => pm.role === 'Participant')
 
     const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
     const totalGrant  = agreements.reduce((s, a) => s + a.grant, 0)
@@ -2178,7 +2124,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     <section className="flex flex-col gap-3 bg-white border border-border rounded-xl p-4">
                         <div className="flex items-center justify-between group/header">
                             <div className="flex items-center gap-2">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants {projectMembers.length > 0 && ( <span>({projectMembers.length})</span>)}</p>
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Membres {projectMembers.length > 0 && ( <span>({projectMembers.length})</span>)}</p>
                             </div>
                             {selectedMembers.length > 0 && (
                                 <div className="flex items-center gap-1">
@@ -2225,6 +2171,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Nom</TableHead>
                                         <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Rôle</TableHead>
                                         <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Partenaire</TableHead>
+                                        {hasParticipants && <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Participation</TableHead>}
                                         <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground text-right">Jours</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -2283,6 +2230,25 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                                         </Tooltip>
                                                     )}
                                                 </TableCell>
+                                                {hasParticipants && (
+                                                    <TableCell className="px-1 py-1.5" onClick={e => e.stopPropagation()}>
+                                                        {pm.role === 'Participant' && (
+                                                            <Select
+                                                                value={pm.participation_status_id?.toString() ?? ''}
+                                                                onValueChange={v => handleParticipationStatusChange(pm.id, v ? Number(v) : null)}
+                                                            >
+                                                                <SelectTrigger className="h-5 text-xs w-28 border-none p-0 shadow-none text-muted-foreground hover:text-foreground">
+                                                                    <SelectValue placeholder="—" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {participationStatuses.map(s => (
+                                                                        <SelectItem key={s.id} value={s.id.toString()}>{s.label}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        )}
+                                                    </TableCell>
+                                                )}
                                                 <TableCell className="px-2 py-1.5 text-right whitespace-nowrap">
                                                     {total_entries > 0 && (
                                                         <span className="font-medium text-gray-700">{total_entries}</span>
@@ -2300,7 +2266,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     <MemberSearchInput
                                         members={availableMembers}
                                         partners={partners}
-                                        onSelect={m => handleAddMember(m.id)}
+                                        linkedMembers={projectMembers.map(pm => members.find(m => m.id === pm.member_id)!).filter(Boolean)}
+                                        onConfirm={ids => ids.forEach(id => handleAddMember(id))}
                                     />
                                     <Select value={roleToAdd} onValueChange={setRoleToAdd}>
                                         <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>

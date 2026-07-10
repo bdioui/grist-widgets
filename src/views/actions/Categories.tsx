@@ -260,7 +260,14 @@ export default function Categories() {
             getAllMemberActionCards(),
         ])
             .then(([data, axes, members, partners, axLinks, memLinks]) => {
-                const mapped = data.map(toCardData)
+                const memberMap = new Map(members.map(m => [m.id, m]))
+                const mapped = data.map(card => ({
+                    ...toCardData(card),
+                    responsables: memLinks
+                        .filter(l => l.action_card_id === card.id && l.role === 'Responsable')
+                        .map(l => memberMap.get(l.member_id))
+                        .filter(Boolean) as import('./ActionCard').Owner[],
+                }))
                 const groups = buildColumnGroups(mapped)
                 const allIds = mapped.map(c => c.category.id)
 
@@ -401,13 +408,12 @@ export default function Categories() {
             if (!selectedAxeIds.some(id => cardAxes.includes(id))) return false
         }
         if (myCardsOnly && currentUser) {
-            if (card.owner?.id !== currentUser.id) return false
+            const cardResp = memberLinks.filter(l => l.action_card_id === card.id && l.role === 'Responsable').map(l => l.member_id)
+            if (!cardResp.includes(currentUser.id)) return false
         }
         if (selectedMemberIds.length > 0) {
-            const cardMembers = memberLinks.filter(l => l.action_card_id === card.id).map(l => l.member_id)
-            const isOwner = card.owner && selectedMemberIds.includes(card.owner.id)
-            const isMember = selectedMemberIds.some(id => cardMembers.includes(id))
-            if (!isOwner && !isMember) return false
+            const cardResp = memberLinks.filter(l => l.action_card_id === card.id && l.role === 'Responsable').map(l => l.member_id)
+            if (!selectedMemberIds.some(id => cardResp.includes(id))) return false
         }
         return true
     })

@@ -49,6 +49,12 @@ export const mockStatuses: Status[] = [
     { id: 15, label: 'Active', context: 'financial_agreement' },
     { id: 16, label: 'Soldée', context: 'financial_agreement' },
     { id: 17, label: 'Annulée', context: 'financial_agreement' },
+    // --- Participation ---
+    { id: 18, label: 'Inscrit', context: 'participation' },
+    { id: 19, label: 'Confirmé', context: 'participation' },
+    { id: 20, label: 'Présent', context: 'participation' },
+    { id: 21, label: 'Absent', context: 'participation' },
+    { id: 22, label: 'Excusé', context: 'participation' },
 ]
 
 export const mockCategories: Category[] = [
@@ -426,6 +432,22 @@ export const mockMemberActionCards: MemberActionCard[] = [
     { id: 30, member_id: 4, action_card_id: 32, role: 'Responsable' },
     { id: 31, member_id: 14, action_card_id: 32, role: 'Contributeur' },
     { id: 32, member_id: 9, action_card_id: 32, role: 'Observateur' },
+    // Multi-responsables pour tester le +N
+    { id: 33, member_id: 3, action_card_id: 1, role: 'Responsable' },
+    { id: 34, member_id: 5, action_card_id: 1, role: 'Responsable' },
+    { id: 35, member_id: 4, action_card_id: 9, role: 'Responsable' },
+    { id: 36, member_id: 12, action_card_id: 9, role: 'Responsable' },
+    { id: 37, member_id: 2, action_card_id: 13, role: 'Responsable' },
+    // Participants avec statut de participation (carte 1 = Séminaire de lancement)
+    { id: 38, member_id: 6,  action_card_id: 1, role: 'Participant', participation_status_id: 20 },
+    { id: 39, member_id: 7,  action_card_id: 1, role: 'Participant', participation_status_id: 19 },
+    { id: 40, member_id: 8,  action_card_id: 1, role: 'Participant', participation_status_id: 21 },
+    { id: 41, member_id: 9,  action_card_id: 1, role: 'Participant', participation_status_id: 18 },
+    { id: 42, member_id: 10, action_card_id: 1, role: 'Participant', participation_status_id: 22 },
+    // Participants carte 7 = Réunion comité de pilotage
+    { id: 43, member_id: 4,  action_card_id: 7, role: 'Participant', participation_status_id: 19 },
+    { id: 44, member_id: 5,  action_card_id: 7, role: 'Participant', participation_status_id: 18 },
+    { id: 45, member_id: 11, action_card_id: 7, role: 'Participant' },
 ]
 
 export const mockAxisActionCards: AxisActionCard[] = [
@@ -552,6 +574,11 @@ export const mockProjectMembers: ProjectMember[] = [
     { id: 29, project_id: 12, member_id: 5, role: 'Equipe' },
     { id: 30, project_id: 12, member_id: 12, role: 'Partenaire' },
     { id: 31, project_id: 12, member_id: 17, role: 'Partenaire' },
+    // Projet 1 — Participants (pour test suivi de participation)
+    { id: 32, project_id: 1, member_id: 6,  role: 'Participant', participation_status_id: 20 },
+    { id: 33, project_id: 1, member_id: 8,  role: 'Participant', participation_status_id: 19 },
+    { id: 34, project_id: 1, member_id: 9,  role: 'Participant' },
+    { id: 35, project_id: 1, member_id: 10, role: 'Participant', participation_status_id: 21 },
 ]
 
 export const mockAgreementMembers: AgreementMember[] = [

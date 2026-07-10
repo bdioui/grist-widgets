@@ -257,7 +257,13 @@ export function normalizeTimeEntry(rows: Record<string, unknown>[]): TimeEntry[]
 }
 
 export function normalizeProjectMembers(rows: Record<string, unknown>[]): ProjectMember[] {
-    return rows.map(r => ({ id: num(r.id), member_id: num(r.member_id), project_id: num(r.project_id), role: str(r.role) }))
+    return rows.map(r => ({
+        id: num(r.id),
+        member_id: num(r.member_id),
+        project_id: num(r.project_id),
+        role: str(r.role),
+        ...(r.participation_status_id != null ? { participation_status_id: num(r.participation_status_id) } : {}),
+    }))
 }
 
 export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): FinancialAgreement[] {
@@ -371,6 +377,7 @@ export function normalizeMemberActionCards(rows: Record<string, unknown>[]): Mem
         member_id: num(r.member_id),
         action_card_id: num(r.action_card_id),
         role: str(r.role),
+        ...(r.participation_status_id != null ? { participation_status_id: num(r.participation_status_id) } : {}),
     }))
 }
 

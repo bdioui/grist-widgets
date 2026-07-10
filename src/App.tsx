@@ -14,6 +14,7 @@ import { Menu, Download, RefreshCw, UserCircle, LogOut, Bell } from 'lucide-reac
 import { type MemberFull, type Project, type ProjectMember, type ActionCardFull, type Comment, type FinancialAgreement, type ProjectMilestone, type Expanse, type MemberActionCard } from '@/lib/types'
 import { getMembersFull, getProjects, getActionCardsFull, getAllProjectMembers, getAllMemberActionCards, getComments, getFinancialAgreements, getAllProjectMilestones, getExpanses } from '@/lib/api'
 import { UserContext } from '@/lib/userContext'
+import { Toaster } from 'sonner'
 import ExportModal from '@/components/ExportModal'
 
 const STORAGE_KEY = 'grist_current_member_id'
@@ -402,6 +403,7 @@ export default function App() {
                     onClose={() => setOpenProject(null)}
                 />
             )}
+    <Toaster position="bottom-right" richColors closeButton />
     </UserContext.Provider>
   )
 }

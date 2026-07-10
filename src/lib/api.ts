@@ -47,6 +47,13 @@ import type {
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
+// Grist Date columns store values as Unix timestamps (seconds since epoch)
+function isoToGristDate(iso: string): number | null {
+    if (!iso) return null
+    const d = new Date(iso)
+    return isNaN(d.getTime()) ? null : Math.floor(d.getTime() / 1000)
+}
+
 // --- IDs des tables Grist (Grist capitalise automatiquement la 1ère lettre) ---
 // Si vos tables ont un ID différent, modifiez uniquement ici.
 const T = {
@@ -405,6 +412,15 @@ export async function updateProjectMember(id: number, role: string): Promise<voi
     await updateRecord(T.project_member, id, { role })
 }
 
+export async function updateProjectMemberParticipationStatus(id: number, participation_status_id: number | null): Promise<void> {
+    if (USE_MOCK) {
+        const pm = mockProjectMembers.find(m => m.id === id)
+        if (pm) pm.participation_status_id = participation_status_id ?? undefined
+        return
+    }
+    await updateRecord(T.project_member, id, { participation_status_id })
+}
+
 // Declaration des temps
 
 export async function getTimeEntries(): Promise<TimeEntry[]> { return USE_MOCK ? mockTimeEntry : normalizeTimeEntry(await fetchTable(T.time_entry)) }
@@ -491,7 +507,7 @@ export async function addToDoItemToList(listId: number, content: string, due_dat
         return item
     }
     const fields: Record<string, unknown> = { list_id: listId, content, status_id: 8 }
-    if (due_date) fields.due_date = due_date
+    if (due_date) fields.due_date = isoToGristDate(due_date)
     const id = await addRecord(T.to_do_item, fields)
     return { id, list_id: listId, content, status_id: 8, start_date: '', end_time: '', due_date }
 }
@@ -505,6 +521,15 @@ export async function addToDoListToCard(cardId: number, title: string): Promise<
     }
     const id = await addRecord(T.to_do_list, { action_card_id: cardId, title })
     return { id, action_card_id: cardId, title, items: [] }
+}
+
+export async function updateToDoList(listId: number, title: string): Promise<void> {
+    if (USE_MOCK) {
+        const list = mockToDoLists.find(l => l.id === listId)
+        if (list) list.title = title
+        return
+    }
+    await updateRecord(T.to_do_list, listId, { title })
 }
 
 export async function deleteToDoList(listId: number): Promise<void> {
@@ -546,6 +571,15 @@ export async function updateMemberRole(linkId: number, role: string): Promise<vo
         return
     }
     await updateRecord(T.member_action_card, linkId, { role })
+}
+
+export async function updateParticipationStatus(linkId: number, participation_status_id: number | null): Promise<void> {
+    if (USE_MOCK) {
+        const link = mockMemberActionCards.find(l => l.id === linkId)
+        if (link) link.participation_status_id = participation_status_id ?? undefined
+        return
+    }
+    await updateRecord(T.member_action_card, linkId, { participation_status_id })
 }
 
 export async function addProjectToCard(cardId: number, projectId: number): Promise<ProjectActionCard & { project: Project }> {

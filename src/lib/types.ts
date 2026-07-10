@@ -78,6 +78,7 @@ export type ProjectMember = {
     member_id: number
     project_id: number
     role: string
+    participation_status_id?: number
 }
 
 export type TimeEntry = {
@@ -250,7 +251,8 @@ export type MemberActionCard = {
     id: number
     member_id: number
     action_card_id: number
-    role: string // 'responsable' | 'contributeur' | 'observateur'
+    role: string // 'Responsable' | 'Contributeur' | 'Observateur' | 'Participant'
+    participation_status_id?: number
 }
 
 export type AxisActionCard = {

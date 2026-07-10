@@ -24,8 +24,8 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, C
 import {
     getMemberActionCardsByCard, getProjectActionCardsByCard, getToDoListsWithItemsByCard,
     getStatuses, getCategories, getMembers, getProjects, getPartners, getFinancialAgreements,
-    updateActionCard, updateToDoItem, addToDoItemToList, addToDoListToCard, deleteToDoList,
-    addMemberToCard, removeMemberFromCard, updateMemberRole, addProjectToCard, removeProjectFromCard,
+    updateActionCard, updateToDoItem, updateToDoList, addToDoItemToList, addToDoListToCard, deleteToDoList,
+    addMemberToCard, removeMemberFromCard, updateMemberRole, updateParticipationStatus, addProjectToCard, removeProjectFromCard,
     getAgreementActionCardsByCard, addAgreementToCard, removeAgreementFromCard,
     deleteActionCard,
     getCommentsFull, createComment, updateComment, deleteComment,
@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import SearchInput from '@/components/SearchInput'
+import MemberSearchInput from '@/components/MemberSearchInput'
 import { ScrollableTabBar } from '@/components/ScrollableTabBar'
 
 const MEMBER_STATUSES = [
@@ -74,6 +75,7 @@ export type ActionCardData = {
         parent?: { id: number; title: string; color?: string | null }
     }
     owner?: Owner
+    responsables?: Owner[]
     start_date?: string
     end_date?: string
     full_address?: string
@@ -91,7 +93,7 @@ const STATUS_COLORS: Record<string, string> = {
     'À traiter': '#ffedd5',
 }
 
-const ROLES = ['Responsable', 'Contributeur', 'Observateur', 'Prospect']
+const ROLES = ['Responsable', 'Contributeur', 'Observateur', 'Prospect', 'Participant']
 
 function formatDate(date?: string) {
     if (!date) return null
@@ -105,13 +107,29 @@ type TodoItemRowProps = {
     onToggle: (item: ToDoItem) => void
     onDelete: (item: ToDoItem) => void
     onDueDateChange: (item: ToDoItem, due_date: string) => void
+    onContentChange: (item: ToDoItem, content: string) => void
 }
 
-function TodoItemRow({ item, onToggle, onDelete, onDueDateChange }: TodoItemRowProps) {
-    const [editingDate, setEditingDate] = useState(false)
+function TodoItemRow({ item, onToggle, onDelete, onDueDateChange, onContentChange }: TodoItemRowProps) {
+    const [editingDate,    setEditingDate]    = useState(false)
+    const [editingContent, setEditingContent] = useState(false)
+    const [contentDraft,   setContentDraft]   = useState('')
     const done = item.status_id === 9
     const today = new Date().toISOString().slice(0, 10)
     const isOverdue = item.due_date && !done && item.due_date < today
+
+    function startEditingContent(e: React.MouseEvent) {
+        e.preventDefault()
+        setContentDraft(item.content)
+        setEditingContent(true)
+    }
+
+    function commitContent() {
+        const trimmed = contentDraft.trim()
+        if (trimmed && trimmed !== item.content) onContentChange(item, trimmed)
+        setEditingContent(false)
+    }
+
     return (
         <li className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted group">
             <Checkbox
@@ -119,12 +137,24 @@ function TodoItemRow({ item, onToggle, onDelete, onDueDateChange }: TodoItemRowP
                 onCheckedChange={() => onToggle(item)}
                 id={`todo-${item.id}`}
             />
-            <label
-                htmlFor={`todo-${item.id}`}
-                className={`flex-1 text-sm cursor-pointer ${done ? 'line-through text-muted-foreground' : ''}`}
-            >
-                {item.content}
-            </label>
+            {editingContent ? (
+                <input
+                    autoFocus
+                    value={contentDraft}
+                    onChange={e => setContentDraft(e.target.value)}
+                    onBlur={commitContent}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitContent() } if (e.key === 'Escape') setEditingContent(false) }}
+                    className="flex-1 text-sm bg-transparent border-b border-border outline-none"
+                />
+            ) : (
+                <label
+                    htmlFor={`todo-${item.id}`}
+                    onDoubleClick={startEditingContent}
+                    className={`flex-1 text-sm cursor-pointer select-none ${done ? 'line-through text-muted-foreground' : ''}`}
+                >
+                    {item.content}
+                </label>
+            )}
             {item.due_date || editingDate ? (
                 <input
                     type="date"
@@ -162,12 +192,22 @@ type TodoSectionProps = {
     onAddItem: (listId: number, content: string, due_date?: string) => void
     onDeleteList: (listId: number) => void
     onDueDateChange: (listId: number, item: ToDoItem, due_date: string) => void
+    onContentChange: (listId: number, item: ToDoItem, content: string) => void
+    onTitleChange: (listId: number, title: string) => void
 }
 
-function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, onDueDateChange }: TodoSectionProps) {
-    const [input, setInput] = useState('')
-    const [dueDate, setDueDate] = useState('')
+function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, onDueDateChange, onContentChange, onTitleChange }: TodoSectionProps) {
+    const [input,        setInput]        = useState('')
+    const [dueDate,      setDueDate]      = useState('')
+    const [editingTitle, setEditingTitle] = useState(false)
+    const [titleDraft,   setTitleDraft]   = useState('')
     const done = list.items.filter(i => i.status_id === 9).length
+
+    function commitTitle() {
+        const trimmed = titleDraft.trim()
+        if (trimmed && trimmed !== list.title) onTitleChange(list.id, trimmed)
+        setEditingTitle(false)
+    }
 
     function submit() {
         if (!input.trim()) return
@@ -179,7 +219,23 @@ function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, on
     return (
         <div className="flex flex-col gap-1 group/list">
             <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-medium">{list.title}</span>
+                {editingTitle ? (
+                    <input
+                        autoFocus
+                        value={titleDraft}
+                        onChange={e => setTitleDraft(e.target.value)}
+                        onBlur={commitTitle}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitTitle() } if (e.key === 'Escape') setEditingTitle(false) }}
+                        className="text-xs font-medium bg-transparent border-b border-border outline-none flex-1 mr-2"
+                    />
+                ) : (
+                    <span
+                        className="text-xs font-medium cursor-default"
+                        onDoubleClick={() => { setTitleDraft(list.title); setEditingTitle(true) }}
+                    >
+                        {list.title}
+                    </span>
+                )}
                 <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">{done}/{list.items.length}</span>
                     <button
@@ -203,6 +259,7 @@ function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, on
                         onToggle={item => onToggle(list.id, item)}
                         onDelete={item => onDeleteItem(list.id, item)}
                         onDueDateChange={(item, due_date) => onDueDateChange(list.id, item, due_date)}
+                        onContentChange={(item, content) => onContentChange(list.id, item, content)}
                     />
                 ))}
             </ul>
@@ -229,69 +286,6 @@ function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, on
 }
 
 // --- Composant recherche membre avec suggestions ---
-
-type MemberSearchInputProps = {
-    members: Member[]
-    partners: Partner[]
-    onSelect: (member: Member) => void
-}
-
-function MemberSearchInput({ members, partners, onSelect }: MemberSearchInputProps) {
-    const [query, setQuery]   = useState('')
-    const [open, setOpen]     = useState(false)
-    const partnerMap = new Map(partners.map(p => [p.id, p]))
-
-    const filtered = query.trim().length === 0 ? members : members.filter(m => {
-        const full = `${m.first_name} ${m.last_name}`.toLowerCase()
-        const partner = partnerMap.get(m.partner_id)?.name.toLowerCase() ?? ''
-        return full.includes(query.toLowerCase()) || partner.includes(query.toLowerCase())
-    })
-
-    function select(m: Member) {
-        onSelect(m)
-        setQuery('')
-        setOpen(false)
-    }
-
-    return (
-        <div className="relative flex-1">
-            <Input
-                value={query}
-                onChange={e => { setQuery(e.target.value); setOpen(true) }}
-                onFocus={() => setOpen(true)}
-                onBlur={() => setTimeout(() => setOpen(false), 150)}
-                placeholder="Rechercher un membre..."
-                className="h-8 text-xs"
-            />
-            {open && filtered.length > 0 && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-hidden">
-                    <ul className="max-h-48 overflow-y-auto py-1">
-                        {filtered.map(m => {
-                            const partner = partnerMap.get(m.partner_id)
-                            return (
-                                <li
-                                    key={m.id}
-                                    onMouseDown={() => select(m)}
-                                    className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted"
-                                >
-                                    <span>{m.first_name} {m.last_name}</span>
-                                    {partner && (
-                                        <span
-                                            className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border"
-                                            style={partner.color ? { backgroundColor: partner.color } : {}}
-                                        >
-                                            {partner.name}
-                                        </span>
-                                    )}
-                                </li>
-                            )
-                        })}
-                    </ul>
-                </div>
-            )}
-        </div>
-    )
-}
 
 // --- Composant recherche convention avec suggestions ---
 
@@ -706,7 +700,8 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     const [todoLists, setTodoLists] = useState<(ToDoList & { items: ToDoItem[] })[]>([])
 
     // Données de référence pour les selects
-    const [allStatuses,   setAllStatuses]   = useState<Status[]>([])
+    const [allStatuses,         setAllStatuses]         = useState<Status[]>([])
+    const [participationStatuses, setParticipationStatuses] = useState<Status[]>([])
     const [allCategories, setAllCategories] = useState<Category[]>([])
     const [allMembers,    setAllMembers]    = useState<Member[]>([])
     const [allPartners,   setAllPartners]   = useState<Partner[]>([])
@@ -740,6 +735,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
 
     // Togglers des section
     const [showCreateMember, setShowCreateMember] = useState(false)
+
 
     // Commentaires
     const currentUser = useCurrentUser()
@@ -809,7 +805,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     // --- Tab navigation ---
     const ALL_AC_OPTIONAL_TABS: { mode: acDetailViewMode; label: string; icon: React.ReactNode }[] = [
         { mode: 'todos',        label: 'Tâches',       icon: <ListTodo size={13} /> },
-        { mode: 'participants', label: 'Participants',  icon: <Users size={13} /> },
+        { mode: 'participants', label: 'Membres',  icon: <Users size={13} /> },
         { mode: 'projects',     label: 'Projets',      icon: <Building2 size={13} /> },
         { mode: 'agreements',   label: 'Conventions',  icon: <ScrollText size={13} /> },
         { mode: 'location',     label: 'Localisation', icon: <MapPin size={13} /> },
@@ -866,6 +862,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
             setAgreementLinks(al as AgreementLink[])
             setTodoLists(tl)
             setAllStatuses(s.filter(st => st.context === 'action_card'))
+            setParticipationStatuses(s.filter(st => st.context === 'participation'))
             setAllCategories(c)
             setAllMembers(m)
             setAllPartners(pt)
@@ -957,6 +954,18 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
         ))
     }
 
+    function updateTodoContent(listId: number, item: ToDoItem, content: string) {
+        updateToDoItem(item.id, { content })
+        setTodoLists(prev => prev.map(l =>
+            l.id !== listId ? l : { ...l, items: l.items.map(i => i.id === item.id ? { ...i, content } : i) }
+        ))
+    }
+
+    function updateListTitle(listId: number, title: string) {
+        updateToDoList(listId, title)
+        setTodoLists(prev => prev.map(l => l.id !== listId ? l : { ...l, title }))
+    }
+
     async function addTodoItem(listId: number, content: string, due_date?: string) {
         const newItem = await addToDoItemToList(listId, content, due_date)
         setTodoLists(prev => prev.map(l =>
@@ -993,6 +1002,11 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     async function handleRoleChange(linkId: number, role: string) {
         await updateMemberRole(linkId, role)
         setMemberLinks(prev => prev.map(l => l.id === linkId ? { ...l, role } : l))
+    }
+
+    async function handleParticipationStatusChange(linkId: number, statusId: number | null) {
+        await updateParticipationStatus(linkId, statusId)
+        setMemberLinks(prev => prev.map(l => l.id === linkId ? { ...l, participation_status_id: statusId ?? undefined } : l))
     }
 
     function toggleSelectLink(l: MemberLink) {
@@ -1082,6 +1096,8 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
             setConfirming(false)
         }
     }
+
+
 
     return (
         <Sheet open={open} onOpenChange={v => { if (!v) { setConfirming(false); onClose() } }}>
@@ -1345,6 +1361,8 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                 onAddItem={addTodoItem}
                                                 onDeleteList={deleteList}
                                                 onDueDateChange={updateDueDate}
+                                                onContentChange={updateTodoContent}
+                                                onTitleChange={updateListTitle}
                                             />
                                         ))}
                                     </div>
@@ -1361,7 +1379,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                         {acTab === 'participants' && (
                             <section className="flex flex-col gap-3">
                                 <div className="flex items-center justify-between">
-                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Participants</p>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Membres</p>
                                     <div className="flex items-center gap-1">
                                         {selectedLinks.length > 0 && (
                                             <>
@@ -1404,6 +1422,9 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                 {memberLinks.length > 0 && (
                                     <div>
                                         <Table className="text-xs">
+                                            {(() => {
+                                                const hasParticipants = memberLinks.some(l => l.role === 'Participant')
+                                                return (
                                             <TableHeader>
                                                 <TableRow className="hover:bg-transparent">
                                                     <TableHead className="h-7 w-6 px-2">
@@ -1415,10 +1436,13 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                     </TableHead>
                                                     <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Nom</TableHead>
                                                     <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Rôle</TableHead>
+                                                    {hasParticipants && <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Participation</TableHead>}
                                                     <TableHead className="h-7 px-2 text-xs font-normal text-muted-foreground">Partenaire</TableHead>
                                                     <TableHead className="h-7 w-6 px-2" />
                                                 </TableRow>
                                             </TableHeader>
+                                                )
+                                            })()}
                                             <TableBody>
                                                 {memberLinks.map(l => {
                                                     const partner = allPartners.find(p => p.id === l.member.partner_id)
@@ -1450,6 +1474,23 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                                         </SelectContent>
                                                                     </Select>
                                                                 </TableCell>
+                                                                {memberLinks.some(ml => ml.role === 'Participant') && (
+                                                                    <TableCell className="px-0 py-1.5">
+                                                                        {l.role === 'Participant' ? (
+                                                                            <Select
+                                                                                value={l.participation_status_id?.toString() ?? ''}
+                                                                                onValueChange={v => handleParticipationStatusChange(l.id, v ? Number(v) : null)}
+                                                                            >
+                                                                                <SelectTrigger className="h-5 text-xs w-24 border-none p-0 shadow-none text-muted-foreground hover:text-foreground" onClick={e => e.stopPropagation()}>
+                                                                                    <SelectValue placeholder="—" />
+                                                                                </SelectTrigger>
+                                                                                <SelectContent>
+                                                                                    {participationStatuses.map(s => <SelectItem key={s.id} value={s.id.toString()}>{s.label}</SelectItem>)}
+                                                                                </SelectContent>
+                                                                            </Select>
+                                                                        ) : <span className="text-muted-foreground px-2">—</span>}
+                                                                    </TableCell>
+                                                                )}
                                                                 <TableCell className="px-2 py-1.5">
                                                                     {partner && (
                                                                         <Tooltip>
@@ -1539,14 +1580,15 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                 )}
 
                                 {!showCreateMember && availableMembers.length > 0 && (
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2 items-start">
                                         <MemberSearchInput
                                             members={availableMembers}
                                             partners={allPartners}
-                                            onSelect={m => handleAddMemberById(m.id)}
+                                            linkedMembers={memberLinks.map(l => l.member)}
+                                            onConfirm={ids => ids.forEach(id => handleAddMemberById(id))}
                                         />
                                         <Select value={roleToAdd} onValueChange={setRoleToAdd}>
-                                            <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+                                            <SelectTrigger className="w-32 h-8 text-xs shrink-0"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                                             </SelectContent>
@@ -1977,7 +2019,17 @@ export default function ActionCard(props: ActionCardData & {
 
                 {(owner || start_date || end_date) && (
                     <CardContent className="pt-0 flex items-center justify-between text-xs text-muted-foreground">
-                        {owner && <span>{owner.first_name} {owner.last_name}</span>}
+                        {(() => {
+                            const { responsables } = data
+                            const resp = responsables && responsables.length > 0 ? responsables : owner ? [owner] : []
+                            if (resp.length === 0) return null
+                            return (
+                                <span className="flex items-center gap-1 mr-2.5">
+                                    {resp[0].first_name} {resp[0].last_name}
+                                    {resp.length > 1 && <span className="bg-muted rounded-full px-1.5">+{resp.length - 1}</span>}
+                                </span>
+                            )
+                        })()}
                         {(start_date || end_date) && (
                             <span className="ml-auto">
                                 {formatDate(start_date)}{end_date ? ` → ${formatDate(end_date)}` : ''}

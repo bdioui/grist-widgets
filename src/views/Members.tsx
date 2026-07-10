@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { getMembersFull, getPartners, getLabs, addMember, updateMember, deleteMember, addPartner, getGroups, getGroupMembers, removeMemberFromGroup, addMemberToGroup, addGroup, deleteGroup, getAllMemberActionCards, getAllProjectMembers, getActionCardsFull, getProjects, addMemberToCard, removeMemberFromCard, addProjectMember, removeProjectMember, createActionCardFull, addProject } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check, Tag, LayoutGrid, Table2, Users } from 'lucide-react'
+import { Plus, Pencil, X, Mail, Phone, ChevronDown, Trash2, CopyIcon, Trash, PencilIcon, ShareIcon, CheckIcon, ListChecks, Download, FileDown, BadgeCheck, Check, Tag, LayoutGrid, Table2, Users, ListTodo, FolderOpen } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { type MemberFull, type Partner, type Lab, type Group, type GroupMember, type ActionCardFull, type MemberActionCard, type ProjectMember, type Project } from '@/lib/types'
@@ -781,11 +782,15 @@ function MemberDetailSheet({ member, partners, labs, existingEmails, open, onClo
 
 // --- Carte contact ---
 
-function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, selectedMembers, groups, groupLinks, onToggleGroup, onToggleMultipleGroup, onSelectAll}: {
+function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, selectedMembers, groups, groupLinks, actions, action_links, projects, projectLinks, onToggleGroup, onToggleMultipleGroup, onSelectAll, onAddToAction, onAddToProject, onAddMultipleToAction, onAddMultipleToProject}: {
     member: MemberFull
     onClick: () => void
     selectOn: boolean
     selected: boolean
+    actions: ActionCardFull[]
+    action_links: MemberActionCard[]
+    projects: Project[]
+    projectLinks: ProjectMember[]
     onToggle: () => void
     onDelete: (id: number) => void
     selectedMembers: MemberFull[]
@@ -794,12 +799,21 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
     onToggleGroup: (member: MemberFull, groupId: number) => void
     onToggleMultipleGroup: (groupId: number) => void
     onSelectAll: () => void
+    onAddToAction: (card: ActionCardFull) => void
+    onAddToProject: (project: Project) => void
+    onAddMultipleToAction: (card: ActionCardFull) => void
+    onAddMultipleToProject: (project: Project) => void
 }) {
 
     const [copied, setCopied] = useState(false)
     const [memberCopied, setMemberCopied] = useState(false)
     const [confirming, setConfirming] = useState(false)
     const [deleting,   setDeleting]   = useState(false)
+
+    const linkedCardIds = action_links.filter(l => l.member_id === member.id).map(l => l.action_card_id)
+    const availableActions = actions.filter(c => !linkedCardIds.includes(c.id))
+    const linkedProjectIds = projectLinks.filter(l => l.member_id === member.id).map(l => l.project_id)
+    const availableProjects = projects.filter(p => !linkedProjectIds.includes(p.id))
 
     function copyEmail() {
         navigator.clipboard.writeText(member.email)
@@ -989,7 +1003,7 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                             <Download size={14} /> Exporter CSV ({selectedMembers.length})
                         </ContextMenuItem>
                         <ContextMenuSub>
-                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter à</ContextMenuSubTrigger>
+                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter au groupe</ContextMenuSubTrigger>
                             <ContextMenuSubContent>
                                 {groups.map(g => {
                                     const memberIdsInGroup = groupLinks.filter(l => l.group_id === g.id).map(l => l.member_id)
@@ -1003,7 +1017,53 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                                 })}
                             </ContextMenuSubContent>
                         </ContextMenuSub>
-                        </>
+                        <ContextMenuSub>
+                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter à l'action</ContextMenuSubTrigger>
+                            <ContextMenuSubContent className="p-0 w-64">
+                                <div
+                                    onPointerEnter={e => e.stopPropagation()}
+                                    onPointerMove={e => e.stopPropagation()}
+                                    onPointerLeave={e => e.stopPropagation()}
+                                    className="p-1"
+                                >
+                                    <SearchInput
+                                        data={actions}
+                                        onSelect={c => onAddMultipleToAction(c)}
+                                        getLabel={c => c.title}
+                                        filterFn={(c, q) => c.title.toLowerCase().includes(q.toLowerCase())}
+                                        renderItem={c => (
+                                            <div className="flex items-center gap-2 w-full min-w-0">
+                                                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.category?.color ?? '#E7E8E2' }} />
+                                                <span className="text-xs truncate flex-1">{c.title}</span>
+                                            </div>
+                                        )}
+                                        placeholder="Rechercher une action…"
+                                        inline
+                                    />
+                                </div>
+                            </ContextMenuSubContent>
+                        </ContextMenuSub>
+                        <ContextMenuSub>
+                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter à un projet</ContextMenuSubTrigger>
+                            <ContextMenuSubContent className="p-0 w-64">
+                                <div
+                                    onPointerEnter={e => e.stopPropagation()}
+                                    onPointerMove={e => e.stopPropagation()}
+                                    onPointerLeave={e => e.stopPropagation()}
+                                    className="p-1"
+                                >
+                                    <SearchInput
+                                        data={projects}
+                                        onSelect={p => onAddMultipleToProject(p)}
+                                        getLabel={p => p.title}
+                                        filterFn={(p, q) => p.title.toLowerCase().includes(q.toLowerCase())}
+                                        placeholder="Rechercher un projet…"
+                                        inline
+                                    />
+                                </div>
+                            </ContextMenuSubContent>
+                        </ContextMenuSub>
+</>
                         
                     
                     ) : (
@@ -1018,7 +1078,7 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                             {memberCopied ? 'Infos copiées !' : 'Partager'}
                         </ContextMenuItem>
                         <ContextMenuSub>
-                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter à</ContextMenuSubTrigger>
+                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter au groupe</ContextMenuSubTrigger>
                             <ContextMenuSubContent>
                                 {groups.map(g => {
                                     const isInGroup = groupLinks.some(l => l.member_id === member.id && l.group_id === g.id)
@@ -1029,6 +1089,52 @@ function MemberCard({ member, onClick, selectOn, selected, onToggle, onDelete, s
                                         </ContextMenuItem>
                                     )
                                 })}
+                            </ContextMenuSubContent>
+                        </ContextMenuSub>
+                        <ContextMenuSub>
+                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter à l'action</ContextMenuSubTrigger>
+                            <ContextMenuSubContent className="p-0 w-64">
+                                <div
+                                    onPointerEnter={e => e.stopPropagation()}
+                                    onPointerMove={e => e.stopPropagation()}
+                                    onPointerLeave={e => e.stopPropagation()}
+                                    className="p-1"
+                                >
+                                    <SearchInput
+                                        data={availableActions}
+                                        onSelect={c => onAddToAction(c)}
+                                        getLabel={c => c.title}
+                                        filterFn={(c, q) => c.title.toLowerCase().includes(q.toLowerCase())}
+                                        renderItem={c => (
+                                            <div className="flex items-center gap-2 w-full min-w-0">
+                                                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.category?.color ?? '#E7E8E2' }} />
+                                                <span className="text-xs truncate flex-1">{c.title}</span>
+                                            </div>
+                                        )}
+                                        placeholder="Rechercher une action…"
+                                        inline
+                                    />
+                                </div>
+                            </ContextMenuSubContent>
+                        </ContextMenuSub>
+                        <ContextMenuSub>
+                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter à un projet</ContextMenuSubTrigger>
+                            <ContextMenuSubContent className="p-0 w-64">
+                                <div
+                                    onPointerEnter={e => e.stopPropagation()}
+                                    onPointerMove={e => e.stopPropagation()}
+                                    onPointerLeave={e => e.stopPropagation()}
+                                    className="p-1"
+                                >
+                                    <SearchInput
+                                        data={availableProjects}
+                                        onSelect={p => onAddToProject(p)}
+                                        getLabel={p => p.title}
+                                        filterFn={(p, q) => p.title.toLowerCase().includes(q.toLowerCase())}
+                                        placeholder="Rechercher un projet…"
+                                        inline
+                                    />
+                                </div>
                             </ContextMenuSubContent>
                         </ContextMenuSub>
                         </>
@@ -1109,6 +1215,10 @@ function MemberCardSkeleton() {
 export default function Members() {
     const [members,  setMembers]  = useState<MemberFull[]>([])
     const [partners, setPartners] = useState<Partner[]>([])
+    const [actionCards, setActionCards] = useState<ActionCardFull[]>([])
+    const [actionLinks, setActionLinks] = useState<MemberActionCard[]>([])
+    const [projects, setProjects] = useState<Project[]>([])
+    const [projectLinks, setProjectLinks] = useState<ProjectMember[]>([])
     const [labs,     setLabs]     = useState<Lab[]>([])
     const [groups, setGroups]     = useState<Group[]>([])
     const [groupLinks, setGroupLinks] = useState<GroupMember[]>([])
@@ -1233,13 +1343,17 @@ export default function Members() {
 
     useEffect(() => {
     setLoading(true)
-    Promise.all([getMembersFull(), getPartners(), getLabs(), getGroups(), getGroupMembers()])
-        .then(([m, p, l, g, gm]) => {
+    Promise.all([getMembersFull(), getPartners(), getLabs(), getGroups(), getGroupMembers(), getActionCardsFull(), getAllMemberActionCards(), getProjects(), getAllProjectMembers()])
+        .then(([m, p, l, g, gm, ac, mac, proj, pm]) => {
             setMembers(m)
             setPartners(p)
             setLabs(l)
             setGroups(g)
-            setGroupLinks(gm) 
+            setGroupLinks(gm)
+            setActionCards(ac)
+            setActionLinks(mac)
+            setProjects(proj as Project[])
+            setProjectLinks(pm as ProjectMember[])
         })
         .catch(err => setError(err.message))
         .finally(() => setLoading(false))
@@ -1272,6 +1386,42 @@ export default function Members() {
     function handleDeleted(id: number) {
         setMembers(prev => prev.filter(m => m.id !== id))
         setSelected(null)
+    }
+
+    async function handleAddToAction(member: MemberFull, card: ActionCardFull) {
+        const link = await addMemberToCard(card.id, member.id, 'Contributeur')
+        setActionLinks(prev => [...prev, link])
+        toast.success(`${member.first_name} ${member.last_name} ajouté à « ${card.title} »`)
+    }
+
+    async function handleAddToProject(member: MemberFull, project: Project) {
+        const link = await addProjectMember(project.id, member.id, 'Contributeur')
+        setProjectLinks(prev => [...prev, link])
+        toast.success(`${member.first_name} ${member.last_name} ajouté à « ${project.title} »`)
+    }
+
+    async function handleAddMultipleToAction(card: ActionCardFull) {
+        const toAdd    = selectedMembers.filter(m => !actionLinks.some(l => l.action_card_id === card.id && l.member_id === m.id))
+        const skipped  = selectedMembers.length - toAdd.length
+        const links    = await Promise.all(toAdd.map(m => addMemberToCard(card.id, m.id, 'Contributeur')))
+        setActionLinks(prev => [...prev, ...links])
+        const msg = toAdd.length > 0
+            ? `${toAdd.length} membre${toAdd.length > 1 ? 's' : ''} ajouté${toAdd.length > 1 ? 's' : ''} à « ${card.title} »`
+            : `Aucun membre ajouté à « ${card.title} »`
+        const desc = skipped > 0 ? `${skipped} déjà présent${skipped > 1 ? 's' : ''}` : undefined
+        toAdd.length > 0 ? toast.success(msg, { description: desc }) : toast.warning(msg, { description: desc })
+    }
+
+    async function handleAddMultipleToProject(project: Project) {
+        const toAdd   = selectedMembers.filter(m => !projectLinks.some(l => l.project_id === project.id && l.member_id === m.id))
+        const skipped = selectedMembers.length - toAdd.length
+        const links   = await Promise.all(toAdd.map(m => addProjectMember(project.id, m.id, 'Contributeur')))
+        setProjectLinks(prev => [...prev, ...links])
+        const msg = toAdd.length > 0
+            ? `${toAdd.length} membre${toAdd.length > 1 ? 's' : ''} ajouté${toAdd.length > 1 ? 's' : ''} à « ${project.title} »`
+            : `Aucun membre ajouté à « ${project.title} »`
+        const desc = skipped > 0 ? `${skipped} déjà présent${skipped > 1 ? 's' : ''}` : undefined
+        toAdd.length > 0 ? toast.success(msg, { description: desc }) : toast.warning(msg, { description: desc })
     }
 
     return (
@@ -1573,6 +1723,10 @@ export default function Members() {
                             <MemberCard
                                 key={member.id}
                                 member={member}
+                                actions={actionCards}
+                                action_links={actionLinks}
+                                projects={projects}
+                                projectLinks={projectLinks}
                                 onClick={() => setSelected(member)}
                                 selectOn= {multipleSelect}
                                 selected={!!selectedMembers.find(m => m.id === member.id)}
@@ -1584,6 +1738,10 @@ export default function Members() {
                                 onToggleGroup={handleToggleGroup}
                                 onToggleMultipleGroup={(groupId) => handleToggleMultipleGroup(groupId)}
                                 onSelectAll={selectAll}
+                                onAddToAction={card => handleAddToAction(member, card)}
+                                onAddToProject={project => handleAddToProject(member, project)}
+                                onAddMultipleToAction={handleAddMultipleToAction}
+                                onAddMultipleToProject={handleAddMultipleToProject}
                             />
                         ))
                     }
@@ -1836,6 +1994,46 @@ export default function Members() {
                                             </button>
                                         )
                                     })}
+                                </PopoverContent>
+                            </Popover>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10">
+                                        <ListTodo size={13} /> Actions
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-64 p-1" side="top" align="center">
+                                    <SearchInput
+                                        data={actionCards}
+                                        onSelect={handleAddMultipleToAction}
+                                        getLabel={c => c.title}
+                                        filterFn={(c, q) => c.title.toLowerCase().includes(q.toLowerCase())}
+                                        renderItem={c => (
+                                            <div className="flex items-center gap-2 w-full min-w-0">
+                                                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.category?.color ?? '#E7E8E2' }} />
+                                                <span className="text-xs truncate flex-1">{c.title}</span>
+                                            </div>
+                                        )}
+                                        placeholder="Rechercher une action…"
+                                        dropdownUp
+                                    />
+                                </PopoverContent>
+                            </Popover>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10">
+                                        <FolderOpen size={13} /> Projets
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-64 p-1" side="top" align="center">
+                                    <SearchInput
+                                        data={projects}
+                                        onSelect={handleAddMultipleToProject}
+                                        getLabel={p => p.title}
+                                        filterFn={(p, q) => p.title.toLowerCase().includes(q.toLowerCase())}
+                                        placeholder="Rechercher un projet…"
+                                        dropdownUp
+                                    />
                                 </PopoverContent>
                             </Popover>
                             <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-red-400 hover:text-red-300 hover:bg-white/10" onClick={() => setConfirmingDelete(true)}>
