@@ -1576,7 +1576,11 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
 
     useEffect(() => {
         if (!project) return
-        localStorage.setItem(`tabs_project_${project.id}`, JSON.stringify(activeOptionalTabs))
+        try {
+            localStorage.setItem(`tabs_project_${project.id}`, JSON.stringify(activeOptionalTabs))
+        } catch {
+            // localStorage can be unavailable (e.g. browser privacy settings)
+        }
     }, [activeOptionalTabs, project?.id])
 
     useEffect(() => {
@@ -1643,7 +1647,12 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                 setAllLabs(labs as Lab[])
 
                 // Auto-affichage des onglets si données existantes
-                const stored = JSON.parse(localStorage.getItem(`tabs_project_${project.id}`) ?? '[]') as detailViewMode[]
+                let stored: detailViewMode[] = []
+                try {
+                    stored = JSON.parse(localStorage.getItem(`tabs_project_${project.id}`) ?? '[]') as detailViewMode[]
+                } catch {
+                    // localStorage can be unavailable (e.g. browser privacy settings)
+                }
                 const projectMembersData = members as ProjectMember[]
                 const projectPartnersData = (pp as ProjectPartner[]).filter(p => p.project_id === project.id)
                 const autoShow: detailViewMode[] = []

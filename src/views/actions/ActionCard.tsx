@@ -835,7 +835,11 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     }
 
     useEffect(() => {
-        localStorage.setItem(`tabs_actioncard_${card.id}`, JSON.stringify(activeACTabs))
+        try {
+            localStorage.setItem(`tabs_actioncard_${card.id}`, JSON.stringify(activeACTabs))
+        } catch {
+            // localStorage can be unavailable (e.g. browser privacy settings)
+        }
     }, [activeACTabs, card.id])
 
     useEffect(() => {
@@ -877,7 +881,12 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
             )
             setshowLocation(!!card.full_address)
             // Tab navigation auto-show
-            const stored = JSON.parse(localStorage.getItem(`tabs_actioncard_${card.id}`) ?? '[]') as acDetailViewMode[]
+            let stored: acDetailViewMode[] = []
+            try {
+                stored = JSON.parse(localStorage.getItem(`tabs_actioncard_${card.id}`) ?? '[]') as acDetailViewMode[]
+            } catch {
+                // localStorage can be unavailable (e.g. browser privacy settings)
+            }
             const autoShow: acDetailViewMode[] = []
             if (tl.length > 0) autoShow.push('todos')
             if (ml.length > 0) autoShow.push('participants')
