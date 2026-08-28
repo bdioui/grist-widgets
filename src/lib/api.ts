@@ -1,4 +1,6 @@
-import { fetchTable, updateRecord, addRecord, addRecords, deleteRecord } from '@/lib/grist'
+import { fetchTable, updateRecord, updateRecords, addRecord, addRecords, deleteRecord, replaceRecords } from '@/lib/grist'
+import { SIFAC_OWNED_COLUMNS } from '@/lib/sifac/reconcile'
+import type { Reconciliation } from '@/lib/sifac/reconcile'
 import {
     mockStatuses, mockCategories, mockMembers, mockPartners, mockLabs, mockPartnerLabs,
     mockAxes, mockActionCards, mockProjectCalls, mockProjects,
@@ -10,7 +12,7 @@ import {
     mockProjectPartners, mockProjectMilestones,
     mockTimeEntry,
     mockFormations, mockProjectFormations, mockProjectAttachments,
-    mockProgram, mockExpanses, mockSuppliers,
+    mockProgram, mockExpanses, mockSuppliers, mockSifacLines,
     mockPublications, mockPublicationMembers,
 } from '@/lib/mock'
 import {
@@ -26,7 +28,7 @@ import {
     normalizeKpiEntries, normalizeProjectPartners, normalizeProjectMilestones,
     normalizeTimeEntry,
     normalizeFormations, normalizeProjectFormations, normalizeProjectAttachments,
-    normalizeProgram, normalizeExpanse, normalizeSuplier,
+    normalizeProgram, normalizeExpanse, normalizeSuplier, normalizeSifacLine,
     normalizePublications, normalizePublicationMembers,
 } from '@/lib/normalize'
 import type {
@@ -40,6 +42,7 @@ import type {
     TimeEntry, Formation, ProjectFormation, ProjectAttachment,
     Program,
     Expanse,
+    SifacLine,
     Supplier,
     Publication,
     PublicationMember,
@@ -86,6 +89,7 @@ const T = {
     project_attachment: 'Project_attachment',
     program: 'Program',
     expanse: 'Expanse',
+    sifac_line: 'Sifac_line',
     expanse_suplier: 'Expanse_suplier',
     supplier: 'Supplier',
     publication: 'Publication',
@@ -116,6 +120,7 @@ export async function getPartnerLabs(): Promise<PartnerLab[]> { return USE_MOCK 
 // Budget & expanses
 export async function getExpanses(): Promise<Expanse[]> { return USE_MOCK ? mockExpanses : normalizeExpanse(await fetchTable(T.expanse)) }
 export async function getSupliers(): Promise<Supplier[]> { return USE_MOCK ? mockSuppliers : normalizeSuplier(await fetchTable(T.supplier)) }
+export async function getSifacLines(): Promise<SifacLine[]> { return USE_MOCK ? mockSifacLines : normalizeSifacLine(await fetchTable(T.sifac_line)) }
 
 
 // Expanses
@@ -147,6 +152,96 @@ export async function updateExpanse(id: number, patch: Partial<Expanse>): Promis
         return
     }
     await updateRecord(T.expanse, id, patch)
+}
+
+// Lignes SIFAC
+// Record<K, true> impose l'exhaustivité : un champ ajouté à SifacLine et oublié
+// ici casse la compilation, au lieu d'être silencieusement vide en base.
+const SIFAC_LINE_FIELDS: Record<keyof Omit<SifacLine, 'id'>, true> = {
+    pfi: true, exercice: true, flux_id: true, flux_label: true, rubrique: true,
+    supplier_name: true, supplier_code: true, account: true, account_label: true,
+    engagement_date: true, amount_engaged: true, amount_certified: true,
+    amount_received: true, invoice_number: true, invoice_date: true,
+    invoice_text: true, amount_invoiced: true, amount_paid: true,
+    payment_date: true, amount_report: true, otp: true, category: true, csf_date: true
+}
+const SIFAC_LINE_COLUMNS = Object.keys(SIFAC_LINE_FIELDS)
+
+// Remplace toutes les lignes d'un couple (PFI, exercice) par celles de l'export.
+// L'export SIFAC est un instantané complet du périmètre, pas un différentiel.
+export async function replaceSifacLines(
+    pfi: string,
+    exercice: number,
+    rows: Omit<SifacLine, 'id'>[]
+): Promise<void> {
+    // Un export vide traduit un fichier mal lu, jamais un exercice réellement vide :
+    // sans ce garde-fou, un parsing raté effacerait le périmètre sans avertissement.
+    if (rows.length === 0) {
+        throw new Error(`Import SIFAC ${pfi} / ${exercice} : aucune ligne lue, périmètre inchangé.`)
+    }
+
+    const inScope = (l: { pfi: string; exercice: number }) => l.pfi === pfi && l.exercice === exercice
+
+    if (USE_MOCK) {
+        const kept = mockSifacLines.filter(l => !inScope(l))
+        let nextId = Math.max(0, ...mockSifacLines.map(l => l.id))
+        const added = rows.map(r => ({ id: ++nextId, ...r }))
+        mockSifacLines.splice(0, mockSifacLines.length, ...kept, ...added)
+        return
+    }
+
+    const existing = await getSifacLines()
+    const toDelete = existing.filter(inScope).map(l => l.id)
+    await replaceRecords(T.sifac_line, toDelete, rows, SIFAC_LINE_COLUMNS)
+}
+
+// Une dépense SIFAC dont le flux a disparu de l'export n'est pas supprimée : elle
+// porte peut-être un rattachement budgétaire à conserver. On la signale, l'arbitrage
+// revient à l'utilisateur.
+export const ORPHAN_STATUS = 'Orpheline'
+
+export type ImportSummary = { created: number; updated: number; orphaned: number }
+
+export async function applyReconciliation(r: Reconciliation): Promise<ImportSummary> {
+    const summary = {
+        created: r.toCreate.length,
+        updated: r.toUpdate.length,
+        orphaned: r.toOrphan.length,
+    }
+
+    if (USE_MOCK) {
+        let nextId = Math.max(0, ...mockExpanses.map(e => e.id))
+        for (const data of r.toCreate) mockExpanses.push({ id: ++nextId, ...data })
+        const patchById = (id: number, patch: Partial<Expanse>) => {
+            const i = mockExpanses.findIndex(e => e.id === id)
+            if (i !== -1) mockExpanses[i] = { ...mockExpanses[i], ...patch }
+        }
+        for (const { id, patch } of r.toUpdate) patchById(id, patch)
+        for (const id of r.toOrphan) patchById(id, { status: ORPHAN_STATUS })
+        return summary
+    }
+
+    if (r.toCreate.length > 0) {
+        await addRecords(T.expanse, r.toCreate)
+    }
+    if (r.toUpdate.length > 0) {
+        await updateRecords(
+            T.expanse,
+            r.toUpdate.map(u => u.id),
+            r.toUpdate.map(u => u.patch),
+            SIFAC_OWNED_COLUMNS,
+        )
+    }
+    if (r.toOrphan.length > 0) {
+        await updateRecords(
+            T.expanse,
+            r.toOrphan,
+            r.toOrphan.map(() => ({ status: ORPHAN_STATUS })),
+            ['status'],
+        )
+    }
+
+    return summary
 }
 
 // Supplier

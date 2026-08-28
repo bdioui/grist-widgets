@@ -25,6 +25,7 @@ import type {
     Supplier,
     Publication,
     PublicationMember,
+    SifacLine
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -546,7 +547,8 @@ export function normalizeSuplier(rows: Record<string, unknown>[]): Supplier[] {
         id: num(r.id),
         name: str(r.name),
         description: str(r.description),
-        siret: str(r.description)
+        siret: str(r.siret),
+        sifac_code: str(r.sifac_code)
     })
     )
 }
@@ -567,27 +569,62 @@ export function normalizeExpanse(rows: Record<string, unknown>[]): Expanse[] {
         payment_date: str(r.payment_date),
         purchase_date: str(r.purchase_date),
         delivery_date: str(r.delivery_date),
-        status: str(r.status)
+        status: str(r.status),
+        amount_engaged: num(r.amount_engaged),
+        amount_paid: num(r.amount_paid),
+        amount_invoiced: num(r.amount_invoiced),
+        flux_id: nullableStr(r.flux_id),
+        invoice_date: str(r.invoice_date),
+        source: r.source === 'sifac' ? 'sifac' : 'manual'
+    }))
+}
+
+export function normalizeSifacLine(rows: Record<string, unknown>[]): SifacLine[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        pfi: str(r.pfi),
+        exercice: num(r.exercice),
+        flux_id: str(r.flux_id),
+        flux_label: str(r.flux_label),
+        rubrique: str(r.rubrique),
+        supplier_name: str(r.supplier_name),
+        supplier_code: str(r.supplier_code),
+        account: str(r.account),
+        account_label: str(r.account_label),
+        engagement_date: str(r.engagement_date),
+        amount_engaged: num(r.amount_engaged),
+        amount_certified: num(r.amount_certified),
+        amount_received: num(r.amount_received),
+        invoice_number: str(r.invoice_number),
+        invoice_date: str(r.invoice_date),
+        invoice_text: str(r.invoice_text),
+        amount_invoiced: num(r.amount_invoiced),
+        amount_paid: num(r.amount_paid),
+        payment_date: str(r.payment_date),
+        amount_report: num(r.amount_report),
+        otp: str(r.otp),
+        category: str(r.category),
+        csf_date: str(r.csf_date)
     }))
 }
 
 export function normalizePublications(rows: Record<string, unknown>[]): Publication[] {
     return rows.map(r => ({
-        id:         num(r.id),
+        id: num(r.id),
         project_id: num(r.project_id),
-        title:      str(r.title),
-        lab_id:     nullable(r.lab_id),
-        subject:    str(r.subject),
-        journal:    str(r.journal),
-        year:       str(r.year),
-        doi:        str(r.doi),
+        title: str(r.title),
+        lab_id: nullable(r.lab_id),
+        subject: str(r.subject),
+        journal: str(r.journal),
+        year: str(r.year),
+        doi: str(r.doi),
     }))
 }
 
 export function normalizePublicationMembers(rows: Record<string, unknown>[]): PublicationMember[] {
     return rows.map(r => ({
-        id:             num(r.id),
+        id: num(r.id),
         publication_id: num(r.publication_id),
-        member_id:      num(r.member_id),
+        member_id: num(r.member_id),
     }))
 }

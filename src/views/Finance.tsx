@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -9,18 +9,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CalendarDays, AlertTriangle, Receipt, FilePenLine, Scale } from 'lucide-react'
-import { Search, FileDown, Trash2, Trash, Pencil, Check, X, Plus, ChevronsUpDown, ChevronUp, ChevronDown, FolderInput, Tag } from 'lucide-react'
+import { Search, FileDown, Trash2, Trash, Pencil, Check, X, Plus, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight, FolderInput, Tag, Upload } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { exportToCsv } from '@/lib/utils'
 import SearchInput from '@/components/SearchInput'
 import {
     getProgram, getExpanses, getBudgetCategories, getBudgetDetails, getSupliers, getProjects,
-    getFinancialAgreements, getPartners, getStatuses,
+    getFinancialAgreements, getPartners, getStatuses, getSifacLines,
     deleteExpanse, deleteAgreement, updateExpanse, createExpanse, createSupplier, updateAgreement, addAgreement,
     createBudgetCategory, updateBudgetCategory, deleteBudgetCategory,
     createBudgetDetail, updateBudgetDetail, deleteBudgetDetail,
+    ORPHAN_STATUS,
 } from '@/lib/api'
-import type { Program, Expanse, BudgetCategory, BudgetDetail, Supplier, Project, FinancialAgreement, Partner, Status } from '@/lib/types'
+import type { ImportSummary } from '@/lib/api'
+import { prepareSifacImport, commitSifacImport } from '@/lib/sifac/import'
+import type { SifacPreview } from '@/lib/sifac/import'
+import type { Program, Expanse, BudgetCategory, BudgetDetail, Supplier, Project, FinancialAgreement, Partner, Status, SifacLine } from '@/lib/types'
 
 const EXPANSE_CATEGORIES = ['Fonctionnement', 'Investissement', 'Personnel', 'Autre'] as const
 
@@ -39,9 +43,10 @@ const LABELS_BY_CATEGORY: Record<string, string[]> = {
 }
 
 const EXPANSE_STATUS_COLORS: Record<string, string> = {
-    'Engagé': '#dbeafe',
-    'Livré':  '#fef9c3',
-    'Payé':   '#dcfce7',
+    'Engagé':      '#dbeafe',
+    'Livré':       '#fef9c3',
+    'Payé':        '#dcfce7',
+    [ORPHAN_STATUS]: '#fee2e2',
 }
 
 const AGREEMENT_STATUS_COLORS: Record<string, string> = {
@@ -62,6 +67,13 @@ function parseAmount(raw: string): number {
 function formatDate(d: string) {
     if (!d) return '—'
     return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+// Le montant réellement décaissé. SIFAC le connaît à l'euro près, y compris pour
+// une commande partiellement payée ; une saisie manuelle ne renseigne pas ce
+// compteur, on retombe alors sur le montant global si le statut dit « Payé ».
+function paidAmount(e: Expanse): number {
+    return e.source === 'sifac' ? e.amount_paid : (e.status === 'Payé' ? e.amount : 0)
 }
 
 // ─── Date range popover ─────────────────────────────────────────────────────
@@ -126,6 +138,7 @@ function NewSupplierPopover({ suppliers, onCreated }: NewSupplierPopoverProps) {
     const [open, setOpen] = useState(false)
     const [name, setName] = useState('')
     const [siret, setSiret] = useState('')
+    const [sifac_code, setSifacCode] = useState('')
     const [description, setDescription] = useState('')
     const [saving, setSaving] = useState(false)
     const [siretError, setSiretError] = useState('')
@@ -146,7 +159,7 @@ function NewSupplierPopover({ suppliers, onCreated }: NewSupplierPopoverProps) {
         if (!name.trim() || siretError) return
         setSaving(true)
         try {
-            const created = await createSupplier({ name: name.trim(), siret, description })
+            const created = await createSupplier({ name: name.trim(), siret, description, sifac_code})
             onCreated(created)
             setOpen(false)
             setName(''); setSiret(''); setDescription(''); setSiretError('')
@@ -175,6 +188,15 @@ function NewSupplierPopover({ suppliers, onCreated }: NewSupplierPopoverProps) {
                             className={`h-7 text-xs font-mono ${siretError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                         />
                         {siretError && <p className="text-[10px] text-destructive mt-0.5 leading-tight">{siretError}</p>}
+                    </div>
+
+                    <div>
+                        <Input
+                            placeholder="Code SIFAC"
+                            value={sifac_code}
+                            onChange={e => { setSifacCode(e.target.value)}}
+                            className={`h-7 text-xs font-mono`}
+                        />
                     </div>
                     <Input placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} className="h-7 text-xs" />
                     <Button size="sm" className="h-7 text-xs mt-1 rounded-md" disabled={!name.trim() || !!siretError || saving} onClick={handleSubmit}>
@@ -240,6 +262,225 @@ function ActionBar({ count, onExport, onDelete, onReclassify, onRecategorize }: 
     )
 }
 
+// ─── Détail des lignes comptables d'un flux ─────────────────────────────────
+
+type AmountKey = 'amount_engaged' | 'amount_invoiced' | 'amount_paid' | 'amount_report'
+
+function SifacLineDetail({ lines }: { lines: SifacLine[] }) {
+    if (lines.length === 0) {
+        return <p className="text-[11px] text-muted-foreground">Aucune ligne comptable pour ce flux.</p>
+    }
+
+    const sum = (k: AmountKey) => lines.reduce((s, l) => s + l[k], 0)
+    const cell = (n: number) => (n === 0 ? <span className="text-muted-foreground">—</span> : formatAmount(n))
+
+    return (
+        <div className="rounded-md border bg-background overflow-hidden">
+            <table className="w-full text-[11px]">
+                <thead className="bg-muted/50 text-muted-foreground">
+                    <tr>
+                        <th className="text-left font-medium px-2 py-1">Rubrique</th>
+                        <th className="text-left font-medium px-2 py-1">Facture</th>
+                        <th className="text-left font-medium px-2 py-1">Compte</th>
+                        <th className="text-center font-medium px-2 py-1">Exercice</th>
+                        <th className="text-right font-medium px-2 py-1">Engagé</th>
+                        <th className="text-right font-medium px-2 py-1">Facturé</th>
+                        <th className="text-right font-medium px-2 py-1">Payé</th>
+                        <th className="text-right font-medium px-2 py-1">Report</th>
+                        <th className="text-left font-medium px-2 py-1">Paiement</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {lines.map(l => (
+                        <tr key={l.id} className="border-t">
+                            <td className="px-2 py-1">{l.rubrique || '—'}</td>
+                            <td className="px-2 py-1 text-muted-foreground">{l.invoice_number || '—'}</td>
+                            <td className="px-2 py-1 text-muted-foreground truncate max-w-32" title={l.account_label}>{l.account || '—'}</td>
+                            <td className="px-2 py-1 text-center tabular-nums text-muted-foreground">{l.exercice}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">{cell(l.amount_engaged)}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">{cell(l.amount_invoiced)}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">{cell(l.amount_paid)}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">{cell(l.amount_report)}</td>
+                            <td className="px-2 py-1 tabular-nums text-muted-foreground">{formatDate(l.payment_date)}</td>
+                        </tr>
+                    ))}
+                </tbody>
+                <tfoot className="border-t bg-muted/30 font-medium">
+                    <tr>
+                        <td className="px-2 py-1" colSpan={4}>{lines.length} ligne{lines.length > 1 ? 's' : ''}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{cell(sum('amount_engaged'))}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{cell(sum('amount_invoiced'))}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{cell(sum('amount_paid'))}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{cell(sum('amount_report'))}</td>
+                        <td className="px-2 py-1" />
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    )
+}
+
+// ─── Import SIFAC ───────────────────────────────────────────────────────────
+
+function errorMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err)
+}
+
+interface SifacImportButtonProps {
+    onImported: () => Promise<void> | void
+}
+
+function SifacImportButton({ onImported }: SifacImportButtonProps) {
+    const fileRef = useRef<HTMLInputElement>(null)
+    const [open, setOpen] = useState(false)
+    const [busy, setBusy] = useState(false)
+    const [error, setError] = useState('')
+    const [preview, setPreview] = useState<SifacPreview | null>(null)
+    const [exercice, setExercice] = useState('')
+    const [summary, setSummary] = useState<ImportSummary | null>(null)
+
+    const exerciceValid = /^\d{4}$/.test(exercice)
+
+    async function handleFile(ev: React.ChangeEvent<HTMLInputElement>) {
+        const file = ev.target.files?.[0]
+        // Vider l'input permet de resélectionner le même fichier après coup.
+        ev.target.value = ''
+        if (!file) return
+
+        setError(''); setPreview(null); setSummary(null); setExercice('')
+        setOpen(true); setBusy(true)
+        try {
+            const p = await prepareSifacImport(file)
+            setPreview(p)
+            setExercice(String(p.exercice))
+        } catch (err) {
+            setError(errorMessage(err))
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    async function confirm() {
+        if (!preview || !exerciceValid) return
+        setBusy(true); setError('')
+        try {
+            const result = await commitSifacImport(preview, Number(exercice))
+            setSummary(result)
+            await onImported()
+        } catch (err) {
+            setError(errorMessage(err))
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    return (
+        <>
+            <input
+                ref={fileRef}
+                type="file"
+                accept=".xlsx,.xls,.XLSX,.XLS"
+                className="hidden"
+                onChange={handleFile}
+            />
+            <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 rounded-md"
+                onClick={() => fileRef.current?.click()}
+            >
+                <Upload size={11} /> Importer SIFAC
+            </Button>
+
+            <Dialog open={open} onOpenChange={o => { if (!o && !busy) setOpen(false) }}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Import SIFAC</DialogTitle>
+                        <DialogDescription>
+                            {summary ? 'Import terminé.'
+                                : preview ? 'Vérifiez l’exercice avant d’écraser le périmètre.'
+                                : 'Lecture du fichier…'}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {error && (
+                        <div className="flex gap-2 rounded-md bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+                            <AlertTriangle size={14} className="shrink-0 mt-px" />
+                            <span>{error}</span>
+                        </div>
+                    )}
+
+                    {summary && (
+                        <div className="flex flex-col gap-1 text-sm">
+                            <p><span className="font-medium tabular-nums">{summary.created}</span> dépense{summary.created > 1 ? 's' : ''} créée{summary.created > 1 ? 's' : ''}</p>
+                            <p><span className="font-medium tabular-nums">{summary.updated}</span> mise{summary.updated > 1 ? 's' : ''} à jour</p>
+                            <p><span className="font-medium tabular-nums">{summary.orphaned}</span> passée{summary.orphaned > 1 ? 's' : ''} en « {ORPHAN_STATUS} »</p>
+                            {summary.created > 0 && (
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    Les dépenses créées n’ont ni catégorie ni ligne budgétaire : filtrez sur une catégorie vide pour les trier.
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {preview && !summary && !error && (
+                        <div className="flex flex-col gap-3">
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                                <div className="rounded-lg border p-2">
+                                    <p className="text-[10px] text-muted-foreground">Programme</p>
+                                    <p className="text-sm font-medium mt-0.5 truncate">{preview.pfi}</p>
+                                </div>
+                                <div className="rounded-lg border p-2">
+                                    <p className="text-[10px] text-muted-foreground">Lignes</p>
+                                    <p className="text-sm font-medium mt-0.5 tabular-nums">{preview.lineCount}</p>
+                                </div>
+                                <div className="rounded-lg border p-2">
+                                    <p className="text-[10px] text-muted-foreground">Dépenses</p>
+                                    <p className="text-sm font-medium mt-0.5 tabular-nums">{preview.fluxCount}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                                <Label>Exercice</Label>
+                                <Input
+                                    value={exercice}
+                                    onChange={ev => setExercice(ev.target.value)}
+                                    className="h-9 text-sm w-32 tabular-nums"
+                                    placeholder="2026"
+                                />
+                                <p className="text-[11px] text-muted-foreground">
+                                    L’exercice n’est pas dans le fichier : {preview.exercice} est l’année majoritaire des écritures.
+                                </p>
+                            </div>
+
+                            <div className="flex gap-2 rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                                <AlertTriangle size={14} className="shrink-0 mt-px" />
+                                <span>
+                                    Toutes les lignes déjà enregistrées pour {preview.pfi} sur l’exercice {exerciceValid ? exercice : '…'} seront remplacées.
+                                    Le tri budgétaire des dépenses est conservé.
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter className="gap-2">
+                        {summary || error ? (
+                            <Button size="sm" onClick={() => setOpen(false)}>Fermer</Button>
+                        ) : (
+                            <>
+                                <Button variant="outline" size="sm" onClick={() => setOpen(false)} disabled={busy}>Annuler</Button>
+                                <Button size="sm" onClick={confirm} disabled={busy || !preview || !exerciceValid}>
+                                    {busy ? 'Import en cours…' : 'Importer'}
+                                </Button>
+                            </>
+                        )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
+    )
+}
+
 // ─── Onglet Dépenses ────────────────────────────────────────────────────────
 
 interface DepensesTabProps {
@@ -272,6 +513,23 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const [newDraft, setNewDraft] = useState<Partial<Expanse>>({})
     const [saving, setSaving] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
+    const [expandedId, setExpandedId] = useState<number | null>(null)
+    // Les lignes comptables ne servent qu'au dépliage : on ne les charge qu'au
+    // premier clic, et une seule fois pour toutes les dépenses.
+    const [sifacLines, setSifacLines] = useState<SifacLine[] | null>(null)
+    const [loadingLines, setLoadingLines] = useState(false)
+
+    async function toggleDetail(id: number) {
+        if (expandedId === id) { setExpandedId(null); return }
+        setExpandedId(id)
+        if (sifacLines !== null || loadingLines) return
+        setLoadingLines(true)
+        try {
+            setSifacLines(await getSifacLines())
+        } finally {
+            setLoadingLines(false)
+        }
+    }
 
     const budgetDetailMap    = useMemo(() => new Map(budgetDetails.map(d => [d.id, d])), [budgetDetails])
     const leafBudgetDetails  = useMemo(() => budgetDetails.filter(d => d.parent_id !== null), [budgetDetails])
@@ -448,10 +706,16 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         ]))
     }
 
-    const selCount = filtered.filter(e => selected.has(e.id)).length
-    const selEngage = expanses.filter(e => selected.has(e.id) && e.status !== 'Payé').reduce((s, e) => s + e.amount, 0)
-    const selPaye   = expanses.filter(e => selected.has(e.id) && e.status === 'Payé').reduce((s, e) => s + e.amount, 0)
+    // Le payé se somme sur les décaissements réels, pas sur les dépenses dont le
+    // statut est « Payé » : une commande partiellement réglée compte pour ce qui
+    // est sorti, et le reste à payer se déduit du total.
+    const totalPaye   = expanses.reduce((s, e) => s + paidAmount(e), 0)
+    const totalEngage = totalAll - totalPaye
+
+    const selCount  = filtered.filter(e => selected.has(e.id)).length
     const selTotal  = expanses.filter(e => selected.has(e.id)).reduce((s, e) => s + e.amount, 0)
+    const selPaye   = expanses.filter(e => selected.has(e.id)).reduce((s, e) => s + paidAmount(e), 0)
+    const selEngage = selTotal - selPaye
 
     return (
         <div className="flex flex-col gap-4">
@@ -459,13 +723,13 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
             <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs text-muted-foreground">Engagé</p>
-                    <p className="text-xl font-semibold mt-1">{formatAmount(expanses.filter(e => e.status !== 'Payé').reduce((s, e) => s + e.amount, 0))}</p>
+                    <p className="text-xl font-semibold mt-1">{formatAmount(totalEngage)}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">Non encore payé</p>
                     {selCount > 0 && <p className="text-[10px] text-primary/70 mt-1">Sélection · {formatAmount(selEngage)}</p>}
                 </div>
                 <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs text-muted-foreground">Payé</p>
-                    <p className="text-xl font-semibold mt-1">{formatAmount(expanses.filter(e => e.status === 'Payé').reduce((s, e) => s + e.amount, 0))}</p>
+                    <p className="text-xl font-semibold mt-1">{formatAmount(totalPaye)}</p>
                     {selCount > 0 && <p className="text-[10px] text-primary/70 mt-1">Sélection · {formatAmount(selPaye)}</p>}
                 </div>
                 <div className="rounded-xl border bg-card p-4">
@@ -535,6 +799,14 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                 )}
                 <div className="ml-auto flex items-center gap-2">
                     {selCount > 0 && <ActionBar count={selCount} onExport={handleExport} onDelete={handleDelete} onReclassify={() => { setBulkDetailId(null); setBulkModal('detail') }} onRecategorize={() => { setBulkCategory(''); setBulkLabel(''); setBulkModal('category') }} />}
+                    {/* Copie explicite : en mode mock, getExpanses rend le tableau source
+                        muté sur place. Sans nouvelle référence, les useMemo de filtrage
+                        conservent leur résultat et le tableau resterait figé. */}
+                    <SifacImportButton onImported={async () => {
+                        setExpanses([...await getExpanses()])
+                        setSifacLines(null)
+                        setExpandedId(null)
+                    }} />
                     <Button size="sm" className="h-8 text-xs gap-1 rounded-md" onClick={startAdd} disabled={isAdding}>
                         <Plus size={11} /> Nouvelle dépense
                     </Button>
@@ -774,17 +1046,29 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                             )
 
                             return (
-                                <TableRow key={e.id} className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
+                                <React.Fragment key={e.id}>
+                                <TableRow className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
                                     <TableCell className="px-3">
                                         <Checkbox checked={isSelected} onCheckedChange={() => toggleRow(e.id)} />
                                     </TableCell>
                                     <TableCell className="font-medium max-w-xs">
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <span className="truncate block max-w-xs cursor-default">{e.title}</span>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="bottom" className="max-w-xs text-xs">{e.description}</TooltipContent>
-                                        </Tooltip>
+                                        <div className="flex items-center gap-1">
+                                            {e.flux_id ? (
+                                                <button
+                                                    onClick={() => toggleDetail(e.id)}
+                                                    className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground"
+                                                    title="Lignes comptables SIFAC"
+                                                >
+                                                    {expandedId === e.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                                </button>
+                                            ) : <span className="shrink-0 w-[18px]" />}
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <span className="truncate block max-w-xs cursor-default">{e.title}</span>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom" className="max-w-xs text-xs">{e.description}</TooltipContent>
+                                            </Tooltip>
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         {e.category && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
@@ -823,6 +1107,18 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                         </button>
                                     </TableCell>
                                 </TableRow>
+                                {expandedId === e.id && (
+                                    <TableRow className="bg-muted/20 hover:bg-muted/20">
+                                        <TableCell colSpan={13} className="p-0">
+                                            <div className="px-10 py-3">
+                                                {sifacLines === null
+                                                    ? <p className="text-[11px] text-muted-foreground">Chargement des lignes comptables…</p>
+                                                    : <SifacLineDetail lines={sifacLines.filter(l => l.flux_id === e.flux_id)} />}
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                                </React.Fragment>
                             )
                         })}
                     </TableBody>

@@ -41,7 +41,7 @@ export default function Actions() {
                 </div>
             </div>
 
-            <div className="flex-1 ml-[30px] overflow-auto">
+            <div className="flex-1 min-h-0 ml-[30px] flex flex-col overflow-auto">
                 {viewMode === 'Categories'  && <Categories />}
                 {viewMode === 'Tâches'      && <Tasks />}
                 {viewMode === 'Calendrier'  && <Calendar />}

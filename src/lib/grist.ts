@@ -72,6 +72,35 @@ export async function addRecords(
     return result.retValues
 }
 
+// Remplace un périmètre de lignes : suppression et réinsertion dans une seule
+// transaction Grist, pour qu'un échec ne laisse jamais le périmètre vidé.
+// `columns` fixe l'ordre des colonnes : une clé absente d'un enregistrement
+// devient `undefined` à sa place au lieu de décaler toute la colonne.
+export async function replaceRecords(
+    tableId: string,
+    rowIdsToDelete: number[],
+    records: Record<string, unknown>[],
+    columns: string[]
+): Promise<void> {
+    const actions: unknown[][] = []
+
+    if (rowIdsToDelete.length > 0) {
+        actions.push(['BulkRemoveRecord', tableId, rowIdsToDelete])
+    }
+
+    if (records.length > 0) {
+        const colsObj: Record<string, unknown[]> = {}
+        for (const col of columns) {
+            colsObj[col] = records.map(r => r[col])
+        }
+        // Autant de null que d'enregistrements, sinon Grist n'insère que les premiers
+        actions.push(['BulkAddRecord', tableId, records.map(() => null), colsObj])
+    }
+
+    if (actions.length === 0) return
+    await getGrist().docApi.applyUserActions(actions)
+}
+
 // Met à jour une ou plusieurs colonnes sur une ligne existante.
 // patch = { category_id: 3, status_id: 2 } par exemple
 export async function updateRecord(
@@ -86,6 +115,30 @@ export async function updateRecord(
         colsObj[col] = [val]
     }
     await getGrist().docApi.applyUserActions([['BulkUpdateRecord', tableId, [rowId], colsObj]])
+}
+
+// Met à jour N lignes en une seule action : un import SIFAC touche plusieurs
+// centaines de dépenses, autant d'appels séparés seraient lents et laisseraient
+// un import interrompu à moitié appliqué.
+// Suppose que tous les enregistrements portent les mêmes colonnes — c'est le cas
+// des patches produits par reconcile.ts.
+export async function updateRecords(
+    tableId: string,
+    rowIds: number[],
+    records: Record<string, unknown>[],
+    columns: string[]
+): Promise<void> {
+    if (rowIds.length === 0) return
+
+    const colsObj: Record<string, unknown[]> = {}
+    for (const col of columns) {
+        // 'id' est déjà passé en troisième argument : le répéter ici ferait
+        // échouer l'action.
+        if (col === 'id') continue
+        colsObj[col] = records.map(r => r[col])
+    }
+
+    await getGrist().docApi.applyUserActions([['BulkUpdateRecord', tableId, rowIds, colsObj]])
 }
 
 // Supprime une ligne par son id

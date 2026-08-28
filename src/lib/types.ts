@@ -362,6 +362,7 @@ export type Supplier = {
     name: string
     description: string
     siret: string
+    sifac_code: string // C'est le numéro tiers fournisseur dans SIFAC
 }
 
 export type Publication = {
@@ -385,7 +386,6 @@ export type Expanse = {
     id: number
     title: string
     description: string
-    amount: number
     category: string
     label: string
     budget_detail_id: number | null
@@ -395,7 +395,41 @@ export type Expanse = {
     purchase_date: string
     delivery_date: string
     payment_date: string
+    invoice_date: string
     status: string
+    flux_id: string | null           // null = saisie manuelle
+    source: 'sifac' | 'manual'
+    amount_engaged: number
+    amount_invoiced: number
+    amount_paid: number
+    amount: number
+}
+
+export type SifacLine = {
+    id: number
+    pfi: string              // Programme de financement
+    exercice: number         // métadonnée d'import, PAS une date du fichier
+    flux_id: string          // Numéro de flux  ← la clé de regroupement
+    flux_label: string       // Libellé du flux
+    rubrique: string         // COMMANDE/FACTURE, ECRITURE DE PAIE, ...
+    supplier_name: string    // Nom du tiers
+    supplier_code: string    // Numéro du tiers fournisseur
+    account: string          // Compte général
+    account_label: string    // Libellé Compte général
+    engagement_date: string  // Date initiale de l'engagement
+    csf_date: string         // Date de livraison service fait
+    amount_engaged: number   // Montant engagé HTR
+    amount_certified: number // Montant HTR des SF certifiés
+    amount_received: number  // Montant réceptionné non facturé
+    invoice_number: string
+    invoice_date: string     // Date comptable facture
+    invoice_text: string     // Texte facture
+    amount_invoiced: number  // Montant facturé HTR
+    amount_paid: number      // Montant payé HTR
+    payment_date: string
+    amount_report: number    // Report
+    otp: string              // Elément d'OTP
+    category: string         // FG/IG/MS
 }
 
 

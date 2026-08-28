@@ -159,8 +159,8 @@ export default function App() {
 
   return (
     <UserContext.Provider value={currentMember}>
-    <div className="min-h-screen bg-gray-50">
-      <nav className="flex justify-between align-center p-4 gap-4">
+    <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
+      <nav className="flex justify-between align-center p-4 gap-4 shrink-0">
         <div className='flex gap-2 items-center'>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -374,7 +374,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main>
+      <main className="flex-1 min-h-0 overflow-y-auto">
         {currentView === "dashboard" && <Dashboard key={refreshKey} />}
         {currentView === "actions" && <Actions key={refreshKey} />}
         {currentView === "projets" && <Projects key={refreshKey} />}
