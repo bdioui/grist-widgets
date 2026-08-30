@@ -18,7 +18,7 @@ type SifacOwned = Pick<Expanse,
     | 'title' | 'description' | 'status' | 'amount'
     | 'amount_engaged' | 'amount_invoiced' | 'amount_paid'
     | 'purchase_date' | 'invoice_date' | 'payment_date' | 'category'
-    | 'supplier_id' | 'delivery_date'>
+    | 'supplier_id' | 'delivery_date' | 'label'>
 
 // Record<K, true> impose l'exhaustivité : un champ ajouté à SifacOwned et oublié
 // ici casse la compilation, au lieu d'être silencieusement ignoré à l'écriture.
@@ -26,7 +26,7 @@ const SIFAC_OWNED_FIELDS: Record<keyof SifacOwned, true> = {
     title: true, description: true, status: true, amount: true,
     amount_engaged: true, amount_invoiced: true, amount_paid: true,
     purchase_date: true, invoice_date: true, payment_date: true, category: true,
-    supplier_id: true, delivery_date: true
+    supplier_id: true, delivery_date: true, label: true
 }
 
 export const SIFAC_OWNED_COLUMNS = Object.keys(SIFAC_OWNED_FIELDS)
@@ -51,6 +51,7 @@ function sifacOwned(
         invoice_date: a.invoice_date,
         payment_date: a.payment_date,
         category: a.category,
+        label: a.account_label,
         supplier_id: suppliers.get(a.supplier_code) ?? fallbackSupplierId,
         delivery_date: a.delivery_date,
     }
@@ -61,7 +62,6 @@ function createFrom(a: FluxAggregate, suppliers: SupplierIndex): Omit<Expanse, '
         ...sifacOwned(a, suppliers, null),
         flux_id: a.flux_id,
         source: 'sifac',
-        label: '',
         budget_detail_id: null,
         project_id: null,
         agreement_id: null,

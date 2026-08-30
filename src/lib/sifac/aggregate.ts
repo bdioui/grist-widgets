@@ -33,6 +33,15 @@ function round2(n: number): number {
     return Math.round(n * 100) / 100
 }
 
+// Le compte d'exécution budgétaire SIFAC ne connaît que trois valeurs. Tout ce
+// qui n'est ni FG ni IG relève de la masse salariale, y compris les écritures de
+// paie qui ne portent pas de code du tout.
+export function sifacCategory(code: string): string {
+    return code === 'FG' ? 'Fonctionnement'
+        : code === 'IG' ? 'Investissement'
+            : 'Personnel'
+}
+
 function firstNonEmpty(lines: Line[], key: keyof Line): string {
     for (const l of lines) {
         const v = l[key]
@@ -77,10 +86,7 @@ function aggregateFlux(flux_id: string, lines: Line[]): FluxAggregate {
         : status === 'Livré' ? amount_invoiced
             : amount_engaged
 
-    const code = firstNonEmpty(lines, 'category')
-    const category = code === "FG" ? "Fonctionnement"
-        : code === "IG" ? "Investissement"
-            : "Personnel"
+    const category = sifacCategory(firstNonEmpty(lines, 'category'))
 
     return {
         flux_id,

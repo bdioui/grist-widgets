@@ -24,6 +24,7 @@ import {
 import type { ImportSummary } from '@/lib/api'
 import { prepareSifacImport, commitSifacImport } from '@/lib/sifac/import'
 import type { SifacPreview } from '@/lib/sifac/import'
+import { sifacCategory } from '@/lib/sifac/aggregate'
 import type { Program, Expanse, BudgetCategory, BudgetDetail, Supplier, Project, FinancialAgreement, Partner, Status, SifacLine } from '@/lib/types'
 
 const EXPANSE_CATEGORIES = ['Fonctionnement', 'Investissement', 'Personnel', 'Autre'] as const
@@ -320,6 +321,80 @@ function SifacLineDetail({ lines }: { lines: SifacLine[] }) {
     )
 }
 
+
+// ─── Lignes du tableau financier détaillé ─────────────────────────────────────────────
+
+function SifacLineDetailedTable({ lines }: { lines: SifacLine[] }) {
+    if (lines.length === 0) {
+        return <p className="text-[11px] text-muted-foreground">Aucune ligne comptable pour ce flux.</p>
+    }
+
+    const sum = (k: AmountKey) => lines.reduce((s, l) => s + l[k], 0)
+    const cell = (n: number) => (n === 0 ? <span className="text-muted-foreground">—</span> : formatAmount(n))
+
+    return (
+        <div className="rounded-lg border bg-background overflow-hidden">
+            <table className="w-full text-[11px]">
+                <thead className="h-8 w-8 px-3">
+                    <tr>
+                        <th className="text-left font-medium px-4 py-3">N°flux</th>
+                        <th className="text-left font-medium px-4 py-3">Rubrique</th>
+                        <th className="text-left font-medium px-4 py-3">Intitulé</th>
+                        <th className="text-left font-medium px-4 py-3">Catégorie</th>
+                        <th className="text-left font-medium px-4 py-3">libéllé dépense</th>
+                        <th className="text-left font-medium px-4 py-3">Facture</th>
+                        <th className="text-right font-medium px-4 py-3">Engagé</th>
+                        <th className="text-right font-medium px-4 py-3">Facturé</th>
+                        <th className="text-right font-medium px-4 py-3">Payé</th>
+                        <th className="text-right font-medium px-4 py-3">Report</th>
+                        <th className="text-left font-medium px-4 py-3">Engagemnt</th>
+                        <th className="text-left font-medium px-4 py-3">facturation</th>
+                        <th className="text-left font-medium px-4 py-3">Paiement</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {lines.map(l => {
+                        const category = sifacCategory(l.category)
+                        return (
+
+                            <tr key={l.id} className="border-t">
+                                <td className="px-4 py-3">{l.flux_id || '—'}</td>
+                                <td className="px-4 py-3">{l.rubrique || '—'}</td>
+                                <td className="px-4 py-3">{l.flux_label || '—'}</td>
+                                <td className="px-4 py-3">
+                                                {category && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: CATEGORY_COLORS[category] ?? '#f3f4f6' }}>
+                                                {category}
+                                                </span>}
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground truncate max-w-32" title={l.account_label}>{l.account || '—'}</td>
+                                <td className="ppx-4 py-3 text-muted-foreground">{l.invoice_number || '—'}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{cell(l.amount_engaged)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{cell(l.amount_invoiced)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{cell(l.amount_paid)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{cell(l.amount_report)}</td>
+                                <td className="px-4 py-3 tabular-nums text-muted-foreground">{formatDate(l.engagement_date)}</td>
+                                <td className="px-4 py-3 tabular-nums text-muted-foreground">{formatDate(l.invoice_date)}</td>
+                                <td className="px-4 py-3 tabular-nums text-muted-foreground">{formatDate(l.payment_date)}</td>
+                            </tr>
+                        
+                        )
+                    })}
+                </tbody>
+                <tfoot className="border-t bg-muted/30 font-medium">
+                    <tr>
+                        <td className="px-4 py-3" colSpan={6}>{lines.length} ligne{lines.length > 1 ? 's' : ''}</td>
+                        <td className="px-4 py-3 text-right font-semibold tabular-nums">{cell(sum('amount_engaged'))}</td>
+                        <td className="px-4 py-3 text-right font-semibold tabular-nums">{cell(sum('amount_invoiced'))}</td>
+                        <td className="px-4 py-3 text-right font-semibold tabular-nums">{cell(sum('amount_paid'))}</td>
+                        <td className="px-4 py-3 text-right font-semibold tabular-nums">{cell(sum('amount_report'))}</td>
+                        <td className="px-4 py-3" />
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    )
+}
+
 // ─── Import SIFAC ───────────────────────────────────────────────────────────
 
 function errorMessage(err: unknown): string {
@@ -495,6 +570,7 @@ interface DepensesTabProps {
 }
 
 function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, suppliers, setSuppliers, projects, agreements }: DepensesTabProps) {
+    type Display = 'grouped' | 'detailed'
     const [search, setSearch] = useState('')
     const [categoryFilter, setCategoryFilter] = useState('all')
     const [labelFilter, setLabelFilter] = useState('all')
@@ -514,10 +590,25 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const [saving, setSaving] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [expandedId, setExpandedId] = useState<number | null>(null)
+    const [displayMode, setDisplayMode] = useState<Display>('grouped')
     // Les lignes comptables ne servent qu'au dépliage : on ne les charge qu'au
     // premier clic, et une seule fois pour toutes les dépenses.
     const [sifacLines, setSifacLines] = useState<SifacLine[] | null>(null)
     const [loadingLines, setLoadingLines] = useState(false)
+
+    async function loadSifacLines() {
+        if (sifacLines !== null || loadingLines) return
+        setLoadingLines(true)
+        try {
+            setSifacLines(await getSifacLines())
+        } finally {
+            setLoadingLines(false)
+        }
+    }
+
+    useEffect(() => {
+        if (displayMode === 'detailed') void loadSifacLines()
+    }, [displayMode])
 
     async function toggleDetail(id: number) {
         if (expandedId === id) { setExpandedId(null); return }
@@ -542,6 +633,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const labelsByCategory = useMemo(() => {
         const map: Record<string, string[]> = { ...LABELS_BY_CATEGORY }
         for (const e of expanses) {
+            if (e.source === 'sifac' || !e.category || !e.label) continue
             if (!e.category || !e.label) continue
             if (!map[e.category]) map[e.category] = []
             if (!map[e.category].includes(e.label)) map[e.category].push(e.label)
@@ -549,20 +641,71 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         for (const key of Object.keys(map)) map[key] = [...new Set(map[key])].sort()
         return map
     }, [expanses])
+
+    function filterTest(e : Expanse){
+            if (search && !e.title.toLowerCase().includes(search.toLowerCase())) return false
+            if (categoryFilter !== 'all' && e.category !== categoryFilter) return false
+            if (labelFilter !== 'all' && e.label !== labelFilter) return false
+            if (statusFilter !== 'all' && e.status !== statusFilter) return false
+            if (detailFilter !== null && e.budget_detail_id !== detailFilter) return false
+            return true
+    } 
+
     const statuses = useMemo(() => [...new Set(expanses.map(e => e.status))].filter(Boolean).sort(), [expanses])
 
     const filtered = useMemo(() => expanses.filter(e => {
-        if (search && !e.title.toLowerCase().includes(search.toLowerCase())) return false
-        if (categoryFilter !== 'all' && e.category !== categoryFilter) return false
-        if (labelFilter !== 'all' && e.label !== labelFilter) return false
-        if (statusFilter !== 'all' && e.status !== statusFilter) return false
-        if (detailFilter !== null && e.budget_detail_id !== detailFilter) return false
+        if(!filterTest(e)) return false
         if (purchaseFrom && (!e.purchase_date || e.purchase_date < purchaseFrom)) return false
         if (purchaseTo && (!e.purchase_date || e.purchase_date > purchaseTo)) return false
         if (paymentFrom && (!e.payment_date || e.payment_date < paymentFrom)) return false
         if (paymentTo && (!e.payment_date || e.payment_date > paymentTo)) return false
         return true
     }), [expanses, search, categoryFilter, labelFilter, statusFilter, detailFilter, purchaseFrom, purchaseTo, paymentFrom, paymentTo])
+
+    const keptFlux = useMemo(
+        () => new Set(expanses.filter(filterTest).map(e => e.flux_id)),
+        [expanses, search, categoryFilter, labelFilter, statusFilter, detailFilter]
+    )
+
+    const visibleLines = useMemo(() => (sifacLines ?? []).filter(l =>
+        keptFlux.has(l.flux_id)
+        && (!paymentFrom || (l.payment_date && l.payment_date >= paymentFrom))
+        && (!paymentTo   || (l.payment_date && l.payment_date <= paymentTo))
+        )
+        .sort((a,b) => a.flux_id.localeCompare(b.flux_id)),
+        [sifacLines, keptFlux, paymentFrom, paymentTo])
+
+    // Les cartes du haut suivent la vue affichée et ses filtres. En mode groupé
+    // elles somment des dépenses entières ; en mode ligne, les écritures
+    // visibles, seules à porter une date de paiement exacte.
+    //
+    // La troisième carte change de sens d'une vue à l'autre, elle porte donc son
+    // libellé. En groupé, une dépense est engagée ou payée : le reste à payer se
+    // déduit du total, et le payé se somme sur les décaissements réels plutôt
+    // que sur le statut, pour qu'une commande partiellement réglée compte pour
+    // ce qui est sorti. En ligne, engagé et payé sont deux colonnes distinctes
+    // portées par des écritures différentes : les soustraire donnerait du
+    // négatif dès qu'un filtre de date écarte la ligne COMMANDE.
+    const totals = useMemo(() => {
+        if (displayMode === 'detailed') {
+            return {
+                engaged: visibleLines.reduce((s, l) => s + l.amount_engaged, 0),
+                paid:    visibleLines.reduce((s, l) => s + l.amount_paid, 0),
+                third:   visibleLines.reduce((s, l) => s + l.amount_invoiced, 0),
+                thirdLabel: 'Facturé',
+                engagedHint: '',
+            }
+        }
+        const all  = filtered.reduce((s, e) => s + e.amount, 0)
+        const paid = filtered.reduce((s, e) => s + paidAmount(e), 0)
+        return {
+            engaged: all - paid,
+            paid,
+            third: all,
+            thirdLabel: 'Total',
+            engagedHint: 'Non encore payé',
+        }
+    }, [displayMode, visibleLines, filtered])
 
     const sorted = useMemo(() => {
         if (!sortKey) return filtered
@@ -591,9 +734,6 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
             setSortKey(key); setSortDir('asc')
         }
     }
-
-    const totalFiltered = filtered.reduce((s, e) => s + e.amount, 0)
-    const totalAll = expanses.reduce((s, e) => s + e.amount, 0)
 
     const allFilteredSelected = filtered.length > 0 && filtered.every(e => selected.has(e.id))
     const someSelected = filtered.some(e => selected.has(e.id))
@@ -691,9 +831,8 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         } finally { setBulkSaving(false) }
     }
 
-    function handleExport() {
-        const rows = filtered.filter(e => selected.has(e.id))
-        exportToCsv('depenses.csv', ['Intitulé', 'Catégorie', 'Libellé', 'Ligne budgétaire', 'Montant', 'Fournisseur', 'Projet', 'Statut', 'Date achat'], rows.map(e => [
+    function exportExpanses(rows: Expanse[], filename: string) {
+        exportToCsv(filename, ['Intitulé', 'Catégorie', 'Libellé', 'Ligne budgétaire', 'Montant', 'Fournisseur', 'Projet', 'Statut', 'Date achat'], rows.map(e => [
             e.title,
             e.category,
             e.label,
@@ -706,11 +845,44 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         ]))
     }
 
-    // Le payé se somme sur les décaissements réels, pas sur les dépenses dont le
-    // statut est « Payé » : une commande partiellement réglée compte pour ce qui
-    // est sorti, et le reste à payer se déduit du total.
-    const totalPaye   = expanses.reduce((s, e) => s + paidAmount(e), 0)
-    const totalEngage = totalAll - totalPaye
+    // Deux portées distinctes : la barre d'actions exporte la sélection, le
+    // bouton permanent exporte ce qui est à l'écran. Les noms de fichier les
+    // séparent, sinon on ne sait plus lequel on a téléchargé.
+    function handleExport() {
+        exportExpanses(filtered.filter(e => selected.has(e.id)), 'depenses-selection.csv')
+    }
+
+    // La vue ligne n'a pas de sélection : on exporte ce qui est affiché, filtres
+    // compris. Les montants partent en brut, sans séparateur de milliers, pour
+    // rester exploitables dans un tableur.
+    function handleExportLines() {
+        exportToCsv(
+            'lignes-sifac.csv',
+            ['N° flux', 'Rubrique', 'Intitulé', 'Catégorie', 'Compte', 'Libellé compte',
+                'Facture', 'Engagé', 'Facturé', 'Payé', 'Report',
+                'Engagement', 'Facturation', 'Paiement', 'Exercice'],
+            visibleLines.map(l => [
+                l.flux_id,
+                l.rubrique,
+                l.flux_label,
+                sifacCategory(l.category),
+                l.account,
+                l.account_label,
+                l.invoice_number,
+                l.amount_engaged,
+                l.amount_invoiced,
+                l.amount_paid,
+                l.amount_report,
+                l.engagement_date,
+                l.invoice_date,
+                l.payment_date,
+                l.exercice,
+            ]),
+        )
+    }
+
+    const totalFiltered = filtered.reduce((s, e) => s + e.amount, 0)
+    const exportCount = displayMode === 'detailed' ? visibleLines.length : sorted.length
 
     const selCount  = filtered.filter(e => selected.has(e.id)).length
     const selTotal  = expanses.filter(e => selected.has(e.id)).reduce((s, e) => s + e.amount, 0)
@@ -723,24 +895,47 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
             <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs text-muted-foreground">Engagé</p>
-                    <p className="text-xl font-semibold mt-1">{formatAmount(totalEngage)}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Non encore payé</p>
-                    {selCount > 0 && <p className="text-[10px] text-primary/70 mt-1">Sélection · {formatAmount(selEngage)}</p>}
+                    <p className="text-xl font-semibold mt-1">{formatAmount(totals.engaged)}</p>
+                    {totals.engagedHint && <p className="text-[10px] text-muted-foreground mt-0.5">{totals.engagedHint}</p>}
+                    {displayMode === 'grouped' && selCount > 0 && <p className="text-[10px] text-primary/70 mt-1">Sélection · {formatAmount(selEngage)}</p>}
                 </div>
                 <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs text-muted-foreground">Payé</p>
-                    <p className="text-xl font-semibold mt-1">{formatAmount(totalPaye)}</p>
-                    {selCount > 0 && <p className="text-[10px] text-primary/70 mt-1">Sélection · {formatAmount(selPaye)}</p>}
+                    <p className="text-xl font-semibold mt-1">{formatAmount(totals.paid)}</p>
+                    {displayMode === 'grouped' && selCount > 0 && <p className="text-[10px] text-primary/70 mt-1">Sélection · {formatAmount(selPaye)}</p>}
                 </div>
                 <div className="rounded-xl border bg-card p-4">
-                    <p className="text-xs text-muted-foreground">Total</p>
-                    <p className="text-xl font-semibold mt-1">{formatAmount(totalAll)}</p>
-                    {selCount > 0 && <p className="text-[10px] text-primary/70 mt-1">Sélection · {formatAmount(selTotal)}</p>}
+                    <p className="text-xs text-muted-foreground">{totals.thirdLabel}</p>
+                    <p className="text-xl font-semibold mt-1">{formatAmount(totals.third)}</p>
+                    {displayMode === 'grouped' && selCount > 0 && <p className="text-[10px] text-primary/70 mt-1">Sélection · {formatAmount(selTotal)}</p>}
                 </div>
             </div>
 
             {/* Filtres + action bar */}
             <div className="flex gap-2 flex-wrap items-center">
+                 <div className="bg-gray-200 rounded-full border p-1 flex relative w-fit">
+                {([
+                        { mode: 'grouped',    label: 'Groupé',    icon: <Receipt size={13} /> },
+                        { mode: 'detailed',    label: 'Détaillée',   icon: <FilePenLine size={13} /> },
+                    ] as { mode: Display; label: string; icon: React.ReactNode }[]).map(({ mode, label, icon }) => (
+                        <button
+                            key={mode}
+                            onClick={() => setDisplayMode(mode)}
+                            className={`relative flex items-center gap-1.5 px-4 py-1 rounded-full text-sm z-10 transition-colors duration-300 ${displayMode === mode ? 'text-white' : 'text-black'}`}
+                        >
+                            <span className="relative z-20 flex items-center gap-1.5">
+                                {icon}{label}
+                            </span>
+                            {displayMode === mode && (
+                                <motion.div
+                                    layoutId="ActiveMode"
+                                    className="absolute inset-0 bg-black rounded-full z-10"
+                                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                />
+                            )}
+                        </button>
+                    ))}
+            </div>
                 <div className="relative flex-1 min-w-48">
                     <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input placeholder="Rechercher une dépense…" className="pl-8 h-8 text-sm" value={search} onChange={e => setSearch(e.target.value)} />
@@ -798,7 +993,16 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                     </Button>
                 )}
                 <div className="ml-auto flex items-center gap-2">
-                    {selCount > 0 && <ActionBar count={selCount} onExport={handleExport} onDelete={handleDelete} onReclassify={() => { setBulkDetailId(null); setBulkModal('detail') }} onRecategorize={() => { setBulkCategory(''); setBulkLabel(''); setBulkModal('category') }} />}
+                    {displayMode === 'grouped' && selCount > 0 && <ActionBar count={selCount} onExport={handleExport} onDelete={handleDelete} onReclassify={() => { setBulkDetailId(null); setBulkModal('detail') }} onRecategorize={() => { setBulkCategory(''); setBulkLabel(''); setBulkModal('category') }} />}
+                    <Button
+                        variant="outline" size="sm" className="h-8 text-xs gap-1 rounded-md"
+                        disabled={exportCount === 0}
+                        onClick={displayMode === 'detailed'
+                            ? handleExportLines
+                            : () => exportExpanses(sorted, 'depenses.csv')}
+                    >
+                        <FileDown size={11} /> Exporter {exportCount} {displayMode === 'detailed' ? 'ligne' : 'dépense'}{exportCount > 1 ? 's' : ''}
+                    </Button>
                     {/* Copie explicite : en mode mock, getExpanses rend le tableau source
                         muté sur place. Sans nouvelle référence, les useMemo de filtrage
                         conservent leur résultat et le tableau resterait figé. */}
@@ -814,7 +1018,9 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
             </div>
 
             {/* Tableau */}
-            <div className="rounded-lg border overflow-hidden">
+            {displayMode === "grouped" && (
+                <>
+                <div className="rounded-lg bg-background border overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow className="text-xs bg-muted/50">
@@ -1129,6 +1335,14 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                     {filtered.length} dépense{filtered.length > 1 ? 's' : ''} · {formatAmount(totalFiltered)}
                 </p>
             )}
+            </>
+            )}
+
+            {displayMode === 'detailed' && (
+                sifacLines === null
+                    ? <p className="text-[11px] text-muted-foreground">Chargement des lignes comptables…</p>
+                    : <SifacLineDetailedTable lines={visibleLines} />
+                        )}
 
             {/* ── Modale reclassement ligne budgétaire ── */}
             <Dialog open={bulkModal === 'detail'} onOpenChange={open => { if (!open) setBulkModal(null) }}>
