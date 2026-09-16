@@ -369,6 +369,7 @@ export function normalizeToDoItems(rows: Record<string, unknown>[]): ToDoItem[] 
         start_date: str(r.start_date),
         end_time: str(r.end_time),
         due_date: str(r.due_date),
+        owner_id: nullable(r.owner_id)
     }))
 }
 

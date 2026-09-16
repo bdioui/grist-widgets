@@ -259,25 +259,25 @@ export const mockProjects: Project[] = [
     { id: 11, project_call_id: 1, status_id: 11, title: 'Projet Inclusion Numérique', description: 'Formation aux compétences numériques de base pour les publics éloignés de l\'emploi.', budget: 48000, start_date: '2024-02-01', end_date: '2025-06-30' },
     { id: 12, project_call_id: 3, status_id: 10, title: 'Projet European Grant HorizonX', description: 'Coordination d\'un projet Horizon Europe multi-partenaires sur la transition écologique.', budget: 450000, start_date: '2025-09-01', end_date: '2028-08-31' },
     // Projets courts 2026 pour heatmap variée
-    { id: 13, project_call_id: 1, status_id: 11, title: 'Audit interne S1 2026',             description: '', budget: 5000,  start_date: '2026-01-05', end_date: '2026-01-20' },
-    { id: 14, project_call_id: 2, status_id: 10, title: 'Kick-off partenariat AlphaLab',     description: '', budget: 8000,  start_date: '2026-01-10', end_date: '2026-01-30' },
-    { id: 15, project_call_id: 1, status_id: 11, title: 'Séminaire Axe 1 – Janvier',         description: '', budget: 3000,  start_date: '2026-01-18', end_date: '2026-01-25' },
+    { id: 13, project_call_id: 1, status_id: 11, title: 'Audit interne S1 2026', description: '', budget: 5000, start_date: '2026-01-05', end_date: '2026-01-20' },
+    { id: 14, project_call_id: 2, status_id: 10, title: 'Kick-off partenariat AlphaLab', description: '', budget: 8000, start_date: '2026-01-10', end_date: '2026-01-30' },
+    { id: 15, project_call_id: 1, status_id: 11, title: 'Séminaire Axe 1 – Janvier', description: '', budget: 3000, start_date: '2026-01-18', end_date: '2026-01-25' },
     { id: 16, project_call_id: 3, status_id: 10, title: 'Colloque régional Sciences&Société', description: '', budget: 12000, start_date: '2026-03-03', end_date: '2026-03-07' },
-    { id: 17, project_call_id: 4, status_id: 12, title: 'Sprint démonstrateur V2',            description: '', budget: 20000, start_date: '2026-03-09', end_date: '2026-03-28' },
-    { id: 18, project_call_id: 2, status_id: 10, title: 'Revue mi-parcours HorizonX',         description: '', budget: 6000,  start_date: '2026-03-15', end_date: '2026-03-20' },
-    { id: 19, project_call_id: 1, status_id: 11, title: 'Formation encadrants recherche',     description: '', budget: 9000,  start_date: '2026-03-22', end_date: '2026-04-04' },
-    { id: 20, project_call_id: 2, status_id: 10, title: 'Atelier IA & données territoriales', description: '', budget: 4000,  start_date: '2026-03-24', end_date: '2026-03-31' },
-    { id: 21, project_call_id: 3, status_id: 10, title: 'Mobilité entrante – Barcelone',      description: '', budget: 2500,  start_date: '2026-06-01', end_date: '2026-06-14' },
-    { id: 22, project_call_id: 1, status_id: 11, title: 'Bilan annuel formation',             description: '', budget: 5000,  start_date: '2026-06-08', end_date: '2026-06-30' },
-    { id: 23, project_call_id: 4, status_id: 12, title: 'Test pilote IoT – Phase 3',          description: '', budget: 18000, start_date: '2026-06-15', end_date: '2026-07-10' },
-    { id: 24, project_call_id: 2, status_id: 10, title: 'Conférence internationale SIGIR',    description: '', budget: 3500,  start_date: '2026-09-07', end_date: '2026-09-12' },
-    { id: 25, project_call_id: 3, status_id: 10, title: 'Rentrée scientifique 2026',          description: '', budget: 7000,  start_date: '2026-09-01', end_date: '2026-09-15' },
-    { id: 26, project_call_id: 1, status_id: 11, title: 'AAP Automne – Instruction dossiers', description: '', budget: 4000,  start_date: '2026-09-14', end_date: '2026-10-09' },
-    { id: 27, project_call_id: 4, status_id: 12, title: 'Séminaire transfert brevet',         description: '', budget: 6000,  start_date: '2026-09-21', end_date: '2026-09-30' },
-    { id: 28, project_call_id: 2, status_id: 10, title: 'Hackathon Open Data',                description: '', budget: 5000,  start_date: '2026-09-25', end_date: '2026-10-02' },
-    { id: 29, project_call_id: 1, status_id: 11, title: 'Clôture projets T4',                 description: '', budget: 3000,  start_date: '2026-11-02', end_date: '2026-11-20' },
-    { id: 30, project_call_id: 3, status_id: 10, title: 'Bilan mobilités Europe',             description: '', budget: 4000,  start_date: '2026-11-09', end_date: '2026-11-27' },
-    { id: 31, project_call_id: 4, status_id: 12, title: 'Rapport final Smart Campus',         description: '', budget: 8000,  start_date: '2026-11-16', end_date: '2026-12-05' },
+    { id: 17, project_call_id: 4, status_id: 12, title: 'Sprint démonstrateur V2', description: '', budget: 20000, start_date: '2026-03-09', end_date: '2026-03-28' },
+    { id: 18, project_call_id: 2, status_id: 10, title: 'Revue mi-parcours HorizonX', description: '', budget: 6000, start_date: '2026-03-15', end_date: '2026-03-20' },
+    { id: 19, project_call_id: 1, status_id: 11, title: 'Formation encadrants recherche', description: '', budget: 9000, start_date: '2026-03-22', end_date: '2026-04-04' },
+    { id: 20, project_call_id: 2, status_id: 10, title: 'Atelier IA & données territoriales', description: '', budget: 4000, start_date: '2026-03-24', end_date: '2026-03-31' },
+    { id: 21, project_call_id: 3, status_id: 10, title: 'Mobilité entrante – Barcelone', description: '', budget: 2500, start_date: '2026-06-01', end_date: '2026-06-14' },
+    { id: 22, project_call_id: 1, status_id: 11, title: 'Bilan annuel formation', description: '', budget: 5000, start_date: '2026-06-08', end_date: '2026-06-30' },
+    { id: 23, project_call_id: 4, status_id: 12, title: 'Test pilote IoT – Phase 3', description: '', budget: 18000, start_date: '2026-06-15', end_date: '2026-07-10' },
+    { id: 24, project_call_id: 2, status_id: 10, title: 'Conférence internationale SIGIR', description: '', budget: 3500, start_date: '2026-09-07', end_date: '2026-09-12' },
+    { id: 25, project_call_id: 3, status_id: 10, title: 'Rentrée scientifique 2026', description: '', budget: 7000, start_date: '2026-09-01', end_date: '2026-09-15' },
+    { id: 26, project_call_id: 1, status_id: 11, title: 'AAP Automne – Instruction dossiers', description: '', budget: 4000, start_date: '2026-09-14', end_date: '2026-10-09' },
+    { id: 27, project_call_id: 4, status_id: 12, title: 'Séminaire transfert brevet', description: '', budget: 6000, start_date: '2026-09-21', end_date: '2026-09-30' },
+    { id: 28, project_call_id: 2, status_id: 10, title: 'Hackathon Open Data', description: '', budget: 5000, start_date: '2026-09-25', end_date: '2026-10-02' },
+    { id: 29, project_call_id: 1, status_id: 11, title: 'Clôture projets T4', description: '', budget: 3000, start_date: '2026-11-02', end_date: '2026-11-20' },
+    { id: 30, project_call_id: 3, status_id: 10, title: 'Bilan mobilités Europe', description: '', budget: 4000, start_date: '2026-11-09', end_date: '2026-11-27' },
+    { id: 31, project_call_id: 4, status_id: 12, title: 'Rapport final Smart Campus', description: '', budget: 8000, start_date: '2026-11-16', end_date: '2026-12-05' },
 ]
 
 export const mockFinancialAgreements: FinancialAgreement[] = [
@@ -376,14 +376,14 @@ export const mockToDoLists: ToDoList[] = [
 ]
 
 export const mockToDoItems: ToDoItem[] = [
-    { id: 1, list_id: 1, content: 'Réserver la salle', status_id: 9, start_date: '2025-08-01', end_time: '2025-08-15', due_date: '2025-08-10' },
-    { id: 2, list_id: 1, content: 'Envoyer les invitations', status_id: 9, start_date: '2025-08-15', end_time: '2025-08-30', due_date: '2025-08-25' },
-    { id: 3, list_id: 2, content: 'Collecter les indicateurs', status_id: 9, start_date: '2025-06-01', end_time: '2025-06-15', due_date: '' },
-    { id: 4, list_id: 2, content: 'Rédiger la synthèse', status_id: 9, start_date: '2025-06-15', end_time: '2025-06-25', due_date: '' },
-    { id: 5, list_id: 3, content: 'Préparer les supports', status_id: 8, start_date: '2026-04-25', end_time: '2026-05-01', due_date: '2026-04-30' },
-    { id: 6, list_id: 3, content: 'Inviter les participants', status_id: 8, start_date: '2026-04-28', end_time: '2026-05-05', due_date: '' },
-    { id: 7, list_id: 4, content: 'Envoyer l\'ordre du jour', status_id: 8, start_date: '2026-05-28', end_time: '2026-06-01', due_date: '2026-05-30' },
-    { id: 8, list_id: 4, content: 'Préparer les indicateurs', status_id: 8, start_date: '2026-05-28', end_time: '2026-06-04', due_date: '' },
+    { id: 1, list_id: 1, content: 'Réserver la salle', status_id: 9, start_date: '2025-08-01', end_time: '2025-08-15', due_date: '2025-08-10', owner_id: null },
+    { id: 2, list_id: 1, content: 'Envoyer les invitations', status_id: 9, start_date: '2025-08-15', end_time: '2025-08-30', due_date: '2025-08-25', owner_id: null },
+    { id: 3, list_id: 2, content: 'Collecter les indicateurs', status_id: 9, start_date: '2025-06-01', end_time: '2025-06-15', due_date: '', owner_id: null },
+    { id: 4, list_id: 2, content: 'Rédiger la synthèse', status_id: 9, start_date: '2025-06-15', end_time: '2025-06-25', due_date: '', owner_id: null },
+    { id: 5, list_id: 3, content: 'Préparer les supports', status_id: 8, start_date: '2026-04-25', end_time: '2026-05-01', due_date: '2026-04-30', owner_id: null },
+    { id: 6, list_id: 3, content: 'Inviter les participants', status_id: 8, start_date: '2026-04-28', end_time: '2026-05-05', due_date: '', owner_id: null },
+    { id: 7, list_id: 4, content: 'Envoyer l\'ordre du jour', status_id: 8, start_date: '2026-05-28', end_time: '2026-06-01', due_date: '2026-05-30', owner_id: null },
+    { id: 8, list_id: 4, content: 'Préparer les indicateurs', status_id: 8, start_date: '2026-05-28', end_time: '2026-06-04', due_date: '', owner_id: null },
 ]
 
 export const mockMemberActionCards: MemberActionCard[] = [
@@ -440,14 +440,14 @@ export const mockMemberActionCards: MemberActionCard[] = [
     { id: 36, member_id: 12, action_card_id: 9, role: 'Responsable' },
     { id: 37, member_id: 2, action_card_id: 13, role: 'Responsable' },
     // Participants avec statut de participation (carte 1 = Séminaire de lancement)
-    { id: 38, member_id: 6,  action_card_id: 1, role: 'Participant', participation_status_id: 20 },
-    { id: 39, member_id: 7,  action_card_id: 1, role: 'Participant', participation_status_id: 19 },
-    { id: 40, member_id: 8,  action_card_id: 1, role: 'Participant', participation_status_id: 21 },
-    { id: 41, member_id: 9,  action_card_id: 1, role: 'Participant', participation_status_id: 18 },
+    { id: 38, member_id: 6, action_card_id: 1, role: 'Participant', participation_status_id: 20 },
+    { id: 39, member_id: 7, action_card_id: 1, role: 'Participant', participation_status_id: 19 },
+    { id: 40, member_id: 8, action_card_id: 1, role: 'Participant', participation_status_id: 21 },
+    { id: 41, member_id: 9, action_card_id: 1, role: 'Participant', participation_status_id: 18 },
     { id: 42, member_id: 10, action_card_id: 1, role: 'Participant', participation_status_id: 22 },
     // Participants carte 7 = Réunion comité de pilotage
-    { id: 43, member_id: 4,  action_card_id: 7, role: 'Participant', participation_status_id: 19 },
-    { id: 44, member_id: 5,  action_card_id: 7, role: 'Participant', participation_status_id: 18 },
+    { id: 43, member_id: 4, action_card_id: 7, role: 'Participant', participation_status_id: 19 },
+    { id: 44, member_id: 5, action_card_id: 7, role: 'Participant', participation_status_id: 18 },
     { id: 45, member_id: 11, action_card_id: 7, role: 'Participant' },
 ]
 
@@ -576,9 +576,9 @@ export const mockProjectMembers: ProjectMember[] = [
     { id: 30, project_id: 12, member_id: 12, role: 'Partenaire' },
     { id: 31, project_id: 12, member_id: 17, role: 'Partenaire' },
     // Projet 1 — Participants (pour test suivi de participation)
-    { id: 32, project_id: 1, member_id: 6,  role: 'Participant', participation_status_id: 20 },
-    { id: 33, project_id: 1, member_id: 8,  role: 'Participant', participation_status_id: 19 },
-    { id: 34, project_id: 1, member_id: 9,  role: 'Participant' },
+    { id: 32, project_id: 1, member_id: 6, role: 'Participant', participation_status_id: 20 },
+    { id: 33, project_id: 1, member_id: 8, role: 'Participant', participation_status_id: 19 },
+    { id: 34, project_id: 1, member_id: 9, role: 'Participant' },
     { id: 35, project_id: 1, member_id: 10, role: 'Participant', participation_status_id: 21 },
 ]
 

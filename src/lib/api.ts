@@ -578,26 +578,27 @@ export async function getToDoListsWithItemsByCard(cardId: number): Promise<(ToDo
 
 // --- Mutations sur les éléments d'une ActionCard ---
 
-export async function updateToDoItem(id: number, patch: Partial<Pick<ToDoItem, 'content' | 'status_id' | 'start_date' | 'end_time' | 'due_date'>>): Promise<void> {
+export async function updateToDoItem(id: number, patch: Partial<Pick<ToDoItem, 'content' | 'status_id' | 'start_date' | 'end_time' | 'due_date' | 'owner_id'>>): Promise<void> {
     if (USE_MOCK) {
         const item = mockToDoItems.find(i => i.id === id)
         if (item) Object.assign(item, patch)
         return
     }
-    await updateRecord(T.to_do_item, id, patch)
+    const fields = patch.owner_id === null ? { ...patch, owner_id: 0 } : patch
+    await updateRecord(T.to_do_item, id, fields)
 }
 
-export async function addToDoItemToList(listId: number, content: string, due_date = ''): Promise<ToDoItem> {
+export async function addToDoItemToList(listId: number, content: string, due_date = '', ownerId: number | null): Promise<ToDoItem> {
     if (USE_MOCK) {
         const newId = Math.max(0, ...mockToDoItems.map(i => i.id)) + 1
-        const item: ToDoItem = { id: newId, list_id: listId, content, status_id: 8, start_date: '', end_time: '', due_date }
+        const item: ToDoItem = { id: newId, list_id: listId, content, status_id: 8, start_date: '', end_time: '', due_date, owner_id: ownerId }
         mockToDoItems.push(item)
         return item
     }
-    const fields: Record<string, unknown> = { list_id: listId, content, status_id: 8 }
+    const fields: Record<string, unknown> = { list_id: listId, content, status_id: 8, owner_id: ownerId ?? 0 }
     if (due_date) fields.due_date = due_date
     const id = await addRecord(T.to_do_item, fields)
-    return { id, list_id: listId, content, status_id: 8, start_date: '', end_time: '', due_date }
+    return { id, list_id: listId, content, status_id: 8, start_date: '', end_time: '', due_date, owner_id: ownerId }
 }
 
 export async function addToDoListToCard(cardId: number, title: string): Promise<ToDoList & { items: ToDoItem[] }> {

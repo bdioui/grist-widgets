@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from '@dnd-kit/core'
 import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle} from '@/components/ui/dialog'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Avatar, AvatarImage, AvatarFallback, AvatarGroup } from '@/components/ui/avatar'
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem,
@@ -50,8 +51,11 @@ import {
     getPublicationsByProject, addPublication, updatePublication, deletePublication,
     getPublicationMembersByProject, addPublicationMember, deletePublicationMember,
     getLabs,
+    getToDoLists,
+    getToDoItems,
+    getAllMemberActionCards,
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
@@ -91,7 +95,8 @@ const STATUS_ORDER = ["En cours", "Suspendu", "En attente", "Terminé",]
 
 const PARTNER_ROLES = ['Associé', 'Bénéficiaire', 'Cofinanceur', 'Sous-traitant']
 
-import { PARTNER_TYPES, PALETTE } from '@/lib/constants'
+import { PARTNER_TYPES, WORKING_ROLES, PALETTE } from '@/lib/constants'
+
 
 const MEMBER_STATUSES = [
     'Enseignant-chercheur', 'Chercheur', 'Ingénieur', 'Doctorant',
@@ -1425,6 +1430,8 @@ export type ProjectDetailSheetProps = {
     axes: Axis[]
     statuses: Status[]
     members: Member[]
+    toDoProgress?: Map<number, { done: number; total: number }>
+    memberLinks?: Map<number, Member[]>
     projectTimes: TimeEntry[]
     axis: Axis[]
     onMemberAdd?: (projectId: number, memberId: number) => void
@@ -1436,6 +1443,8 @@ export type ProjectDetailSheetProps = {
     onTimeEntryUpdated?: (e: TimeEntry) => void
     onTimeEntryDeleted?: (id: number) => void
     allFormations: Formation[]
+    onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
+    onMemberLinkChanged?: (cardId: number, links: MemberActionCard[]) => void
 }
 
 type detailViewMode = 'overview' | 'participants' | 'partners' | 'kpis' | 'publications' | 'formations' | 'tasks' | 'conventions' | 'budget' | 'files'
@@ -1479,7 +1488,7 @@ function SortableTab({ mode, label, icon, isActive, isEmpty, onActivate, onRemov
     )
 }
 
-export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses, members, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations }: ProjectDetailSheetProps) {
+export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -1554,6 +1563,23 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
 
     const [detailViewMode, setDetailViewMode] = useState<detailViewMode>('overview')
     const [activeOptionalTabs, setActiveOptionalTabs] = useState<detailViewMode[]>([])
+    
+    // Backlog : un groupe par statut, dans l'ordre de la table Grist.
+    // Dans chaque groupe : en retard d'abord, puis échéance la plus proche,
+    // et les fiches sans date à la fin.
+    const actionGroups = useMemo(() => {
+        const today = new Date().toISOString().slice(0, 10)
+        const rank = (c: { end_date: string }) => !c.end_date ? 2 : c.end_date < today ? 0 : 1
+        return statuses
+            .filter(s => s.context === 'action_card')
+            .map(s => ({
+                status: s,
+                cards: actionCards
+                    .filter(c => c.status.id === s.id)
+                    .sort((a, b) => rank(a) - rank(b) || a.end_date.localeCompare(b.end_date)),
+            }))
+            .filter(g => g.cards.length > 0)
+    }, [actionCards, statuses])
 
     function addOptionalTab(mode: detailViewMode) {
         setActiveOptionalTabs(prev => prev.includes(mode) ? prev : [...prev, mode])
@@ -1809,7 +1835,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const hasParticipants = projectMembers.some(pm => pm.role === 'Participant')
 
     const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
-    const totalGrant  = agreements.reduce((s, a) => s + a.grant, 0)
+    const totalGrant  = agreements.reduce((s, a) => s + a.grant, 0) 
+    const notCovered = totalBudget - totalGrant
     const operationalExpanses  = projectExpanses.filter(e => !e.agreement_id)
     const reversementExpanses  = projectExpanses.filter(e => !!e.agreement_id)
     const totalExpanses = projectExpanses.reduce((s, e) => s + e.amount, 0)
@@ -2779,39 +2806,82 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     />
                                 )}
 
-                                {actionCards.map(card => {
-                                    const categoryColor = card.category.parent?.color ?? card.category.color ?? null
-                                    return (
-                                        <div
-                                            key={card.id}
-                                            className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-muted/40 group cursor-pointer hover:bg-muted/70 transition-colors"
-                                            onClick={() => setSelectedActionCard(card)}
-                                        >
-                                            {categoryColor && (
-                                                <div className="w-1.5 h-8 rounded-full shrink-0" style={{ backgroundColor: categoryColor }} />
-                                            )}
-                                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                                                <span className="text-sm font-medium truncate">{card.title}</span>
-                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                    <span>{card.category.parent ? `${card.category.parent.title} · ` : ''}{card.category.title}</span>
-                                                    {card.end_date && <span>→ {formatDate(card.end_date)}</span>}
-                                                </div>
-                                            </div>
+                                {actionGroups.map(group => (
+                                    <div key={group.status.id} className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-2 px-1">
                                             <span
-                                                className="shrink-0 text-xs px-1.5 py-0.5 rounded-full border border-border text-black"
-                                                style={{ backgroundColor: PROJECT_STATUS_COLORS[card.status.label] ?? '#f3f4f6' }}
-                                            >
-                                                {card.status.label}
-                                            </span>
-                                            <div
-                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
-                                                onClick={e => { e.stopPropagation(); handleUnlinkCard(card.linkId) }}
-                                            >
-                                                <X size={13} />
-                                            </div>
+                                                className="w-2 h-2 rounded-full shrink-0"
+                                                style={{ backgroundColor: PROJECT_STATUS_COLORS[group.status.label] ?? '#d1d5db' }}
+                                            />
+                                            <span className="text-xs font-medium">{group.status.label}</span>
+                                            <span className="text-xs text-muted-foreground">{group.cards.length}</span>
                                         </div>
-                                    )
-                                })}
+
+                                        {group.cards.map(card => {
+                                            const categoryColor = card.category.parent?.color ?? card.category.color ?? null
+                                            const isOverdue = card.end_date && card.end_date < new Date().toISOString().slice(0, 10)
+                                            const todos = toDoProgress?.get(card.id)
+                                            const owners = memberLinks?.get(card.id) ?? []
+                                            return (
+                                                <div
+                                                    key={card.id}
+                                                    className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-muted/40 group cursor-pointer hover:bg-muted/70 transition-colors"
+                                                    onClick={() => setSelectedActionCard(card)}
+                                                >
+                                                    {/* Colonne élastique : titre + catégorie */}
+                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                        <div
+                                                            className="w-1 h-8 rounded-full shrink-0"
+                                                            style={{ backgroundColor: categoryColor ?? 'transparent' }}
+                                                        />
+                                                        <div className="flex flex-col gap-0.5 min-w-0">
+                                                            <span className="text-sm font-medium truncate">{card.title}</span>
+                                                            <span className="text-xs text-muted-foreground truncate">
+                                                                {card.category.parent ? `${card.category.parent.title} · ` : ''}{card.category.title}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Colonnes fixes : elles s'alignent d'une ligne à l'autre */}
+                                                    <span className={`w-14 shrink-0 text-xs text-right tabular-nums ${todos ? 'text-muted-foreground' : 'text-transparent'}`}>
+                                                        {todos ? `${todos.done}/${todos.total}` : '0/0'}
+                                                    </span>
+
+                                                    <span className={`w-20 shrink-0 text-xs text-right tabular-nums ${isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                                                        {card.end_date ? formatDate(card.end_date) : ''}
+                                                    </span>
+
+                                                    <div className="w-20 shrink-0 flex justify-end">
+                                                        <AvatarGroup>
+                                                            {owners.map(o => (
+                                                                <Tooltip key={o.id}>
+                                                                    <TooltipTrigger asChild>
+                                                                        <Avatar className="h-6 w-6">
+                                                                            <AvatarImage src={o.profile_image} alt={`${o.first_name} ${o.last_name}`} />
+                                                                            <AvatarFallback className="text-[10px]">
+                                                                                {o.first_name[0]}{o.last_name[0]}
+                                                                            </AvatarFallback>
+                                                                        </Avatar>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent>
+                                                                        {o.first_name} {o.last_name}
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            ))}
+                                                        </AvatarGroup>
+                                                    </div>
+
+                                                    <div
+                                                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
+                                                        onClick={e => { e.stopPropagation(); handleUnlinkCard(card.linkId) }}
+                                                    >
+                                                        <X size={13} />
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                ))}
                         </div>
                     </section>
 
@@ -3160,6 +3230,10 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                             <span className="italic">{fmt(reversementExpanses.reduce((s, e) => s + e.amount, 0))}</span>
                                         </div>
                                     )}
+                                    <div className="flex justify-between text-muted-foreground">
+                                        <span>Part non subventionnée</span>
+                                        <span className="font-medium text-foreground">{fmt(notCovered)}</span>
+                                    </div>
                                 </div>
                             </>
                         )}
@@ -3243,6 +3317,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     setActionCards(prev => prev.filter(c => c.id !== id))
                     setSelectedActionCard(null)
                 }}
+                onTodosChanged= {onTodosChanged}
+                onMemberLinkChanged={onMemberLinkChanged}
             />
         )}
         {selectedPartner && (
@@ -3724,6 +3800,9 @@ export default function Projects() {
     const [allFormations, setAllFormations] = useState<Formation[]>([])
     const [loading,       setLoading]       = useState(true)
     const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
+    const [toDoLists, setToDoLists] = useState<ToDoList[]>([])
+    const [toDoItems, setToDoItems] = useState<ToDoItem[]>([])
+    const [memberActionCards, setMemberActionCards] = useState<MemberActionCard[]>([])
 
 
     // Filtres
@@ -3764,10 +3843,9 @@ export default function Projects() {
         setMultipleSelect(false)
     }
 
-
     useEffect(() => {
-        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations()])
-            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm, formations]) => {
+        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards()])
+            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm, formations, tdl, tdi, amac]) => {
                 const axisMap = new Map((axs as Axis[]).map(a => [a.id, a]))
 
                 const fullCalls: ProjectCallFull[] = (pcs as ProjectCall[]).map(pc => ({
@@ -3791,9 +3869,55 @@ export default function Projects() {
                 setTimeEntries(te)
                 setAllProjectMembers(pm)
                 setAllFormations(formations as Formation[])
+                setToDoLists(tdl)
+                setToDoItems(tdi)
+                setMemberActionCards(amac)
             })
             .finally(() => setLoading(false))
     }, [])
+
+    function onTodosChanged(cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) {
+        const oldListIds = new Set(toDoLists.filter(l => l.action_card_id === cardId).map(l => l.id))
+
+        setToDoLists(prev => [...prev.filter(l => l.action_card_id !== cardId), ...lists])
+        setToDoItems(prev => [...prev.filter(i => !oldListIds.has(i.list_id)), ...lists.flatMap(l => l.items)])
+    }
+
+    function onMemberLinkChanged(cardId: number, links: MemberActionCard[]) {
+        setMemberActionCards(prev => [...prev.filter(mac => mac.action_card_id !== cardId), ...links])
+    }
+
+    const toDoProgress = useMemo(() => {
+        const listToCard = new Map<number, number>()
+        for (const l of toDoLists) listToCard.set(l.id, l.action_card_id)
+
+        const progress = new Map<number, {done : number, total : number, items : ToDoItem[]}>()
+        for(const item of toDoItems){
+            const cardId = listToCard.get(item.list_id)
+            if(!cardId) continue
+            const p = progress.get(cardId) ?? {done : 0, total: 0, items: []}
+            p.total++
+            p.items.push(item)
+            if(item.status_id === 9) p.done++
+            progress.set(cardId, p)
+        }
+        return progress
+            }       
+        ,[toDoItems, toDoLists])
+
+    const memberLinks = useMemo(() => { // clé : action_card_id — valeur : Member[] — je parcours : les liens
+        const mlMap = new Map<number, Member[]>()
+        const memberMap = new Map(members.map(m => [m.id, m]))
+        for (const link of memberActionCards) {
+            const member = memberMap.get(link.member_id)
+            if(!member) continue
+            if (!WORKING_ROLES.has(link.role)) continue
+            const list = mlMap.get(link.action_card_id) ?? []
+            list.push(member)
+            mlMap.set(link.action_card_id, list)
+        } 
+        return mlMap
+    },[members, memberActionCards])
 
     // Conventions enrichies par projet (pour les ProjectCards)
     const partnerMap = new Map(partners.map(p => [p.id, p]))
@@ -4660,6 +4784,8 @@ export default function Projects() {
                 axes={axes}
                 statuses={statuses}
                 members={members}
+                toDoProgress={toDoProgress}
+                memberLinks={memberLinks}
                 projectTimes={timeEntries.filter(te => te.project_id === selectedProject?.id)}
                 axis={axes}
                 onMemberCreated={m => setMembers(prev => [...prev, m])}
@@ -4668,6 +4794,8 @@ export default function Projects() {
                 onTimeEntryUpdated={e => setTimeEntries(prev => prev.map(x => x.id === e.id ? e : x))}
                 onTimeEntryDeleted={id => setTimeEntries(prev => prev.filter(e => e.id !== id))}
                 allFormations={allFormations}
+                onTodosChanged={onTodosChanged}
+                onMemberLinkChanged={onMemberLinkChanged}
             />
         </div>
     )

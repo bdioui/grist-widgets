@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -104,13 +104,16 @@ function formatDate(date?: string) {
 
 type TodoItemRowProps = {
     item: ToDoItem
+    linkedMembers: Member[]
     onToggle: (item: ToDoItem) => void
     onDelete: (item: ToDoItem) => void
     onDueDateChange: (item: ToDoItem, due_date: string) => void
     onContentChange: (item: ToDoItem, content: string) => void
+    onOwnerChange: (item: ToDoItem, ownerId: number | null) => void
+
 }
 
-function TodoItemRow({ item, onToggle, onDelete, onDueDateChange, onContentChange }: TodoItemRowProps) {
+function TodoItemRow({ item, linkedMembers, onToggle, onDelete, onDueDateChange, onOwnerChange, onContentChange }: TodoItemRowProps) {
     const [editingDate,    setEditingDate]    = useState(false)
     const [editingContent, setEditingContent] = useState(false)
     const [contentDraft,   setContentDraft]   = useState('')
@@ -145,7 +148,8 @@ function TodoItemRow({ item, onToggle, onDelete, onDueDateChange, onContentChang
                     onBlur={commitContent}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitContent() } if (e.key === 'Escape') setEditingContent(false) }}
                     className="flex-1 text-sm bg-transparent border-b border-border outline-none"
-                />
+                >
+                </input>
             ) : (
                 <label
                     htmlFor={`todo-${item.id}`}
@@ -155,6 +159,22 @@ function TodoItemRow({ item, onToggle, onDelete, onDueDateChange, onContentChang
                     {item.content}
                 </label>
             )}
+            {linkedMembers.length > 0 && (
+                <Select value={item.owner_id != null ? String(item.owner_id) : ''} onValueChange={v => onOwnerChange(item, v === '0' ? null : Number(v))}>
+                        <SelectTrigger className={`h-7 text-xs w-40 shrink-0 ${item.owner_id == null ? 'border-transparent text-muted-foreground hover:border-input' : ''}`}>
+                            <SelectValue placeholder="Assigner un membre" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                <SelectItem value={'0'} className="text-muted-foreground">Non assigné</SelectItem>
+                                {linkedMembers.map(m=> 
+                                        <SelectItem key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</SelectItem>
+                                )}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
+            )}
+
             {item.due_date || editingDate ? (
                 <input
                     type="date"
@@ -187,20 +207,24 @@ function TodoItemRow({ item, onToggle, onDelete, onDueDateChange, onContentChang
 
 type TodoSectionProps = {
     list: ToDoList & { items: ToDoItem[] }
+    linkedMembers: Member[]
+    cardOwnerId?: number | null
     onToggle: (listId: number, item: ToDoItem) => void
     onDeleteItem: (listId: number, item: ToDoItem) => void
-    onAddItem: (listId: number, content: string, due_date?: string) => void
+    onAddItem: (listId: number, content: string, ownerId: number | null, due_date?: string) => void
     onDeleteList: (listId: number) => void
     onDueDateChange: (listId: number, item: ToDoItem, due_date: string) => void
     onContentChange: (listId: number, item: ToDoItem, content: string) => void
+    onOwnerChange: (listId: number, item: ToDoItem, ownerId: number | null) => void
     onTitleChange: (listId: number, title: string) => void
 }
 
-function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, onDueDateChange, onContentChange, onTitleChange }: TodoSectionProps) {
+function TodoSection({ list, linkedMembers, cardOwnerId, onToggle, onDeleteItem, onAddItem, onDeleteList, onDueDateChange, onContentChange, onOwnerChange, onTitleChange }: TodoSectionProps) {
     const [input,        setInput]        = useState('')
     const [dueDate,      setDueDate]      = useState('')
     const [editingTitle, setEditingTitle] = useState(false)
     const [titleDraft,   setTitleDraft]   = useState('')
+    const [owner, setOwner] = useState(cardOwnerId ?? null)
     const done = list.items.filter(i => i.status_id === 9).length
 
     function commitTitle() {
@@ -211,7 +235,7 @@ function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, on
 
     function submit() {
         if (!input.trim()) return
-        onAddItem(list.id, input.trim(), dueDate || undefined)
+        onAddItem(list.id, input.trim(), owner, dueDate || undefined)
         setInput('')
         setDueDate('')
     }
@@ -255,11 +279,13 @@ function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, on
                 }).map(item => (
                     <TodoItemRow
                         key={item.id}
+                        linkedMembers={linkedMembers}
                         item={item}
                         onToggle={item => onToggle(list.id, item)}
                         onDelete={item => onDeleteItem(list.id, item)}
                         onDueDateChange={(item, due_date) => onDueDateChange(list.id, item, due_date)}
                         onContentChange={(item, content) => onContentChange(list.id, item, content)}
+                        onOwnerChange={(item, ownerId) => onOwnerChange(list.id, item, ownerId)}
                     />
                 ))}
             </ul>
@@ -271,6 +297,22 @@ function TodoSection({ list, onToggle, onDeleteItem, onAddItem, onDeleteList, on
                     placeholder="Nouvelle tâche..."
                     className="h-7 text-xs flex-1"
                 />
+                {linkedMembers.length > 0 && (
+                    <Select value={owner != null ? String(owner) : ''} onValueChange={v => setOwner(v === '0' ? null : Number(v))}>
+                        <SelectTrigger className={`h-7 text-xs w-40 shrink-0 ${owner == null ? 'border-transparent text-muted-foreground hover:border-input' : ''}`}>
+                            <SelectValue placeholder="Assigner un membre" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                <SelectItem value={'0'} className="text-muted-foreground">Non assigné</SelectItem>
+                                {linkedMembers.map(m=> 
+                                        <SelectItem key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</SelectItem>
+                                )}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
+                )}
+                
                 <input
                     type="date"
                     value={dueDate}
@@ -429,6 +471,8 @@ type DetailSheetProps = {
     onClose: () => void
     onUpdated: (patch: Partial<ActionCardData>) => void
     onDeleted?: (id: number) => void
+    onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
+    onMemberLinkChanged?: (cardId: number, links: (MemberActionCard[])) => void
 }
 
 // --- Formulaire création rapide membre (dans le sheet détail) ---
@@ -689,7 +733,7 @@ function SortableTabAC({ mode, label, icon, isActive, isEmpty, onActivate, onRem
     )
 }
 
-export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted }: DetailSheetProps) {
+export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDeleted, onTodosChanged, onMemberLinkChanged}: DetailSheetProps) {
     const [loading, setLoading] = useState(true)
     const [expanded, setExpanded] = useState(false)
 
@@ -843,6 +887,14 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
     }, [activeACTabs, card.id])
 
     useEffect(() => {
+        if (!loading) onTodosChanged?.(card.id, todoLists)
+    }, [todoLists])
+
+    useEffect(() => {
+        if(!loading) onMemberLinkChanged?.(card.id, memberLinks)
+    }, [memberLinks])
+
+    useEffect(() => {
         if (!open) return
         setDraft(card)
         setEditing(false)
@@ -898,6 +950,18 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
         }).catch(err => console.error('[ActionCard] Promise.all failed:', err))
         .finally(() => setLoading(false))
     }, [open, card.id])
+
+
+
+    const cardMembers = useMemo(() => memberLinks.map(l => l.member), [memberLinks])
+
+    // Les liens de rôle « Responsable » font foi ; owner_id n'est qu'un repli
+    // pour les fiches créées avant la table de liaison.
+    const responsables = useMemo<Owner[]>(() => {
+        const fromLinks = memberLinks.filter(l => l.role === 'Responsable').map(l => l.member)
+        if (fromLinks.length > 0) return fromLinks
+        return card.owner ? [card.owner] : []
+    }, [memberLinks, card.owner])
 
     function setDraftField<K extends keyof ActionCardData>(key: K, value: ActionCardData[K]) {
         setDraft(prev => ({ ...prev, [key]: value }))
@@ -970,13 +1034,20 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
         ))
     }
 
+    function updateTodoOwner(listId: number, item: ToDoItem, owner_id: number | null) {
+        updateToDoItem(item.id, { owner_id })
+        setTodoLists(prev => prev.map(l =>
+            l.id !== listId ? l : { ...l, items: l.items.map(i => i.id === item.id ? { ...i, owner_id } : i) }
+        ))
+    }
+
     function updateListTitle(listId: number, title: string) {
         updateToDoList(listId, title)
         setTodoLists(prev => prev.map(l => l.id !== listId ? l : { ...l, title }))
     }
 
-    async function addTodoItem(listId: number, content: string, due_date?: string) {
-        const newItem = await addToDoItemToList(listId, content, due_date)
+    async function addTodoItem(listId: number, content: string,  ownerId: number | null, due_date?: string) {
+        const newItem = await addToDoItemToList(listId, content, due_date, ownerId)
         setTodoLists(prev => prev.map(l =>
             l.id !== listId ? l : { ...l, items: [...l.items, newItem] }
         ))
@@ -1321,11 +1392,16 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                         {card.end_date   && <span>Fin : {formatDate(card.end_date)}</span>}
                                     </p>
                                 )}
-                                {card.owner && (
-                                    
+                                {responsables.length > 0 && (
                                     <p className="text-xs text-muted-foreground">
-                                        Responsable : <span className="font-medium text-foreground">{card.owner.first_name} {card.owner.last_name}</span>
-                                        {card.owner.position ? ` — ${card.owner.position}` : ''}
+                                        {responsables.length > 1 ? 'Responsables : ' : 'Responsable : '}
+                                        {responsables.map((r, i) => (
+                                            <span key={r.id}>
+                                                {i > 0 && ', '}
+                                                <span className="font-medium text-foreground">{r.first_name} {r.last_name}</span>
+                                                {r.position ? ` — ${r.position}` : ''}
+                                            </span>
+                                        ))}
                                     </p>
                                 )}
                             </section>
@@ -1365,12 +1441,15 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                             <TodoSection
                                                 key={list.id}
                                                 list={list}
+                                                linkedMembers={cardMembers}
+                                                cardOwnerId={card.owner?.id}
                                                 onToggle={toggleTodo}
                                                 onDeleteItem={deleteTodoItem}
                                                 onAddItem={addTodoItem}
                                                 onDeleteList={deleteList}
                                                 onDueDateChange={updateDueDate}
                                                 onContentChange={updateTodoContent}
+                                                onOwnerChange={updateTodoOwner}
                                                 onTitleChange={updateListTitle}
                                             />
                                         ))}
@@ -1959,8 +2038,11 @@ export default function ActionCard(props: ActionCardData & {
     onSelectMultiple?: () => void
     onSelectAll?: () => void
     selectedCards?: ActionCardData[]
+    onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
+    onMemberLinkChanged? : (cardId: number, links: MemberActionCard[]) => void
 }) {
-    const { onDeleted, onUpdated: onUpdatedProp, selectOn, selected, onToggle, onSelectMultiple: _onSelectMultiple, onSelectAll, selectedCards = [] } = props
+    const { onDeleted, onUpdated: onUpdatedProp, selectOn, selected, onToggle, onSelectMultiple: _onSelectMultiple, onSelectAll, selectedCards = [], onTodosChanged, onMemberLinkChanged
+     } = props
     const [open, setOpen]         = useState(false)
     const [data, setData]         = useState<ActionCardData>(props)
     const [copied, setCopied]     = useState(false)
@@ -2121,6 +2203,8 @@ export default function ActionCard(props: ActionCardData & {
                 onUpdatedProp?.(patch)
             }}
             onDeleted={onDeleted}
+            onTodosChanged={onTodosChanged}
+            onMemberLinkChanged={onMemberLinkChanged}
         />
         </>
     )

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from '@dnd-kit/core'
 import ActionCard, { type ActionCardData } from './ActionCard'
 import DraggableCard from './DraggableCard'
@@ -16,12 +16,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SlidersHorizontal, Plus, Pencil, Search, Users, ListChecks, X, Copy, Trash, FileDown } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { getActionCardsFull, updateActionCard, deleteActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards } from '@/lib/api'
-import type { ActionCardFull, Category, Axis, Member, Partner, AxisActionCard, MemberActionCard } from '@/lib/types'
+import { getActionCardsFull, updateActionCard, deleteActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards, getToDoItems, getToDoLists } from '@/lib/api'
+import { type ActionCardFull, type Category, type Axis, type Member, type Partner, type AxisActionCard, type MemberActionCard, type ToDoItem, type ToDoList } from '@/lib/types'
 import ActionCardSheet from './ActionCardSheet'
 import { useCurrentUser } from '@/lib/userContext'
 import { exportToCsv } from '@/lib/utils'
 import CategorySheet from './CategorySheet'
+import { participantsByCard } from '@/lib/utils'
 
 // --- Mapping API → ActionCardData ---
 
@@ -226,6 +227,9 @@ export default function Categories() {
     const [sheetOpen, setSheetOpen]             = useState(false)
     const [catSheetOpen, setCatSheetOpen]       = useState(false)
     const [editingCategory, setEditingCategory] = useState<Category | undefined>()
+    const [toDoItems, setTodoItems] = useState<ToDoItem[]>([])
+    const [toDoLists, setTodoLists] = useState<ToDoList[]>([])
+
 
     // Données de filtre
     const [allAxes,    setAllAxes]    = useState<Axis[]>([])
@@ -258,8 +262,11 @@ export default function Categories() {
             getPartners(),
             getAllAxisActionCards(),
             getAllMemberActionCards(),
+            getToDoLists(),
+            getToDoItems()
+            
         ])
-            .then(([data, axes, members, partners, axLinks, memLinks]) => {
+            .then(([data, axes, members, partners, axLinks, memLinks, tdl, tdi]) => {
                 const memberMap = new Map(members.map(m => [m.id, m]))
                 const mapped = data.map(card => ({
                     ...toCardData(card),
@@ -279,12 +286,19 @@ export default function Categories() {
                 setAllPartners(partners)
                 setAxisLinks(axLinks)
                 setMemberLinks(memLinks)
+                setTodoItems(tdi)
+                setTodoLists(tdl)
             })
             .catch(err => setError(err.message))
             .finally(() => setLoading(false))
     }
 
     useEffect(() => { loadData() }, [])
+
+    const participants = useMemo(
+        () => participantsByCard(memberLinks, toDoLists, toDoItems),
+        [memberLinks, toDoLists, toDoItems]
+    )
 
     function toggleChild(id: number) {
         setVisibleIds(prev =>
@@ -408,12 +422,11 @@ export default function Categories() {
             if (!selectedAxeIds.some(id => cardAxes.includes(id))) return false
         }
         if (myCardsOnly && currentUser) {
-            const cardResp = memberLinks.filter(l => l.action_card_id === card.id && l.role === 'Responsable').map(l => l.member_id)
-            if (!cardResp.includes(currentUser.id)) return false
+            if (!participants.get(card.id)?.has(currentUser.id)) return false
         }
         if (selectedMemberIds.length > 0) {
-            const cardResp = memberLinks.filter(l => l.action_card_id === card.id && l.role === 'Responsable').map(l => l.member_id)
-            if (!selectedMemberIds.some(id => cardResp.includes(id))) return false
+            const onCard = participants.get(card.id)
+            if (!selectedMemberIds.some(id => onCard?.has(id))) return false
         }
         return true
     })

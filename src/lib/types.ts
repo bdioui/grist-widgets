@@ -289,6 +289,7 @@ export type ToDoItem = {
     start_date?: string
     end_time?: string
     due_date: string
+    owner_id: number | null
 }
 
 // --- Types enrichis (jointures côté front) ---
