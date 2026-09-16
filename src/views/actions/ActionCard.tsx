@@ -51,6 +51,7 @@ const MEMBER_STATUSES = [
 ]
 import { MapContainer, TileLayer, Marker, useMap} from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import { WORKING_ROLES } from '@/lib/constants'
 
 // --- Types exportés (utilisés par Categories, DraggableCard, etc.) ---
 
@@ -159,21 +160,6 @@ function TodoItemRow({ item, linkedMembers, onToggle, onDelete, onDueDateChange,
                     {item.content}
                 </label>
             )}
-            {linkedMembers.length > 0 && (
-                <Select value={item.owner_id != null ? String(item.owner_id) : ''} onValueChange={v => onOwnerChange(item, v === '0' ? null : Number(v))}>
-                        <SelectTrigger className={`h-7 text-xs w-40 shrink-0 ${item.owner_id == null ? 'border-transparent text-muted-foreground hover:border-input' : ''}`}>
-                            <SelectValue placeholder="Assigner un membre" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value={'0'} className="text-muted-foreground">Non assigné</SelectItem>
-                                {linkedMembers.map(m=> 
-                                        <SelectItem key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</SelectItem>
-                                )}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-            )}
 
             {item.due_date || editingDate ? (
                 <input
@@ -192,6 +178,22 @@ function TodoItemRow({ item, linkedMembers, onToggle, onDelete, onDueDateChange,
                 >
                     <Calendar size={12} />
                 </button>
+            )}
+
+            {linkedMembers.length > 0 && (
+                <Select value={item.owner_id != null ? String(item.owner_id) : ''} onValueChange={v => onOwnerChange(item, v === '0' ? null : Number(v))}>
+                        <SelectTrigger className={`h-7 text-xs w-40 shrink-0 ${item.owner_id == null ? 'border-transparent text-muted-foreground hover:border-input' : ''}`}>
+                            <SelectValue placeholder="Assigner un membre" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                <SelectItem value={'0'} className="text-muted-foreground">Non assigné</SelectItem>
+                                {linkedMembers.map(m=> 
+                                        <SelectItem key={m.id} value={String(m.id)}>{m.first_name} {m.last_name}</SelectItem>
+                         )}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
             )}
             <button
                 onClick={() => onDelete(item)}
@@ -297,6 +299,12 @@ function TodoSection({ list, linkedMembers, cardOwnerId, onToggle, onDeleteItem,
                     placeholder="Nouvelle tâche..."
                     className="h-7 text-xs flex-1"
                 />
+                <input
+                    type="date"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    className="h-7 text-xs border border-input rounded-md px-2 bg-background text-muted-foreground w-32"
+                />
                 {linkedMembers.length > 0 && (
                     <Select value={owner != null ? String(owner) : ''} onValueChange={v => setOwner(v === '0' ? null : Number(v))}>
                         <SelectTrigger className={`h-7 text-xs w-40 shrink-0 ${owner == null ? 'border-transparent text-muted-foreground hover:border-input' : ''}`}>
@@ -312,13 +320,6 @@ function TodoSection({ list, linkedMembers, cardOwnerId, onToggle, onDeleteItem,
                         </SelectContent>
                     </Select>
                 )}
-                
-                <input
-                    type="date"
-                    value={dueDate}
-                    onChange={e => setDueDate(e.target.value)}
-                    className="h-7 text-xs border border-input rounded-md px-2 bg-background text-muted-foreground w-32"
-                />
                 <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={submit} disabled={!input.trim()}>
                     <Plus size={12} />
                 </Button>
@@ -472,7 +473,7 @@ type DetailSheetProps = {
     onUpdated: (patch: Partial<ActionCardData>) => void
     onDeleted?: (id: number) => void
     onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
-    onMemberLinkChanged?: (cardId: number, links: (MemberActionCard[])) => void
+    onMemberLinkChanged?: (cardId: number, links: (MemberLink[])) => void
 }
 
 // --- Formulaire création rapide membre (dans le sheet détail) ---
@@ -953,7 +954,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
 
 
 
-    const cardMembers = useMemo(() => memberLinks.map(l => l.member), [memberLinks])
+    const cardMembers = useMemo(() => memberLinks.filter(l => WORKING_ROLES.has(l.role)).map(l => l.member), [memberLinks])
 
     // Les liens de rôle « Responsable » font foi ; owner_id n'est qu'un repli
     // pour les fiches créées avant la table de liaison.
@@ -2039,7 +2040,7 @@ export default function ActionCard(props: ActionCardData & {
     onSelectAll?: () => void
     selectedCards?: ActionCardData[]
     onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
-    onMemberLinkChanged? : (cardId: number, links: MemberActionCard[]) => void
+    onMemberLinkChanged? : (cardId: number, links: MemberLink[]) => void
 }) {
     const { onDeleted, onUpdated: onUpdatedProp, selectOn, selected, onToggle, onSelectMultiple: _onSelectMultiple, onSelectAll, selectedCards = [], onTodosChanged, onMemberLinkChanged
      } = props
