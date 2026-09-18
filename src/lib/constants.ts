@@ -1,9 +1,16 @@
+import type { Partner } from './types'
+
 export const PARTNER_TYPES = [
     'Université et grandes écoles', 'Entreprise privée', 'Association',
     'Établissement public', 'Administration', 'Collectivité', 'Fondation', 'Autre',
 ]
 
 export const WORKING_ROLES = new Set(['Responsable', 'Contributeur'])
+
+// Affiché quand une référence pointe vers un partenaire supprimé.
+export const FALLBACK_PARTNER: Partner = {
+    id: 0, name: '?', description: '', color: '', logo: '', status_id: 0, type: '', consortium: false,
+}
 
 export const PALETTE = [
     { label: 'Lavande', hexa: '#D8CFEE' },

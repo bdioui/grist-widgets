@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import {
     getProjectCalls, getAxes, getStatuses, getPartners,
-    getMembersFull, getFormations, getTimeEntries,
+    getMembersFull, getFormations, getTimeEntries, getProjectPartners,
 } from '@/lib/api'
-import type { Project, ProjectCall, Axis, Status, Partner, Formation, TimeEntry, MemberFull, ActionCardFull } from '@/lib/types'
-import type { ProjectFull, ProjectCallFull } from '@/views/Projects'
+import type { Project, ProjectCall, Axis, Status, Partner, Formation, TimeEntry, MemberFull, ActionCardFull, ProjectPartner } from '@/lib/types'
+import type { ProjectFull, ProjectCallFull, ProjectPartnerFull } from '@/views/Projects'
+import { FALLBACK_PARTNER } from '@/lib/constants'
 import type { ActionCardData } from '@/views/actions/ActionCard'
 
 const ProjectDetailSheetLazy = lazy(() =>
@@ -17,14 +18,15 @@ const ActionCardDetailSheetLazy = lazy(() =>
 // --- ProjectViewerSheet ---
 
 type ProjectRefData = {
-    projectFull:  ProjectFull
-    projectCalls: ProjectCallFull[]
-    axes:         Axis[]
-    statuses:     Status[]
-    partners:     Partner[]
-    members:      MemberFull[]
-    formations:   Formation[]
-    times:        TimeEntry[]
+    projectFull:     ProjectFull
+    projectCalls:    ProjectCallFull[]
+    axes:            Axis[]
+    statuses:        Status[]
+    partners:        Partner[]
+    projectPartners: ProjectPartnerFull[]
+    members:         MemberFull[]
+    formations:      Formation[]
+    times:           TimeEntry[]
 }
 
 export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { project: Project; open: boolean; onClose: () => void; onUpdated?: (p: Project) => void }) {
@@ -41,7 +43,8 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
             getMembersFull(),
             getFormations(),
             getTimeEntries(),
-        ]).then(([calls, axes, statuses, partners, members, formations, times]) => {
+            getProjectPartners(),
+        ]).then(([calls, axes, statuses, partners, members, formations, times, pp]) => {
             const axisMap = new Map((axes as Axis[]).map(a => [a.id, a]))
             const fullCalls: ProjectCallFull[] = (calls as ProjectCall[]).map(c => ({
                 ...c,
@@ -56,12 +59,18 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
                     axis: { id: 0, name: 'Inconnu', description: '' },
                 },
             }
+            const partnerMap = new Map((partners as Partner[]).map(p => [p.id, p]))
+            const projectPartners: ProjectPartnerFull[] = (pp as ProjectPartner[])
+                .filter(p => p.project_id === project.id)
+                .map(p => ({ ...p, partner: partnerMap.get(p.partner_id) ?? FALLBACK_PARTNER }))
+
             setRefData({
                 projectFull,
                 projectCalls: fullCalls,
                 axes: axes as Axis[],
                 statuses: statuses as Status[],
                 partners: partners as Partner[],
+                projectPartners,
                 members: members as MemberFull[],
                 formations: formations as Formation[],
                 times: times as TimeEntry[],
@@ -85,6 +94,10 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
                 onAgreementAdded={() => {}}
                 onAgreementDeleted={() => {}}
                 partners={refData.partners}
+                cardProjectPartners={refData.projectPartners}
+                onChangeProjectPartners={(_projectId, list) =>
+                    setRefData(prev => prev ? { ...prev, projectPartners: list } : null)
+                }
                 projectCalls={refData.projectCalls}
                 axes={refData.axes}
                 statuses={refData.statuses}

@@ -95,7 +95,7 @@ const STATUS_ORDER = ["En cours", "Suspendu", "En attente", "Terminé",]
 
 const PARTNER_ROLES = ['Associé', 'Bénéficiaire', 'Cofinanceur', 'Sous-traitant']
 
-import { PARTNER_TYPES, WORKING_ROLES, PALETTE } from '@/lib/constants'
+import { PARTNER_TYPES, WORKING_ROLES, PALETTE, FALLBACK_PARTNER } from '@/lib/constants'
 
 
 const MEMBER_STATUSES = [
@@ -109,7 +109,7 @@ const MEMBER_STATUSES = [
 export type ProjectCallFull    = ProjectCall & { axis: Axis }
 export type ProjectFull        = Project     & { projectCall: ProjectCallFull }
 export type AgreementFull      = FinancialAgreement & { partner: Partner }
-type ProjectPartnerFull = ProjectPartner & { partner: Partner }
+export type ProjectPartnerFull = ProjectPartner & { partner: Partner }
 
 // --- Helpers ---
 
@@ -140,7 +140,7 @@ function projectProgress(start_date: string, end_date: string): number | null {
 
 type ProjectCardProps = {
     project: ProjectFull
-    agreements: AgreementFull[]
+    cofinancingByProject: Map<number, number>
     statuses: Status[]
     onClick: () => void
     selectOn: boolean
@@ -153,9 +153,7 @@ type ProjectCardProps = {
     onSelectAll: () => void
 }
 
-function ProjectCard({ project, agreements, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple: _onSelectMultiple, onSelectAll }: ProjectCardProps) {
-    const totalGrant = agreements.reduce((s, a) => s + a.grant, 0)
-    const partners = [...new Map(agreements.map(a => [a.partner_id, a.partner])).values()]
+function ProjectCard({ project, cofinancingByProject, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple: _onSelectMultiple, onSelectAll }: ProjectCardProps) {
     const status  = statuses.find(s => s.id === project.status_id)
 
     const [copied,      setCopied]      = useState(false)
@@ -219,16 +217,24 @@ function ProjectCard({ project, agreements, statuses, onClick, selectOn, selecte
             {/* Budget / subvention */}
             <div className="flex flex-col gap-1 text-xs text-muted-foreground">
                 {project.budget > 0 && (
+                    <>
                     <div className="flex justify-between">
                         <span>Budget</span>
                         <span className="font-medium text-foreground">{fmt(project.budget)}</span>
                     </div>
-                )}
-                {totalGrant > 0 && (
-                    <div className="flex justify-between">
-                        <span>Subvention</span>
-                        <span className="font-medium text-foreground">{fmt(totalGrant)}</span>
+
+                    <hr></hr>
+
+                     <div className="flex justify-between text-[10px]">
+                        <span>Autofinancement</span>
+                        <span className="font-medium text-foreground">{fmt(project.budget - (cofinancingByProject.get(project.id) ?? 0))}</span>
                     </div>
+
+                     <div className="flex justify-between text-[10px]">
+                        <span>Cofinancements</span>
+                        <span className="font-medium text-foreground">{fmt(cofinancingByProject.get(project.id) ?? 0)}</span>
+                    </div>
+                    </>
                 )}
             </div>
 
@@ -256,7 +262,7 @@ function ProjectCard({ project, agreements, statuses, onClick, selectOn, selecte
                 )
             })()}
             {/* Conventions + badges partenaires */}
-            {agreements.length > 0 && (
+            {/* {agreements.length > 0 && (
                 <div className="flex items-center justify-between gap-2 pt-1 border-t border-border">
                     <div className="flex items-center gap-1 min-w-0 flex-wrap">
                         {partners.slice(0, 2).map(p => (
@@ -275,10 +281,10 @@ function ProjectCard({ project, agreements, statuses, onClick, selectOn, selecte
                         )}
                     </div>
                     <span className="text-xs text-muted-foreground shrink-0">
-                        {agreements.length} conv.
+                        {agreements.length} conv. ({fmt(totalGrant)})
                     </span>
                 </div>
-            )}
+            )} */}
         </div>
             </ContextMenuTrigger>
             <ContextMenuContent className="w-52">
@@ -1426,6 +1432,7 @@ export type ProjectDetailSheetProps = {
     onAgreementAdded: (a: FinancialAgreement) => void
     onAgreementDeleted: (id: number) => void
     partners: Partner[]
+    cardProjectPartners: ProjectPartnerFull[]
     projectCalls: ProjectCall[]
     axes: Axis[]
     statuses: Status[]
@@ -1442,6 +1449,7 @@ export type ProjectDetailSheetProps = {
     onTimeEntryAdded?: (e: TimeEntry) => void
     onTimeEntryUpdated?: (e: TimeEntry) => void
     onTimeEntryDeleted?: (id: number) => void
+    onChangeProjectPartners: (cardId: number, list: ProjectPartnerFull[]) => void
     allFormations: Formation[]
     onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
     onMemberLinkChanged?: (cardId: number, links: MemberActionCard[]) => void
@@ -1488,7 +1496,7 @@ function SortableTab({ mode, label, icon, isActive, isEmpty, onActivate, onRemov
     )
 }
 
-export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, partners, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged }: ProjectDetailSheetProps) {
+export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, onChangeProjectPartners, partners, cardProjectPartners, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -1516,7 +1524,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [selectedKpi, setSelectedKpi] = useState<Kpi | null>(null)
     const pendingMemberIds = useRef(new Set<number>())
     const [selectedAgreement, setSelectedAgreement] = useState<AgreementFull | null>()
-    const [projectPartners,  setProjectPartners]  = useState<ProjectPartnerFull[]>([])
     const [showAddPartner,   setShowAddPartner]   = useState(false)
     const [actionCards,      setActionCards]      = useState<(ActionCardFull & { linkId: number })[]>([])
     const [showLinkCard,       setShowLinkCard]       = useState(false)
@@ -1633,7 +1640,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
             getProjectMembers(project.id),
             getKpis(),
             getKpiEntries(project.id),
-            getProjectPartners(),
             getProjectMilestones(project.id),
             getActionCardsByProject(project.id),
             getFormationsByProject(project.id),
@@ -1647,16 +1653,11 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
             getPublicationMembersByProject(project.id),
             getLabs(),
         ])
-            .then(([agreements, members, kpis, kpiEntries, pp, ms, acs, formations, formationLinks, attachments, expanses, suppliers, cats, details, pubs, pubMembers, labs]) => {
+            .then(([agreements, members, kpis, kpiEntries,ms, acs, formations, formationLinks, attachments, expanses, suppliers, cats, details, pubs, pubMembers, labs]) => {
                 setAgreements(agreements as AgreementFull[])
                 setProjectMembers(members)
                 setKpis(kpis)
                 setKpiEntries(kpiEntries)
-                const partnerMap = new Map(partners.map(p => [p.id, p]))
-                const fullPartners = (pp as ProjectPartner[])
-                    .filter(p => p.project_id === project.id)
-                    .map(p => ({ ...p, partner: partnerMap.get(p.partner_id) ?? { id: 0, name: '?', description: '', color: '', logo: '', status_id: 0, type: '', consortium: false } }))
-                setProjectPartners(fullPartners)
                 setMilestones(ms as ProjectMilestone[])
                 setActionCards(acs as (ActionCardFull & { linkId: number })[])
                 setFormations(formations as Formation[])
@@ -1680,10 +1681,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                     // localStorage can be unavailable (e.g. browser privacy settings)
                 }
                 const projectMembersData = members as ProjectMember[]
-                const projectPartnersData = (pp as ProjectPartner[]).filter(p => p.project_id === project.id)
                 const autoShow: detailViewMode[] = []
                 if (projectMembersData.length > 0) autoShow.push('participants')
-                if (projectPartnersData.length > 0) autoShow.push('partners')
+                if (cardProjectPartners.length > 0) autoShow.push('partners')
                 if ((kpiEntries as KpiEntry[]).length > 0) autoShow.push('kpis')
                 if ((acs as ActionCardFull[]).length > 0) autoShow.push('tasks')
                 if ((expanses as Expanse[]).filter(e => e.project_id === project.id).length > 0) autoShow.push('budget')
@@ -1834,6 +1834,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const participationStatuses = statuses.filter(s => s.context === 'participation')
     const hasParticipants = projectMembers.some(pm => pm.role === 'Participant')
 
+    const TotalCofinancing = cardProjectPartners.reduce((s, a) => s + (a.amount ?? 0), 0)
+    const TotalAutofinancing = project.budget - TotalCofinancing
+
     const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
     const totalGrant  = agreements.reduce((s, a) => s + a.grant, 0) 
     const notCovered = totalBudget - totalGrant
@@ -1948,7 +1951,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         .map(({ mode, label, icon }) => {
                                             const isEmpty =
                                                 (mode === 'participants' && projectMembers.length === 0)  ||
-                                                (mode === 'partners'     && projectPartners.length === 0) ||
+                                                (mode === 'partners'     && cardProjectPartners.length === 0) ||
                                                 (mode === 'kpis'         && kpiEntries.length === 0)      ||
                                                 (mode === 'tasks'        && actionCards.length === 0)     ||
                                                 (mode === 'budget'       && projectExpanses.length === 0) ||
@@ -2067,16 +2070,24 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     </div>
                                 )}
                                 {project.budget > 0 && (
-                                    <div className="flex justify-between gap-2">
-                                        <span className="text-muted-foreground shrink-0">Budget</span>
+                                    <>
+                                    <div className="flex justify-between gap-2 mt-4">
+                                        <span className="text-muted-foreground shrink-0">Budget total</span>
                                         <span className="font-medium">{fmt(project.budget)}</span>
                                     </div>
-                                )}
-                                {totalGrant > 0 && (
-                                    <div className="flex justify-between gap-2">
-                                        <span className="text-muted-foreground shrink-0">Subventions</span>
-                                        <span className="font-medium">{fmt(totalGrant)}</span>
+
+                                    <hr></hr>
+
+
+                                    <div className="flex justify-between gap-2 text-[10px]">
+                                        <span className="text-muted-foreground shrink-0">Autofinancement</span>
+                                        <span className="font-small">{fmt(TotalAutofinancing)}</span>
                                     </div>
+                                     <div className="flex justify-between gap-2 text-[10px]">
+                                        <span className="text-muted-foreground shrink-0">Cofinancements</span>
+                                        <span className="font-small">{fmt(TotalCofinancing)}</span>
+                                    </div>
+                                    </>
                                 )}
                             </div>
                         )}
@@ -2362,16 +2373,16 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             )}
                         </div>
                         <div className="flex flex-col gap-2">
-                            {projectPartners.length === 0 && !showAddPartner && !showCreatePartner && (
+                            {cardProjectPartners.length === 0 && !showAddPartner && !showCreatePartner && (
                                 <p className="text-xs text-muted-foreground italic">Aucun partenaire</p>
                             )}
                             {showAddPartner && (
                                 <ProjectPartnerForm
-                                    partners={partners.filter(p => !projectPartners.some(pp => pp.partner_id === p.id))}
+                                    partners={partners.filter(p => !cardProjectPartners.some(pp => pp.partner_id === p.id))}
                                     onSaved={async (partnerId, role, amount, label) => {
                                         const pp = await addProjectPartner(project.id, partnerId, role, amount, label)
                                         const partner = partners.find(p => p.id === partnerId)!
-                                        setProjectPartners(prev => [...prev, { ...pp, partner }])
+                                        onChangeProjectPartners(project.id, [...cardProjectPartners, { ...pp, partner }])
                                         setShowAddPartner(false)
                                     }}
                                     onCancel={() => setShowAddPartner(false)}
@@ -2383,13 +2394,13 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     onSaved={async partner => {
                                         onPartnerCreated?.(partner)
                                         const pp = await addProjectPartner(project.id, partner.id, PARTNER_ROLES[0], null, null)
-                                        setProjectPartners(prev => [...prev, { ...pp, partner }])
+                                        onChangeProjectPartners(project.id, [...cardProjectPartners, { ...pp, partner }])
                                         setShowCreatePartner(false)
                                     }}
                                     onCancel={() => setShowCreatePartner(false)}
                                 />
                             )}
-                            {projectPartners.map(pp => (
+                            {cardProjectPartners.map(pp => (
                                 editingPartnerId === pp.id ? (
                                     <ProjectPartnerForm
                                         key={pp.id}
@@ -2398,7 +2409,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         onSaved={async (partnerId, role, amount, label) => {
                                             await updateProjectPartner(pp.id, { partner_id: partnerId, role, amount: amount ?? null, label: label ?? null })
                                             const partner = partners.find(p => p.id === partnerId)!
-                                            setProjectPartners(prev => prev.map(x => x.id === pp.id ? { ...x, partner_id: partnerId, role, amount, label, partner } : x))
+                                            onChangeProjectPartners(project.id, cardProjectPartners.map(x =>
+                                                x.id === pp.id ? { ...x, partner_id: partnerId, role, amount, label, partner } : x
+                                            ))
                                             setEditingPartnerId(null)
                                         }}
                                         onCancel={() => setEditingPartnerId(null)}
@@ -2441,7 +2454,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                                 onClick={e => {
                                                     e.stopPropagation()
                                                     removeProjectPartner(pp.id)
-                                                    setProjectPartners(prev => prev.filter(x => x.id !== pp.id))
+                                                    onChangeProjectPartners(project.id, cardProjectPartners.filter(x => x.id !== pp.id))
                                                 }}
                                             >
                                                 <X size={11} />
@@ -3123,7 +3136,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                             const partnerMap = new Map(partners.map(p => [p.id, p]))
                                             setAllAgreementsForLink((all as FinancialAgreement[])
                                                 .filter(a => a.project_id !== project.id)
-                                                .map(a => ({ ...a, partner: partnerMap.get(a.partner_id) ?? { id: 0, name: '?', description: '', color: '', logo: '', status_id: 0, type: '', consortium: false } }))
+                                                .map(a => ({ ...a, partner: partnerMap.get(a.partner_id) ?? FALLBACK_PARTNER }))
                                             )
                                             setLoadingLinkAgreements(false)
                                         }
@@ -3327,13 +3340,13 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                 open={!!selectedPartner}
                 onClose={() => setSelectedPartner(null)}
                 onUpdated={updated => {
-                    setProjectPartners(prev => prev.map(pp =>
+                    onChangeProjectPartners(project.id, cardProjectPartners.map(pp =>
                         pp.partner_id === updated.id ? { ...pp, partner: updated } : pp
                     ))
                     setSelectedPartner(updated)
                 }}
                 onDeleted={id => {
-                    setProjectPartners(prev => prev.filter(pp => pp.partner_id !== id))
+                    onChangeProjectPartners(project.id, cardProjectPartners.filter(pp => pp.partner_id !== id))
                     setSelectedPartner(null)
                 }}
             />
@@ -3803,6 +3816,7 @@ export default function Projects() {
     const [toDoLists, setToDoLists] = useState<ToDoList[]>([])
     const [toDoItems, setToDoItems] = useState<ToDoItem[]>([])
     const [memberActionCards, setMemberActionCards] = useState<MemberActionCard[]>([])
+    const [projectPartners, setProjectPartners] = useState<ProjectPartnerFull[]>([])
 
 
     // Filtres
@@ -3844,8 +3858,8 @@ export default function Projects() {
     }
 
     useEffect(() => {
-        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards()])
-            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm, formations, tdl, tdi, amac]) => {
+        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards(), getProjectPartners()])
+            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm, formations, tdl, tdi, amac, pp]) => {
                 const axisMap = new Map((axs as Axis[]).map(a => [a.id, a]))
 
                 const fullCalls: ProjectCallFull[] = (pcs as ProjectCall[]).map(pc => ({
@@ -3872,6 +3886,10 @@ export default function Projects() {
                 setToDoLists(tdl)
                 setToDoItems(tdi)
                 setMemberActionCards(amac)
+                const partnerMap = new Map((pts as Partner[]).map(p => [p.id, p]))
+                const fullPartners = (pp as ProjectPartner[])
+                    .map(p => ({ ...p, partner: partnerMap.get(p.partner_id) ?? FALLBACK_PARTNER }))
+                setProjectPartners(fullPartners)
             })
             .finally(() => setLoading(false))
     }, [])
@@ -3886,6 +3904,14 @@ export default function Projects() {
     function onMemberLinkChanged(cardId: number, links: MemberActionCard[]) {
         setMemberActionCards(prev => [...prev.filter(mac => mac.action_card_id !== cardId), ...links])
     }
+
+    const cofinancingByProject = useMemo(() => {
+        const totals = new Map<number, number>()
+        for(const pp of projectPartners) {
+            totals.set(pp.project_id, (totals.get(pp.project_id) ?? 0) + (pp.amount ?? 0))
+        }
+        return totals
+    }, [projectPartners])
 
     const toDoProgress = useMemo(() => {
         const listToCard = new Map<number, number>()
@@ -4330,7 +4356,7 @@ export default function Projects() {
                                                                     <ProjectCard
                                                                         key={p.id}
                                                                         project={p}
-                                                                        agreements={agreementsByProject.get(p.id) ?? []}
+                                                                        cofinancingByProject={cofinancingByProject}
                                                                         statuses={statuses}
                                                                         onClick={() => { setSelectedProject(p); setDetailOpen(true) }}
                                                                         selectOn={multipleSelect}
@@ -4780,6 +4806,10 @@ export default function Projects() {
                 onAgreementAdded={handleAgreementAdded}
                 onAgreementDeleted={handleAgreementDeleted}
                 partners={partners}
+                cardProjectPartners={projectPartners.filter(p=> p.project_id === selectedProject?.id)}
+                onChangeProjectPartners={(projectId, list) =>
+                    setProjectPartners(prev => [...prev.filter(p => p.project_id !== projectId), ...list])
+                }
                 projectCalls={projectCalls}
                 axes={axes}
                 statuses={statuses}
