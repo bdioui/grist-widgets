@@ -2,10 +2,12 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import {
     getProjectCalls, getAxes, getStatuses, getPartners,
     getMembersFull, getFormations, getTimeEntries, getProjectPartners,
+    getFinancialAgreements, getExpanses,
 } from '@/lib/api'
-import type { Project, ProjectCall, Axis, Status, Partner, Formation, TimeEntry, MemberFull, ActionCardFull, ProjectPartner } from '@/lib/types'
+import type { Project, ProjectCall, Axis, Status, Partner, Formation, TimeEntry, MemberFull, ActionCardFull, ProjectPartner, FinancialAgreement, Expanse } from '@/lib/types'
 import type { ProjectFull, ProjectCallFull, ProjectPartnerFull } from '@/views/Projects'
 import { FALLBACK_PARTNER } from '@/lib/constants'
+import { computeFinancials, NO_FINANCIALS, type ProjectFinancials } from '@/lib/utils'
 import type { ActionCardData } from '@/views/actions/ActionCard'
 
 const ProjectDetailSheetLazy = lazy(() =>
@@ -27,6 +29,7 @@ type ProjectRefData = {
     members:         MemberFull[]
     formations:      Formation[]
     times:           TimeEntry[]
+    finances:        ProjectFinancials
 }
 
 export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { project: Project; open: boolean; onClose: () => void; onUpdated?: (p: Project) => void }) {
@@ -44,7 +47,9 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
             getFormations(),
             getTimeEntries(),
             getProjectPartners(),
-        ]).then(([calls, axes, statuses, partners, members, formations, times, pp]) => {
+            getFinancialAgreements(),
+            getExpanses(),
+        ]).then(([calls, axes, statuses, partners, members, formations, times, pp, agrs, exp]) => {
             const axisMap = new Map((axes as Axis[]).map(a => [a.id, a]))
             const fullCalls: ProjectCallFull[] = (calls as ProjectCall[]).map(c => ({
                 ...c,
@@ -64,6 +69,14 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
                 .filter(p => p.project_id === project.id)
                 .map(p => ({ ...p, partner: partnerMap.get(p.partner_id) ?? FALLBACK_PARTNER }))
 
+            // Même arithmétique que la liste des projets, sur un seul projet.
+            const finances = computeFinancials(
+                [project],
+                (pp as ProjectPartner[]).filter(p => p.project_id === project.id),
+                (agrs as FinancialAgreement[]).filter(a => a.project_id === project.id),
+                (exp as Expanse[]).filter(e => e.project_id === project.id),
+            ).get(project.id) ?? NO_FINANCIALS
+
             setRefData({
                 projectFull,
                 projectCalls: fullCalls,
@@ -74,6 +87,7 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
                 members: members as MemberFull[],
                 formations: formations as Formation[],
                 times: times as TimeEntry[],
+                finances,
             })
         })
     }, [open, project.id])
@@ -105,6 +119,8 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
                 projectTimes={refData.times.filter(t => t.project_id === project.id)}
                 axis={refData.axes}
                 allFormations={refData.formations}
+                finances={refData.finances}
+                onExpanseLinked={() => {}}
             />
         </Suspense>
     )

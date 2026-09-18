@@ -21,8 +21,8 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, LayoutGrid, Table2, Paperclip, Receipt, EllipsisIcon, Building2, BarChart2, BookOpen, GraduationCap, ScrollText, ChartGantt } from 'lucide-react'
-import { exportToCsv } from '@/lib/utils'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, LayoutGrid, Table2, Paperclip, Receipt, EllipsisIcon, Building2, BarChart2, BookOpen, GraduationCap, ScrollText, ChartGantt, ChevronDown, ChevronRight } from 'lucide-react'
+import { exportToCsv, computeFinancials, NO_FINANCIALS, type ProjectFinancials } from '@/lib/utils'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { ActionCardDetailSheet } from '@/views/actions/ActionCard'
 import type { ActionCardData } from '@/views/actions/ActionCard'
@@ -113,6 +113,14 @@ export type ProjectPartnerFull = ProjectPartner & { partner: Partner }
 
 // --- Helpers ---
 
+// Vert tant qu'il reste de la marge, ambre au-delà de 75 % engagé,
+// rouge dès que les dépenses passent le budget.
+function balanceColor(f: ProjectFinancials) {
+    if (f.balance < 0) return 'text-red-600'
+    if (f.budget > 0 && f.balance / f.budget <= 0.25) return 'text-amber-600'
+    return 'text-green-600'
+}
+
 function fmt(n: number) {
     return n.toLocaleString('fr-FR') + ' €'
 }
@@ -140,7 +148,7 @@ function projectProgress(start_date: string, end_date: string): number | null {
 
 type ProjectCardProps = {
     project: ProjectFull
-    cofinancingByProject: Map<number, number>
+    financialsByProject: Map<number, ProjectFinancials>
     statuses: Status[]
     onClick: () => void
     selectOn: boolean
@@ -153,8 +161,9 @@ type ProjectCardProps = {
     onSelectAll: () => void
 }
 
-function ProjectCard({ project, cofinancingByProject, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple: _onSelectMultiple, onSelectAll }: ProjectCardProps) {
+function ProjectCard({ project, financialsByProject, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple: _onSelectMultiple, onSelectAll }: ProjectCardProps) {
     const status  = statuses.find(s => s.id === project.status_id)
+    const finances = financialsByProject.get(project.id) ?? NO_FINANCIALS
 
     const [copied,      setCopied]      = useState(false)
     const [confirming,  setConfirming]  = useState(false)
@@ -227,12 +236,17 @@ function ProjectCard({ project, cofinancingByProject, statuses, onClick, selectO
 
                      <div className="flex justify-between text-[10px]">
                         <span>Autofinancement</span>
-                        <span className="font-medium text-foreground">{fmt(project.budget - (cofinancingByProject.get(project.id) ?? 0))}</span>
+                        <span className="font-medium text-foreground">{fmt(finances.selfFinanced)}</span>
                     </div>
 
                      <div className="flex justify-between text-[10px]">
                         <span>Cofinancements</span>
-                        <span className="font-medium text-foreground">{fmt(cofinancingByProject.get(project.id) ?? 0)}</span>
+                        <span className="font-medium text-foreground">{fmt(finances.cofinanced)}</span>
+                    </div>
+
+                    <div className="flex justify-between">
+                        <span>Solde</span>
+                        <span className={`font-medium ${balanceColor(finances)}`}>{fmt(finances.balance)}</span>
                     </div>
                     </>
                 )}
@@ -1433,6 +1447,8 @@ export type ProjectDetailSheetProps = {
     onAgreementDeleted: (id: number) => void
     partners: Partner[]
     cardProjectPartners: ProjectPartnerFull[]
+    finances: ProjectFinancials
+    onExpanseLinked: (e: Expanse) => void
     projectCalls: ProjectCall[]
     axes: Axis[]
     statuses: Status[]
@@ -1496,7 +1512,7 @@ function SortableTab({ mode, label, icon, isActive, isEmpty, onActivate, onRemov
     )
 }
 
-export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, onChangeProjectPartners, partners, cardProjectPartners, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged }: ProjectDetailSheetProps) {
+export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, onChangeProjectPartners, partners, cardProjectPartners, finances, onExpanseLinked, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -1834,11 +1850,16 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const participationStatuses = statuses.filter(s => s.context === 'participation')
     const hasParticipants = projectMembers.some(pm => pm.role === 'Participant')
 
-    const TotalCofinancing = cardProjectPartners.reduce((s, a) => s + (a.amount ?? 0), 0)
-    const TotalAutofinancing = project.budget - TotalCofinancing
+    // La vue d'ensemble vient de Projects : la carte, la colonne AAP et cette
+    // fiche affichent le même chiffre parce qu'il n'est calculé qu'une fois.
+    const TotalCofinancing   = finances.cofinanced
+    const TotalAutofinancing = finances.selfFinanced
 
+    // Ces deux-là restent locaux : ils décrivent les conventions entre elles,
+    // pas le budget du projet. notCovered est la part que les conventions
+    // annoncent sans la financer, sans rapport avec le solde du projet.
     const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
-    const totalGrant  = agreements.reduce((s, a) => s + a.grant, 0) 
+    const totalGrant  = finances.granted
     const notCovered = totalBudget - totalGrant
     const operationalExpanses  = projectExpanses.filter(e => !e.agreement_id)
     const reversementExpanses  = projectExpanses.filter(e => !!e.agreement_id)
@@ -2086,6 +2107,28 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                      <div className="flex justify-between gap-2 text-[10px]">
                                         <span className="text-muted-foreground shrink-0">Cofinancements</span>
                                         <span className="font-small">{fmt(TotalCofinancing)}</span>
+                                    </div>
+
+                                    <div className="flex justify-between gap-2 mt-3">
+                                        <span className="text-muted-foreground shrink-0">Dépenses</span>
+                                        <span className="font-medium">{fmt(finances.spent)}</span>
+                                    </div>
+
+                                    <hr></hr>
+
+                                    <div className="flex justify-between gap-2 text-[10px]">
+                                        <span className="text-muted-foreground shrink-0">Subventions accordées</span>
+                                        <span className="font-small">{fmt(finances.granted)}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-2 text-[10px]">
+                                        <span className="text-muted-foreground shrink-0">Dépenses directes</span>
+                                        <span className="font-small">{fmt(finances.direct)}</span>
+                                    </div>
+
+                                    <hr className='mt-4'></hr>
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground shrink-0">Solde</span>
+                                        <span className={`font-medium ${balanceColor(finances)}`}>{fmt(finances.balance)}</span>
                                     </div>
                                     </>
                                 )}
@@ -3006,6 +3049,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         const linked = { ...e, project_id: project.id }
                                         setProjectExpanses(prev => [...prev, linked])
                                         setAllExpanses(prev => prev.map(x => x.id === e.id ? linked : x))
+                                        onExpanseLinked(linked)
                                         setShowLinkExpanse(false)
                                     }}
                                     getLabel={e => e.title}
@@ -3817,6 +3861,7 @@ export default function Projects() {
     const [toDoItems, setToDoItems] = useState<ToDoItem[]>([])
     const [memberActionCards, setMemberActionCards] = useState<MemberActionCard[]>([])
     const [projectPartners, setProjectPartners] = useState<ProjectPartnerFull[]>([])
+    const [allExpanses, setAllExpanses] = useState<Expanse[]>([])
 
 
     // Filtres
@@ -3831,6 +3876,7 @@ export default function Projects() {
     const [detailOpen,       setDetailOpen]       = useState(false)
     const [selectedProject,  setSelectedProject]  = useState<ProjectFull | null>(null)
     const [editingCall,      setEditingCall]      = useState<ProjectCall | undefined>()
+    const [openCallBudgets,  setOpenCallBudgets]  = useState<Set<number>>(new Set())
     const [defaultCallId,    setDefaultCallId]    = useState<number | undefined>()
 
     const [multipleSelect,           setMultipleSelect]           = useState(false)
@@ -3851,6 +3897,15 @@ export default function Projects() {
         else { setSortKey(key); setSortDir('asc') }
     }
 
+    function toggleCallBudget(callId: number) {
+        setOpenCallBudgets(prev => {
+            const next = new Set(prev)
+            if (next.has(callId)) next.delete(callId)
+            else next.add(callId)
+            return next
+        })
+    }
+
     function handleViewMode(mode: ViewMode) {
         setViewMode(mode)
         setSearch('')
@@ -3858,8 +3913,8 @@ export default function Projects() {
     }
 
     useEffect(() => {
-        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards(), getProjectPartners()])
-            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm, formations, tdl, tdi, amac, pp]) => {
+        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards(), getProjectPartners(), getExpanses()])
+            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm, formations, tdl, tdi, amac, pp, exp]) => {
                 const axisMap = new Map((axs as Axis[]).map(a => [a.id, a]))
 
                 const fullCalls: ProjectCallFull[] = (pcs as ProjectCall[]).map(pc => ({
@@ -3890,6 +3945,7 @@ export default function Projects() {
                 const fullPartners = (pp as ProjectPartner[])
                     .map(p => ({ ...p, partner: partnerMap.get(p.partner_id) ?? FALLBACK_PARTNER }))
                 setProjectPartners(fullPartners)
+                setAllExpanses([...(exp as Expanse[])])
             })
             .finally(() => setLoading(false))
     }, [])
@@ -3905,13 +3961,10 @@ export default function Projects() {
         setMemberActionCards(prev => [...prev.filter(mac => mac.action_card_id !== cardId), ...links])
     }
 
-    const cofinancingByProject = useMemo(() => {
-        const totals = new Map<number, number>()
-        for(const pp of projectPartners) {
-            totals.set(pp.project_id, (totals.get(pp.project_id) ?? 0) + (pp.amount ?? 0))
-        }
-        return totals
-    }, [projectPartners])
+    const financialsByProject = useMemo(
+        () => computeFinancials(projects, projectPartners, allAgreements, allExpanses),
+        [projects, projectPartners, allAgreements, allExpanses]
+    )
 
     const toDoProgress = useMemo(() => {
         const listToCard = new Map<number, number>()
@@ -4268,20 +4321,28 @@ export default function Projects() {
                                             {/* Colonnes AAP */}
                                             <div className="flex flex-row h-full overflow-x-auto">
                                                 {calls.sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date)).sort((a,b) => (a.title).localeCompare(b.title)).map(pc => {
-                                                    console.log("Calls :", calls)
                                                     const pcProjects = filteredProjects.filter(p => p.project_call_id === pc.id)
                                                     const pcStatus = statuses.find(s => s.id === pc.status_id)
                                                     const pcColor = pcStatus?.label === "Terminé" ? "#f3f4f6" : "#d1fae5"
-                                                    const pcGrantTotal = pcProjects.reduce((sum, p) =>
-                                                        sum + (agreementsByProject.get(p.id) ?? []).reduce((s, a) => s + (a.grant ?? 0), 0), 0
-                                                    )
+
+                                                    // Somme des lignes projet, mais sur le budget de l'AAP :
+                                                    // c'est lui l'enveloppe, pas le cumul des budgets projets.
+                                                    const pcFinances = pcProjects.reduce<ProjectFinancials>((acc, p) => {
+                                                        const f = financialsByProject.get(p.id) ?? NO_FINANCIALS
+                                                        acc.cofinanced += f.cofinanced
+                                                        acc.granted    += f.granted
+                                                        acc.direct     += f.direct
+                                                        return acc
+                                                    }, { ...NO_FINANCIALS, budget: pc.budget })
+                                                    pcFinances.selfFinanced = pcFinances.budget - pcFinances.cofinanced
+                                                    pcFinances.spent        = pcFinances.granted + pcFinances.direct
+                                                    pcFinances.balance      = pcFinances.budget - pcFinances.spent
 
                                                     const pcGrantLength = pcProjects.reduce((sum, p) =>
                                                         sum + (agreementsByProject.get(p.id) ?? []).length, 0
                                                     )
-                                                    
-                                                    
-                                                    const pcBudgetPct = pc.budget > 0 ? Math.round((pcGrantTotal / pc.budget) * 100) : null
+                                                    const pcSpentPct = pc.budget > 0 ? Math.round((pcFinances.spent / pc.budget) * 100) : null
+                                                    const pcBudgetOpen = openCallBudgets.has(pc.id)
 
                                                     return (
                                                         <div key={pc.id} className="w-72 shrink-0 flex flex-col h-full border-r last:border-r-0">
@@ -4301,18 +4362,56 @@ export default function Projects() {
                                                                     
                                                                    
                                                                     {pc.budget > 0 && (
-                                                                        <div className="mt-2 flex flex-col gap-0.5 mt-4">
-                                                                            <div className="flex items-center justify-between text-xs">
-                                                                                <span className="text-muted-foreground">Budget</span>
-                                                                                <span className="font-medium">{pc.budget.toLocaleString('fr-FR')} €</span>
+                                                                        <>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => toggleCallBudget(pc.id)}
+                                                                            aria-expanded={pcBudgetOpen}
+                                                                            className="mt-4 flex w-full items-center justify-between text-xs"
+                                                                        >
+                                                                            <span className="flex items-center gap-1 text-muted-foreground">
+                                                                                {pcBudgetOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                                                                                Solde{pcSpentPct !== null ? ` (${pcSpentPct} % engagé)` : ''}
+                                                                            </span>
+                                                                            <span className={`font-medium ${balanceColor(pcFinances)}`}>
+                                                                                {fmt(pcFinances.balance)}
+                                                                            </span>
+                                                                        </button>
+
+                                                                        {pcBudgetOpen && (
+                                                                            <>
+                                                                            <div className="mt-2 flex flex-col gap-0.5">
+                                                                                <div className="flex items-center justify-between text-xs">
+                                                                                    <span className="text-muted-foreground">Budget alloué</span>
+                                                                                    <span className="font-medium">{fmt(pcFinances.budget)}</span>
+                                                                                </div>
+                                                                                <div className="flex items-center justify-between text-[10px]">
+                                                                                    <span className="text-muted-foreground">Cofinancement</span>
+                                                                                    <span>{fmt(pcFinances.cofinanced)}</span>
+                                                                                </div>
+                                                                                <div className="flex items-center justify-between text-[10px]">
+                                                                                    <span className="text-muted-foreground">Autofinancement</span>
+                                                                                    <span>{fmt(pcFinances.selfFinanced)}</span>
+                                                                                </div>
                                                                             </div>
-                                                                            <div className="flex items-center justify-between text-xs">
-                                                                                <span className="text-muted-foreground">Subventions allouées {pcGrantLength !== null ? ` (${pcGrantLength})` : ''}</span>
-                                                                                <span className={`font-medium ${pcBudgetPct !== null && pcBudgetPct >= 100 ? 'text-green-600' : pcBudgetPct !== null && pcBudgetPct >= 75 ? 'text-amber-600' : ''}`}>
-                                                                                    {pcGrantTotal.toLocaleString('fr-FR')} €
-                                                                                </span>
+
+                                                                            <div className="mt-3 flex flex-col gap-0.5">
+                                                                                <div className="flex items-center justify-between text-xs">
+                                                                                    <span className="text-muted-foreground">Dépenses</span>
+                                                                                    <span className="font-medium">{fmt(pcFinances.spent)}</span>
+                                                                                </div>
+                                                                                <div className="flex items-center justify-between text-[10px]">
+                                                                                    <span className="text-muted-foreground">Subventions accordées{pcGrantLength > 0 ? ` (${pcGrantLength})` : ''}</span>
+                                                                                    <span>{fmt(pcFinances.granted)}</span>
+                                                                                </div>
+                                                                                <div className="flex items-center justify-between text-[10px]">
+                                                                                    <span className="text-muted-foreground">Dépenses directes</span>
+                                                                                    <span>{fmt(pcFinances.direct)}</span>
+                                                                                </div>
                                                                             </div>
-                                                                        </div>
+                                                                            </>
+                                                                        )}
+                                                                        </>
                                                                     )}
 
                                                                     <div className="flex justify-between items-center gap-2 mt-4">
@@ -4356,7 +4455,7 @@ export default function Projects() {
                                                                     <ProjectCard
                                                                         key={p.id}
                                                                         project={p}
-                                                                        cofinancingByProject={cofinancingByProject}
+                                                                        financialsByProject={financialsByProject}
                                                                         statuses={statuses}
                                                                         onClick={() => { setSelectedProject(p); setDetailOpen(true) }}
                                                                         selectOn={multipleSelect}
@@ -4826,6 +4925,8 @@ export default function Projects() {
                 allFormations={allFormations}
                 onTodosChanged={onTodosChanged}
                 onMemberLinkChanged={onMemberLinkChanged}
+                finances={(selectedProject && financialsByProject.get(selectedProject.id)) ?? NO_FINANCIALS}
+                onExpanseLinked={e => setAllExpanses(prev => prev.map(x => x.id === e.id ? e : x))}
             />
         </div>
     )
