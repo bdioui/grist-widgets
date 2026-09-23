@@ -498,10 +498,10 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                                             <div className="flex items-top justify-between">
                                                 <span className="text-sm font-medium">{p.title}</span>
                                                 <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0">
-                                                    {/* `budget` porte la part autofinancée, pas le total :
+                                                    {/* `budget` porte le financement propre, pas le total :
                                                         le libellé doit dire laquelle des deux on affiche. */}
                                                     {p.budget > 0 && (
-                                                        <span>Autofinancement : <span className="font-medium text-foreground">{p.budget.toLocaleString('fr-FR')} €</span></span>
+                                                        <span>Financement propre : <span className="font-medium text-foreground">{p.budget.toLocaleString('fr-FR')} €</span></span>
                                                     )}
                                                     {projectGrant > 0 && (
                                                         <span>Versé : <span className="font-medium text-foreground">{projectGrant.toLocaleString('fr-FR')} €</span></span>
@@ -579,7 +579,7 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                         {showProjectCreate && (
                             <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
                                 <Input placeholder="Titre du projet *" value={qProjectTitle} onChange={e => setQProjectTitle(e.target.value)} className="h-7 text-xs" />
-                                <Input type="number" placeholder="Autofinancement (€)" value={qProjectBudget} onChange={e => setQProjectBudget(e.target.value)} className="h-7 text-xs" />
+                                <Input type="number" placeholder="Financement propre (€)" value={qProjectBudget} onChange={e => setQProjectBudget(e.target.value)} className="h-7 text-xs" />
                                 <div className="flex gap-2">
                                     <Button variant="outline" size="sm" className="flex-1 h-7 text-xs" onClick={() => { setShowProjectCreate(false); setQProjectTitle(''); setQProjectBudget('') }}>Annuler</Button>
                                     <Button size="sm" className="flex-1 h-7 text-xs" disabled={!qProjectTitle.trim() || saving} onClick={handleProjectQuickAdd}>

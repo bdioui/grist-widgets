@@ -216,7 +216,7 @@ export default function Dashboard() {
     // ne se cumulent pas, le mélange ne désignerait aucune somme réelle.
     const totalGranted         = sumGrant(agreements, 'depense')
     const totalCofinanced      = sumGrant(agreements, 'recette')
-    // Le chiffre saisi sur un projet est sa part autofinancée ; les recettes
+    // Le chiffre saisi sur un projet est son financement propre ; les recettes
     // sont ce total plus les cofinancements reçus. Additionner les deux ici
     // évite d'annoncer un « budget » qui ignorerait l'apport des partenaires.
     const totalSelfFinanced    = projects.reduce((s, p) => s + p.budget, 0)

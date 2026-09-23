@@ -167,7 +167,7 @@ export type ProjectMilestone = {
     status_id: number
 }
 
-// Sens d'une convention : le laboratoire reçoit la somme ou il la verse.
+// Sens d'une convention : le programme reçoit la somme ou il la verse.
 // Une seule table porte les deux, ce champ seul les distingue.
 export type AgreementDirection = 'recette' | 'depense'
 

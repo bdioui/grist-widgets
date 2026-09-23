@@ -9,7 +9,7 @@ export const WORKING_ROLES = new Set(['Responsable', 'Contributeur'])
 
 export const PARTNER_ROLES = ['Associé', 'Bénéficiaire', 'Cofinanceur', 'Sous-traitant']
 
-// Seuls ces deux rôles échangent de l'argent avec le laboratoire par voie de
+// Seuls ces deux rôles échangent de l'argent avec le programme par voie de
 // convention, et le rôle dit de quel côté. Un associé n'apporte rien ; un
 // sous-traitant est payé sur facture, donc compté en dépense directe. Un
 // montant saisi sur un autre rôle n'entrerait dans aucun total.

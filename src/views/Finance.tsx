@@ -1471,7 +1471,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
     }), [agreements, search, statusFilter, statusMap, partnerMap, partnerFilter, projectFilter])
 
     // Le montant engagé ne se lit que sur les conventions sortantes : c'est ce
-    // que le laboratoire s'engage à couvrir. Les conventions reçues ont leur
+    // que le programme s'engage à couvrir. Les conventions reçues ont leur
     // propre total, à part.
     const totalGrant  = sumGrant(agreements, 'depense')
     const totalIncome = sumGrant(agreements, 'recette')

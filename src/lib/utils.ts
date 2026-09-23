@@ -27,11 +27,11 @@ export function exportToCsv(filename: string, headers: string[], rows: (string |
 
 // Vue financière d'un projet, en deux colonnes.
 //
-// Recettes : ce que le laboratoire met de sa poche (selfFinanced, saisi sur le
-// projet) et ce que les partenaires apportent (cofinanced, observé). Leur somme
-// est le budget total — il n'est pas saisi, il tombe de l'addition. Un
-// cofinancement qui arrive augmente le budget au lieu de manger l'apport du
-// laboratoire, ce qui est ce qui se passe vraiment.
+// Recettes : ce que le projet finance sur ses propres ressources (selfFinanced,
+// saisi sur le projet) et ce que les partenaires apportent (cofinanced, observé).
+// Leur somme est le budget total — il n'est pas saisi, il tombe de l'addition. Un
+// cofinancement qui arrive augmente le budget au lieu de manger le financement
+// propre, ce qui est ce qui se passe vraiment.
 //
 // Dépenses : les subventions accordées (granted) et les dépenses directes.
 //
@@ -56,7 +56,7 @@ export const NO_FINANCIALS: ProjectFinancials = {
 // posés en premier pour que chacun ait sa ligne, même sans mouvement ; les
 // trois sources viennent ensuite l'alimenter et le dernier passage dérive.
 export function computeFinancials(
-    // `budget` porte ici la part autofinancée, pas le total : c'est le seul
+    // `budget` porte ici le financement propre, pas le total : c'est le seul
     // chiffre saisi à la main, le reste s'observe.
     projects:        { id: number; budget: number }[],
     projectPartners: ProjectPartner[],
@@ -110,7 +110,7 @@ export function computeFinancials(
 }
 
 // Additionner les deux sens donnerait un chiffre qui ne désigne rien : ce que le
-// laboratoire reçoit et ce qu'il verse ne se cumulent pas. Tout total de
+// programme reçoit et ce qu'il verse ne se cumulent pas. Tout total de
 // conventions doit donc choisir son côté.
 export function sumGrant(
     agreements: { direction: AgreementDirection; grant: number }[],

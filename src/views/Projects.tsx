@@ -234,7 +234,7 @@ function ProjectCard({ project, financialsByProject, statuses, onClick, selectOn
 
             {/* Consommation du budget. La carte se parcourt : elle ne porte que le
                 rapport dépenses / recettes, et le solde passe dans la couleur de la
-                barre. Le détail — autofinancement, cofinancements, subventions,
+                barre. Le détail — financement propre, cofinancements, subventions,
                 dépenses directes — vit dans la fiche, qui s'ouvre au clic.
                 Mise en barre comme la progression temporelle juste dessous : c'est
                 la comparaison des deux qui se lit d'un coup d'œil. */}
@@ -324,7 +324,7 @@ function ProjectCard({ project, financialsByProject, statuses, onClick, selectOn
                         </ContextMenuItem>
                         <ContextMenuItem onClick={() => exportToCsv(
                             'projets.csv',
-                            ['Titre', 'Appel à projets', 'Axe', 'Autofinancement (€)'],
+                            ['Titre', 'Appel à projets', 'Axe', 'Financement propre (€)'],
                             selectedProjects.map(p => [
                                 p.title, p.projectCall.title, p.projectCall.axis.name, p.budget,
                             ])
@@ -637,10 +637,10 @@ function ProjectSheet({ open, onClose, onSaved, projectCalls, statuses, defaultC
                     </div>
                     
                     <div className="flex flex-col gap-1.5">
-                        <Label>Autofinancement (€)</Label>
+                        <Label>Financement propre (€)</Label>
                         <Input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="0" />
                         <p className="text-[11px] text-muted-foreground leading-snug">
-                            Part financée par le laboratoire. Les cofinancements des partenaires s'y ajouteront.
+                            Part que le projet finance sur ses propres ressources. Les cofinancements des partenaires s'y ajouteront.
                         </p>
                     </div>
                 </div>
@@ -1801,17 +1801,17 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     // La vue d'ensemble vient de Projects : la carte, la colonne AAP et cette
     // fiche affichent le même chiffre parce qu'il n'est calculé qu'une fois.
     const TotalCofinancing   = finances.cofinanced
-    const TotalAutofinancing = finances.selfFinanced
+    const TotalOwnFunding = finances.selfFinanced
 
     // Les totaux de conventions se lisent par sens : additionner ce que le
-    // laboratoire verse et ce qu'il reçoit ne donnerait aucun chiffre lisible.
+    // programme verse et ce qu'il reçoit ne donnerait aucun chiffre lisible.
     const outgoingAgreements = agreements.filter(a => a.direction === 'depense')
     const incomingAgreements = agreements.filter(a => a.direction === 'recette')
     const totalIncoming = incomingAgreements.reduce((s, a) => s + a.grant, 0)
     const totalGrant    = finances.granted
 
     // Ces deux-là ne portent que sur les conventions sortantes : la part que
-    // le laboratoire s'engage à couvrir sans la subventionner.
+    // le programme s'engage à couvrir sans la subventionner.
     const totalBudget = outgoingAgreements.reduce((s, a) => s + a.budget, 0)
     const notCovered  = totalBudget - totalGrant
     const operationalExpanses  = projectExpanses.filter(e => !e.agreement_id)
@@ -2016,13 +2016,13 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     </div>
                                 </div>
                                 {/* Le champ doit porter son vrai sens dès la saisie : c'est la
-                                    part que le laboratoire met de sa poche, pas le total.
+                                    part que le projet finance lui-même, pas le total.
                                     Le total se calcule, il ne se tape pas. */}
                                 <div className="flex flex-col gap-1">
-                                    <Label className="text-xs text-muted-foreground"> Financement propre (€)</Label>
+                                    <Label className="text-xs text-muted-foreground">Financement propre (€)</Label>
                                     <Input type="number" value={draft.budget} onChange={e => setDraft(d => d ? { ...d, budget: Number(e.target.value) } : d)} className="h-8 text-xs" />
                                     <p className="text-[10px] text-muted-foreground leading-snug">
-                                        Part financée par sur financement propre. Les cofinancements s'y ajoutent pour former les recettes.
+                                        Part financée sur les ressources propres du projet. Les cofinancements s'y ajoutent pour former les recettes.
                                     </p>
                                 </div>
                                 <div className="flex flex-col gap-1">
@@ -2060,8 +2060,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
 
 
                                     <div className="flex justify-between gap-2 text-[10px]">
-                                        <span className="text-muted-foreground shrink-0">Autofinancement</span>
-                                        <span className="font-small">{fmt(TotalAutofinancing)}</span>
+                                        <span className="text-muted-foreground shrink-0">Financement propre</span>
+                                        <span className="font-small">{fmt(TotalOwnFunding)}</span>
                                     </div>
                                      <div className="flex justify-between gap-2 text-[10px]">
                                         <span className="text-muted-foreground shrink-0">Cofinancements</span>
@@ -4374,7 +4374,7 @@ export default function Projects() {
                                                                                     <span className="font-medium">{fmt(pcRevenue)}</span>
                                                                                 </div>
                                                                                 <div className="flex items-center justify-between text-[10px]">
-                                                                                    <span className="text-muted-foreground">Autofinancement</span>
+                                                                                    <span className="text-muted-foreground">Financement propre</span>
                                                                                     <span>{fmt(pcFinances.selfFinanced)}</span>
                                                                                 </div>
                                                                                 <div className="flex items-center justify-between text-[10px]">
@@ -4502,7 +4502,7 @@ export default function Projects() {
                                     </Button>
                                     <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md" onClick={() => exportToCsv(
                                         'projets.csv',
-                                        ['Titre', 'Appel à projets', 'Axe', 'Autofinancement (€)'],
+                                        ['Titre', 'Appel à projets', 'Axe', 'Financement propre (€)'],
                                         selectedProjects.map(p => [p.title, p.projectCall.title, p.projectCall.axis.name, p.budget])
                                     )}>
                                         <FileDown size={13} /> Exporter en CSV
@@ -4696,7 +4696,7 @@ export default function Projects() {
                                         </Button>
                                         <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md"
                                             onClick={() => exportToCsv('projets.csv',
-                                                ['Titre', 'Dispositif', 'Axe', 'Statut', 'Recettes (€)', 'Autofinancement (€)', 'Cofinancement (€)', 'Dépenses (€)', 'Subventions accordées (€)', 'Dépenses directes (€)', 'Solde (€)', 'Début', 'Fin'],
+                                                ['Titre', 'Dispositif', 'Axe', 'Statut', 'Recettes (€)', 'Financement propre (€)', 'Cofinancement (€)', 'Dépenses (€)', 'Subventions accordées (€)', 'Dépenses directes (€)', 'Solde (€)', 'Début', 'Fin'],
                                                 selectedProjects.map(p => {
                                                     // Le même calcul qu'à l'écran : l'export ne refait pas ses totaux.
                                                     const f = financialsByProject.get(p.id) ?? NO_FINANCIALS
