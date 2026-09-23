@@ -1297,7 +1297,6 @@ export default function Members() {
                 ? prev.filter(m => m.id !== member.id)
                 : [...prev, member]
         )
-        console.log(selectedMembers)
     }
 
     async function handleDeleteGroup(groupId: number) {

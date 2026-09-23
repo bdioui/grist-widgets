@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarDays, AlertTriangle, Receipt, FilePenLine, Scale } from 'lucide-react'
 import { Search, FileDown, Trash2, Trash, Pencil, Check, X, Plus, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight, FolderInput, Tag, Upload } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { exportToCsv } from '@/lib/utils'
+import { exportToCsv, sumGrant } from '@/lib/utils'
 import SearchInput from '@/components/SearchInput'
 import {
     getProgram, getExpanses, getBudgetCategories, getBudgetDetails, getSupliers, getProjects,
@@ -25,7 +25,8 @@ import type { ImportSummary } from '@/lib/api'
 import { prepareSifacImport, commitSifacImport } from '@/lib/sifac/import'
 import type { SifacPreview } from '@/lib/sifac/import'
 import { sifacCategory } from '@/lib/sifac/aggregate'
-import type { Program, Expanse, BudgetCategory, BudgetDetail, Supplier, Project, FinancialAgreement, Partner, Status, SifacLine } from '@/lib/types'
+import type { Program, Expanse, BudgetCategory, BudgetDetail, Supplier, Project, FinancialAgreement, Partner, Status, SifacLine, AgreementDirection } from '@/lib/types'
+import { DirectionPill } from '@/components/DirectionPill'
 
 const EXPANSE_CATEGORIES = ['Fonctionnement', 'Investissement', 'Personnel', 'Autre'] as const
 
@@ -1469,8 +1470,12 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
         return true
     }), [agreements, search, statusFilter, statusMap, partnerMap, partnerFilter, projectFilter])
 
-    const totalGrant = agreements.reduce((s, a) => s + a.grant, 0)
-    const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
+    // Le montant engagé ne se lit que sur les conventions sortantes : c'est ce
+    // que le laboratoire s'engage à couvrir. Les conventions reçues ont leur
+    // propre total, à part.
+    const totalGrant  = sumGrant(agreements, 'depense')
+    const totalIncome = sumGrant(agreements, 'recette')
+    const totalBudget = agreements.filter(a => a.direction === 'depense').reduce((s, a) => s + a.budget, 0)
     const activeCount = agreements.filter(a => statusMap.get(a.status_id)?.label === 'Active').length
 
     const allFilteredSelected = filtered.length > 0 && filtered.every(a => selected.has(a.id))
@@ -1490,7 +1495,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
 
     function startAdd() {
         setIsAdding(true)
-        setNewDraft({ title: '', description: '', budget: 0, grant: 0, signed_date: '', project_id: projects[0]?.id ?? 1, partner_id: partners[0]?.id ?? 1, axis_id: null, status_id: agreementStatuses[0]?.id ?? 1, budget_detail_id: null })
+        // Sans ce défaut la colonne partirait vide côté Grist : le cast de
+        // saveNew laisse passer un champ manquant sans que le compilateur bronche.
+        setNewDraft({ title: '', description: '', direction: 'depense', budget: 0, grant: 0, signed_date: '', project_id: projects[0]?.id ?? 1, partner_id: partners[0]?.id ?? 1, axis_id: null, status_id: agreementStatuses[0]?.id ?? 1, budget_detail_id: null })
         setEditingId(null)
     }
 
@@ -1552,6 +1559,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
             else if (sortKey === 'project') { va = projectMap.get(a.project_id)?.title ?? ''; vb = projectMap.get(b.project_id)?.title ?? '' }
             else if (sortKey === 'budget')  { va = a.budget; vb = b.budget }
             else if (sortKey === 'grant')   { va = a.grant; vb = b.grant }
+            else if (sortKey === 'direction') { va = a.direction; vb = b.direction }
             else if (sortKey === 'status')  { va = statusMap.get(a.status_id)?.label ?? ''; vb = statusMap.get(b.status_id)?.label ?? '' }
             else if (sortKey === 'signed')  { va = a.signed_date ?? ''; vb = b.signed_date ?? '' }
             const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb), 'fr', { sensitivity: 'base' })
@@ -1585,6 +1593,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                 <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs text-muted-foreground">Subventions accordées</p>
                     <p className="text-xl font-semibold mt-1">{formatAmount(totalGrant)}</p>
+                    {totalIncome > 0 && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{formatAmount(totalIncome)} reçus par ailleurs</p>
+                    )}
                 </div>
             </div>
 
@@ -1661,6 +1672,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                 { key: 'project', label: 'Projet',          className: 'h-8 w-36' },
                                 { key: 'detail',  label: 'Ligne budgétaire',className: 'h-8 w-40' },
                                 { key: 'grant',   label: 'Montant',         className: 'h-8 w-28 text-right' },
+                                { key: 'direction', label: 'Sens',          className: 'h-8 w-24' },
                                 { key: 'status',  label: 'Statut',          className: 'h-8 w-28' },
                                 { key: 'signed',  label: 'Date signature',  className: 'h-8 w-28' },
                             ] as const).map(col => (
@@ -1722,6 +1734,15 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     <Input type="number" step="0.01" value={newDraft.grant ?? ''} onChange={ev => setNewDraft(d => ({ ...d, grant: parseAmount(ev.target.value) }))} placeholder="0" className="h-7 text-xs text-right" />
                                 </TableCell>
                                 <TableCell>
+                                    <Select value={newDraft.direction ?? 'depense'} onValueChange={v => setNewDraft(d => ({ ...d, direction: v as AgreementDirection }))}>
+                                        <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="depense" className="text-xs">Dépense</SelectItem>
+                                            <SelectItem value="recette" className="text-xs">Recette</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </TableCell>
+                                <TableCell>
                                     <Select value={String(newDraft.status_id ?? '')} onValueChange={v => setNewDraft(d => ({ ...d, status_id: Number(v) }))}>
                                         <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
                                         <SelectContent>
@@ -1742,7 +1763,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                         )}
                         {filtered.length === 0 && !isAdding ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-8">
+                                <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-8">
                                     Aucune convention trouvée
                                 </TableCell>
                             </TableRow>
@@ -1793,6 +1814,15 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     </TableCell>
                                     <TableCell>
                                         <Input type="number" step="0.01" value={draft.grant ?? ''} onChange={ev => setDraft(d => ({ ...d, grant: parseAmount(ev.target.value) }))} className="h-7 text-xs text-right" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Select value={draft.direction ?? 'depense'} onValueChange={v => setDraft(d => ({ ...d, direction: v as AgreementDirection }))}>
+                                            <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="depense" className="text-xs">Dépense</SelectItem>
+                                                <SelectItem value="recette" className="text-xs">Recette</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </TableCell>
                                     <TableCell>
                                         <Select value={String(draft.status_id ?? '')} onValueChange={v => setDraft(d => ({ ...d, status_id: Number(v) }))}>
@@ -1850,6 +1880,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     </TableCell>
                                     <TableCell className="text-right font-medium tabular-nums">{formatAmount(a.grant)}</TableCell>
                                     <TableCell>
+                                        <DirectionPill direction={a.direction} className="text-[10px] rounded" />
+                                    </TableCell>
+                                    <TableCell>
                                         <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: AGREEMENT_STATUS_COLORS[status?.label ?? ''] ?? '#f3f4f6' }}>
                                             {status?.label ?? '—'}
                                         </span>
@@ -1868,7 +1901,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
             </div>
             {filtered.length > 0 && (
                 <p className="text-xs text-muted-foreground text-right">
-                    {filtered.length} convention{filtered.length > 1 ? 's' : ''} · {formatAmount(filtered.reduce((s, a) => s + a.grant, 0))} en subventions
+                    {filtered.length} convention{filtered.length > 1 ? 's' : ''} · {formatAmount(sumGrant(filtered, 'depense'))} versés · {formatAmount(sumGrant(filtered, 'recette'))} reçus
                 </p>
             )}
 
@@ -2433,7 +2466,10 @@ export default function Finance() {
             setBudgetDetails(details)
             setSuppliers(sups)
             setProjects(projs)
-            setAgreements(agrs)
+            // Copie : en mock, getFinancialAgreements rend le tableau source et
+            // addAgreement y pousse. Sans elle, la première convention créée
+            // entre deux fois dans la liste.
+            setAgreements([...(agrs as FinancialAgreement[])])
             setPartners(parts)
             setStatuses(stats)
             setLoading(false)

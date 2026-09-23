@@ -1722,7 +1722,7 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                                     <div className="flex flex-col gap-2 text-xs">
                                                         {l.project.budget > 0 && (
                                                             <div className="flex items-center gap-2">
-                                                                <span className="w-24 shrink-0 text-muted-foreground">Budget total</span>
+                                                                <span className="w-24 shrink-0 text-muted-foreground">Autofinancement</span>
                                                                 <span>{l.project.budget.toLocaleString('fr-FR')} €</span>
                                                             </div>
                                                         )}
@@ -1934,8 +1934,6 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
 
                             <div className="flex flex-col gap-2">
                                 {comments.map(comment => {
-                                    console.log('currentUser email:', currentUser?.email)
-                                    console.log('comment owner email:', comment.owner.email)
                                     return (
                                     <div key={comment.id}>
                                         {editingComment === comment.id ? (

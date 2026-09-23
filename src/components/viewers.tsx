@@ -106,6 +106,7 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
                 }}
                 onDeleted={() => {}}
                 onAgreementAdded={() => {}}
+                onAgreementUpdated={() => {}}
                 onAgreementDeleted={() => {}}
                 partners={refData.partners}
                 cardProjectPartners={refData.projectPartners}

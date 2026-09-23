@@ -7,6 +7,17 @@ export const PARTNER_TYPES = [
 
 export const WORKING_ROLES = new Set(['Responsable', 'Contributeur'])
 
+export const PARTNER_ROLES = ['Associé', 'Bénéficiaire', 'Cofinanceur', 'Sous-traitant']
+
+// Seuls ces deux rôles échangent de l'argent avec le laboratoire par voie de
+// convention, et le rôle dit de quel côté. Un associé n'apporte rien ; un
+// sous-traitant est payé sur facture, donc compté en dépense directe. Un
+// montant saisi sur un autre rôle n'entrerait dans aucun total.
+export const PARTNER_ROLE_DIRECTION: Record<string, 'recette' | 'depense'> = {
+    'Cofinanceur':  'recette',
+    'Bénéficiaire': 'depense',
+}
+
 // Affiché quand une référence pointe vers un partenaire supprimé.
 export const FALLBACK_PARTNER: Partner = {
     id: 0, name: '?', description: '', color: '', logo: '', status_id: 0, type: '', consortium: false,

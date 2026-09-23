@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, LayoutGrid, Table2, Paperclip, Receipt, EllipsisIcon, Building2, BarChart2, BookOpen, GraduationCap, ScrollText, ChartGantt, ChevronDown, ChevronRight } from 'lucide-react'
 import { exportToCsv, computeFinancials, NO_FINANCIALS, type ProjectFinancials } from '@/lib/utils'
+import { DirectionPill } from '@/components/DirectionPill'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { ActionCardDetailSheet } from '@/views/actions/ActionCard'
 import type { ActionCardData } from '@/views/actions/ActionCard'
@@ -55,7 +56,7 @@ import {
     getToDoItems,
     getAllMemberActionCards,
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard, type AgreementDirection } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
@@ -93,9 +94,8 @@ const ROLE_ORDER = ['Porteur', 'Prospect', 'Equipe - Lead', 'Equipe - Contribute
 
 const STATUS_ORDER = ["En cours", "Suspendu", "En attente", "Terminé",]
 
-const PARTNER_ROLES = ['Associé', 'Bénéficiaire', 'Cofinanceur', 'Sous-traitant']
 
-import { PARTNER_TYPES, WORKING_ROLES, PALETTE, FALLBACK_PARTNER } from '@/lib/constants'
+import { PARTNER_TYPES, WORKING_ROLES, PALETTE, FALLBACK_PARTNER, PARTNER_ROLES, PARTNER_ROLE_DIRECTION } from '@/lib/constants'
 
 
 const MEMBER_STATUSES = [
@@ -119,6 +119,15 @@ function balanceColor(f: ProjectFinancials) {
     if (f.balance < 0) return 'text-red-600'
     if (f.budget > 0 && f.balance / f.budget <= 0.25) return 'text-amber-600'
     return 'text-green-600'
+}
+
+// Mêmes seuils que `balanceColor`, en fond plutôt qu'en texte. Séparer les deux
+// évite d'aller traduire une classe `text-` en `bg-` au moment du rendu, et
+// laisse `balanceColor` servir ailleurs sans que la barre l'entraîne.
+function spendBarColor(f: ProjectFinancials) {
+    if (f.balance < 0) return 'bg-red-500'
+    if (f.budget > 0 && f.balance / f.budget <= 0.25) return 'bg-amber-500'
+    return 'bg-emerald-600'
 }
 
 function fmt(n: number) {
@@ -223,34 +232,35 @@ function ProjectCard({ project, financialsByProject, statuses, onClick, selectOn
                 </div>
             </div>
 
-            {/* Budget / subvention */}
-            <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                {project.budget > 0 && (
-                    <>
-                    <div className="flex justify-between">
-                        <span>Budget</span>
-                        <span className="font-medium text-foreground">{fmt(project.budget)}</span>
+            {/* Consommation du budget. La carte se parcourt : elle ne porte que le
+                rapport dépenses / recettes, et le solde passe dans la couleur de la
+                barre. Le détail — autofinancement, cofinancements, subventions,
+                dépenses directes — vit dans la fiche, qui s'ouvre au clic.
+                Mise en barre comme la progression temporelle juste dessous : c'est
+                la comparaison des deux qui se lit d'un coup d'œil. */}
+            {(finances.budget > 0 || finances.spent > 0) && (() => {
+                // Sans recettes il n'y a pas de ratio à montrer. On affiche alors la
+                // dépense seule plutôt qu'un pourcentage qui diviserait par zéro.
+                const pct = finances.budget > 0
+                    ? Math.min(100, Math.round((finances.spent / finances.budget) * 100))
+                    : null
+                return (
+                    <div className="flex flex-col gap-1">
+                        <div className="flex justify-between items-baseline gap-1.5 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground tabular-nums">{fmt(finances.spent)}</span>
+                            <span className="tabular-nums">
+                                {pct !== null ? `sur ${fmt(finances.budget)} (${pct} %)` : 'dépensés'}
+                            </span>
+                        </div>
+                        {pct !== null && (
+                            <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                                <div className={`h-full rounded-full transition-all ${spendBarColor(finances)}`}
+                                     style={{ width: `${pct}%` }} />
+                            </div>
+                        )}
                     </div>
-
-                    <hr></hr>
-
-                     <div className="flex justify-between text-[10px]">
-                        <span>Autofinancement</span>
-                        <span className="font-medium text-foreground">{fmt(finances.selfFinanced)}</span>
-                    </div>
-
-                     <div className="flex justify-between text-[10px]">
-                        <span>Cofinancements</span>
-                        <span className="font-medium text-foreground">{fmt(finances.cofinanced)}</span>
-                    </div>
-
-                    <div className="flex justify-between">
-                        <span>Solde</span>
-                        <span className={`font-medium ${balanceColor(finances)}`}>{fmt(finances.balance)}</span>
-                    </div>
-                    </>
-                )}
-            </div>
+                )
+            })()}
 
             {/* Progression temporelle */}
             {(() => {
@@ -314,7 +324,7 @@ function ProjectCard({ project, financialsByProject, statuses, onClick, selectOn
                         </ContextMenuItem>
                         <ContextMenuItem onClick={() => exportToCsv(
                             'projets.csv',
-                            ['Titre', 'Appel à projets', 'Axe', 'Budget (€)'],
+                            ['Titre', 'Appel à projets', 'Axe', 'Autofinancement (€)'],
                             selectedProjects.map(p => [
                                 p.title, p.projectCall.title, p.projectCall.axis.name, p.budget,
                             ])
@@ -627,8 +637,11 @@ function ProjectSheet({ open, onClose, onSaved, projectCalls, statuses, defaultC
                     </div>
                     
                     <div className="flex flex-col gap-1.5">
-                        <Label>Budget total (€)</Label>
+                        <Label>Autofinancement (€)</Label>
                         <Input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="0" />
+                        <p className="text-[11px] text-muted-foreground leading-snug">
+                            Part financée par le laboratoire. Les cofinancements des partenaires s'y ajouteront.
+                        </p>
                     </div>
                 </div>
 
@@ -646,189 +659,90 @@ function ProjectSheet({ open, onClose, onSaved, projectCalls, statuses, defaultC
     )
 }
 
-// --- Dialog détail convention ---
-
-type AgreementDetailProps = {
-    open: boolean
-    onClose: () => void
-    agreement: AgreementFull | null
-    partners: Partner[]
-    statuses: Status[]
-    axes: Axis[]
-    projectId: number
-    budgetDetails: BudgetDetail[]
-    onSaved: (a: AgreementFull) => void
-    onDeleted: (id: number) => void
-}
-
-function AgreementDetailDialog({ open, onClose, agreement, partners, statuses, axes, projectId, onSaved, onDeleted: _onDeleted, budgetDetails}: AgreementDetailProps) {
-    const [editing, setEditing] = useState(false)
-
-    useEffect(() => {
-        if (!open) setEditing(false)
-    }, [open])
-
-    if (!agreement) return null
-
-    const status = statuses.find(s => s.id === agreement.status_id)
-    const rate   = financingRate(agreement.budget, agreement.grant)
-
-    return (
-        <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
-            <DialogContent showCloseButton={false} style={{ maxWidth: '600px' }}>
-                <DialogHeader>
-                    <div className="flex items-start justify-between gap-2">
-                        <div className="flex flex-col gap-1"> 
-                            <DialogTitle className="text-base font-semibold leading-snug">{agreement.title}</DialogTitle>
-                            <div className="flex items-center gap-2">
-                                <span
-                                    className="text-xs px-1.5 py-0.5 rounded-full border border-border"
-                                    style={agreement.partner.color ? { backgroundColor: agreement.partner.color } : {}}
-                                >
-                                    {agreement.partner.name}
-                                </span>
-                                {status && (
-                                    <span
-                                        className="text-xs px-1.5 py-0.5 rounded-full border border-border text-black"
-                                        style={{ backgroundColor: AGREEMENT_STATUS_COLORS[status.label] ?? '#f3f4f6' }}
-                                    >
-                                        {status.label}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(e => !e)}>
-                                {editing ? "" : <Pencil size={13} />}
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onClose}>
-                                <X size={13} />
-                            </Button>
-                        </div>
-                    </div>
-                </DialogHeader>
-
-                <div className="flex flex-col gap-4 mt-2">
-                    {!editing && (
-                        <div className="flex flex-col gap-3">
-                            {agreement.description && (
-                                <p className="text-sm text-muted-foreground">{agreement.description}</p>
-                            )}
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                                {agreement.budget > 0 && (
-                                    <div className="flex flex-col gap-0.5">
-                                        <span className="text-muted-foreground">Budget</span>
-                                        <span className="font-medium text-foreground">{fmt(agreement.budget)}</span>
-                                    </div>
-                                )}
-                                {agreement.grant > 0 && (
-                                    <div className="flex flex-col gap-0.5">
-                                        <span className="text-muted-foreground">Subvention</span>
-                                        <span className="font-medium text-foreground">{fmt(agreement.grant)}</span>
-                                    </div>
-                                )}
-                                {rate !== null && (
-                                    <div className="flex flex-col gap-0.5">
-                                        <span className="text-muted-foreground">Taux financé</span>
-                                        <span className="font-medium text-foreground">{rate} %</span>
-                                    </div>
-                                )}
-                                {agreement.signed_date && (
-                                    <div className="flex flex-col gap-0.5">
-                                        <span className="text-muted-foreground">Date de signature</span>
-                                        <span className="font-medium text-foreground">{formatDate(agreement.signed_date)}</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {editing && (
-                        <AgreementForm
-                            partners={partners}
-                            statuses={statuses}
-                            axes={axes}
-                            projectId={projectId}
-                            budgetDetails={budgetDetails}
-                            initial={agreement}
-                            onSaved={a => { onSaved(a); setEditing(false) }}
-                            onCancel={() => setEditing(false)}
-                        />
-                    )}
-                </div>
-            </DialogContent>
-        </Dialog>
-    )
-}
-
 type AgreementRowProps = {
     agreement: AgreementFull
     statuses: Status[]
     axe?: Axis
     onEdit: (a: AgreementFull) => void
     onDelete: (id: number) => void
-    onOpen: (a: AgreementFull) => void
 }
 
 
-function AgreementRow({ agreement: a, statuses, axe, onEdit, onDelete, onOpen }: AgreementRowProps) {
+function AgreementRow({ agreement: a, statuses, axe, onEdit, onDelete }: AgreementRowProps) {
     const rate   = financingRate(a.budget, a.grant)
     const status = statuses.find(s => s.id === a.status_id)
     return (
-        <>
-                <div onClick={() => onOpen(a)} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-border bg-muted/40 group cursor-pointer hover:bg-muted/70 transition-colors">
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-medium truncate">{a.title}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {axe && (
-                                <span className="text-xs px-1.5 py-0.5 rounded-full border border-border shrink-0 text-black">
-                                    {axe.name}
-                                </span>
-                            )}
-                            {status && (
-                                <span className="text-xs px-1.5 py-0.5 rounded-full border border-border shrink-0 text-black"
-                                    style={{ backgroundColor: AGREEMENT_STATUS_COLORS[status.label] ?? '#f3f4f6' }}>
-                                    {status.label}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <span
-                                        className="text-xs px-2.5 py-0.5 rounded-full border border-border truncate inline-block max-w-[120px]"
-                                        style={a.partner.color ? { backgroundColor: a.partner.color } : {}}
-                                    >
-                                        {a.partner.name}
-                                    </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{a.partner.name}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                            {a.grant > 0 && <span className="font-medium text-foreground">{fmt(a.grant)}</span>}
-                            {rate !== null && <span>{rate} %</span>}
-                            {a.signed_date && <span>{formatDate(a.signed_date)}</span>}
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0 ml-2">
-                        <div
-                            className="h-7 w-7 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-foreground"
-                            onClick={e => { e.stopPropagation(); onEdit(a) }}
-                        >
-                            <Pencil size={13} />
-                        </div>
-                        <div
-                            className="h-7 w-7 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-destructive"
-                            onClick={e => { e.stopPropagation(); onDelete(a.id) }}
-                        >
-                            <Trash2 size={13} />
-                        </div>
-                    </div>
+        // Le clic ouvre le formulaire : il n'y a pas assez de matière pour un
+        // écran de lecture séparé, et le formulaire montre déjà tout.
+        <div
+            onClick={() => onEdit(a)}
+            className="group flex items-stretch gap-3 px-3 py-2.5 rounded-lg border border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors"
+        >
+            {/* Avec qui d'abord : c'est le partenaire qui identifie une convention,
+                son intitulé ne vient qu'ensuite le préciser. */}
+            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                <span className="text-sm font-medium leading-snug">
+                    Convention avec {a.partner.name}
+                </span>
+                {a.description ? (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="text-xs text-muted-foreground leading-snug cursor-default">{a.title}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-xs text-xs">{a.description}</TooltipContent>
+                    </Tooltip>
+                ) : (
+                    <span className="text-xs text-muted-foreground leading-snug">{a.title}</span>
+                )}
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
+                    {status && (
+                        <span className="flex items-center gap-1">
+                            {/* Le statut garde sa couleur, mais réduite à un point :
+                                assez pour le repérer, trop peu pour concurrencer le sens. */}
+                            <span
+                                className="h-1.5 w-1.5 rounded-full shrink-0"
+                                style={{ backgroundColor: AGREEMENT_STATUS_COLORS[status.label] ?? '#d4d4d8' }}
+                            />
+                            {status.label}
+                        </span>
+                    )}
+                    {axe && <><span className="text-muted-foreground/40">·</span><span>{axe.name}</span></>}
+                    {a.signed_date && <><span className="text-muted-foreground/40">·</span><span className="tabular-nums">signée le {formatDate(a.signed_date)}</span></>}
                 </div>
-        </>
+            </div>
+
+            {/* Le sens en haut, ce qu'elle pèse en bas. */}
+            <div className="flex flex-col items-end justify-between shrink-0 gap-2">
+                <DirectionPill direction={a.direction} className="text-[10px]" />
+                <div className="flex flex-col items-end leading-tight">
+                    {a.grant > 0 && <span className="text-sm font-medium tabular-nums">{fmt(a.grant)}</span>}
+                    {/* Le budget se lit dans le taux plutôt que sur sa propre ligne :
+                        « 60 % de 50 000 € » dit les deux d'un coup. */}
+                    {rate !== null
+                        ? <span className="text-[11px] text-muted-foreground">{rate} % de {fmt(a.budget)}</span>
+                        : a.budget > 0 && <span className="text-[11px] text-muted-foreground">coût {fmt(a.budget)}</span>
+                    }
+                </div>
+            </div>
+
+            {/* Toujours rendues, seulement transparentes : la ligne ne saute pas au survol. */}
+            <div className="flex flex-col items-center justify-between gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <button
+                    type="button"
+                    className="h-7 w-7 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-foreground"
+                    onClick={e => { e.stopPropagation(); onEdit(a) }}
+                >
+                    <Pencil size={13} />
+                </button>
+                <button
+                    type="button"
+                    className="h-7 w-7 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-destructive"
+                    onClick={e => { e.stopPropagation(); onDelete(a.id) }}
+                >
+                    <Trash2 size={13} />
+                </button>
+            </div>
+        </div>
     )
 }
 
@@ -858,6 +772,7 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
     const [budget,        setBudget]         = useState(initial?.budget ? String(initial.budget) : '')
     const [grant,         setGrant]          = useState(initial?.grant  ? String(initial.grant)  : '')
     const [signedDate,    setSignedDate]     = useState(initial?.signed_date ?? '')
+    const [direction,     setDirection]      = useState<AgreementDirection>(initial?.direction ?? 'depense')
     const [budgetDetailId, setBudgetDetailId] = useState<number | null>(initial?.budget_detail_id ?? null)
     const [submitting,    setSubmitting]     = useState(false)
     const [error,         setError]          = useState<string | null>(null)
@@ -874,7 +789,7 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
                 title, description, partner_id: partnerId, project_id: projectId,
                 axis_id: axisId, status_id: statusId,
                 budget: Number(budget) || 0, grant: Number(grant) || 0, signed_date: signedDate,
-                budget_detail_id: budgetDetailId,
+                budget_detail_id: budgetDetailId, direction,
             }
             const partner = partners.find(p => p.id === partnerId)!
             if (initial) {
@@ -924,6 +839,16 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
                 </div>
             </div>
             <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Sens</Label>
+                <Select value={direction} onValueChange={v => setDirection(v as AgreementDirection)}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="depense">Dépense — le projet verse</SelectItem>
+                        <SelectItem value="recette">Recette — le projet reçoit</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">Axe</Label>
                 <Select value={axisId ? String(axisId) : 'none'} onValueChange={v => setAxisId(v === 'none' ? null : Number(v))}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Aucun axe" /></SelectTrigger>
@@ -933,16 +858,23 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
                     </SelectContent>
                 </Select>
             </div>
+            {/* « Budget » désignait ici le coût de ce que couvre la convention,
+                pas le budget du projet ni celui de l'AAP. Trois budgets pour
+                trois choses différentes : celui-ci change de nom. */}
             <div className="flex gap-3">
                 <div className="flex flex-col gap-1.5 flex-1">
-                    <Label className="text-xs">Budget (€)</Label>
+                    <Label className="text-xs">Coût de l'opération (€)</Label>
                     <Input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="0" className="h-8 text-xs" />
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1">
-                    <Label className="text-xs">Subvention (€)</Label>
+                    <Label className="text-xs">{direction === 'recette' ? 'Montant reçu (€)' : 'Montant versé (€)'}</Label>
                     <Input type="number" value={grant} onChange={e => setGrant(e.target.value)} placeholder="0" className="h-8 text-xs" />
                 </div>
             </div>
+            <p className="text-[10px] text-muted-foreground leading-snug -mt-1">
+                Le coût de l'opération est ce que couvre la convention dans son ensemble ;
+                le montant est la part qui {direction === 'recette' ? 'revient au projet' : 'est versée au partenaire'}.
+            </p>
             <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">Date de signature</Label>
                 <Input type="date" value={signedDate} onChange={e => setSignedDate(e.target.value)} className="h-8 text-xs" />
@@ -996,11 +928,17 @@ function ProjectPartnerForm({ partners, initial, onSaved, onCancel }: ProjectPar
     const [label,       setLabel]       = useState(initial?.label ?? '')
     const [submitting,  setSubmitting]  = useState(false)
 
+    const roleDirection = PARTNER_ROLE_DIRECTION[role]
+
     async function handleSubmit() {
         if (!partnerId) return
         setSubmitting(true)
         try {
-            await onSaved(partnerId, role, amount ? Number(amount) : null, label || null)
+            // Le champ montant disparaît quand le rôle change ; sans ce garde,
+            // une saisie faite sous Cofinanceur survivrait à un passage en
+            // Associé et resterait invisible dans le formulaire.
+            const keptAmount = roleDirection && amount ? Number(amount) : null
+            await onSaved(partnerId, role, keptAmount, keptAmount === null ? null : label || null)
         } finally {
             setSubmitting(false)
         }
@@ -1025,23 +963,32 @@ function ProjectPartnerForm({ partners, initial, onSaved, onCancel }: ProjectPar
                     </SelectContent>
                 </Select>
             </div>
-            <div className="flex gap-2">
-                <Input
-                    type="number"
-                    value={amount}
-                    onChange={e => setAmount(e.target.value)}
-                    placeholder="Montant (€) — optionnel"
-                    className="h-8 text-xs flex-1"
-                />
-                {amount && (
+            {roleDirection && (
+                <>
+                <div className="flex gap-2">
                     <Input
-                        value={label}
-                        onChange={e => setLabel(e.target.value)}
-                        placeholder="Nature (ex: Apport en nature)"
+                        type="number"
+                        value={amount}
+                        onChange={e => setAmount(e.target.value)}
+                        placeholder={roleDirection === 'recette' ? 'Montant apporté (€) — optionnel' : 'Montant reversé (€) — optionnel'}
                         className="h-8 text-xs flex-1"
                     />
-                )}
-            </div>
+                    {amount && (
+                        <Input
+                            value={label}
+                            onChange={e => setLabel(e.target.value)}
+                            placeholder="Nature (ex: Apport en nature)"
+                            className="h-8 text-xs flex-1"
+                        />
+                    )}
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                    Montant annoncé au tour de table. Dès qu'une convention
+                    {roleDirection === 'recette' ? ' de recette' : ' de reversement'} est signée avec ce
+                    partenaire, c'est elle qui compte et ce montant cesse d'être additionné.
+                </p>
+                </>
+            )}
             <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={onCancel} disabled={submitting} className="rounded-md">Annuler</Button>
                 <Button size="sm" onClick={handleSubmit} disabled={submitting || !partnerId} className="rounded-md">
@@ -1444,6 +1391,7 @@ export type ProjectDetailSheetProps = {
     onUpdated: (p: Project) => void
     onDeleted: (id: number) => void
     onAgreementAdded: (a: FinancialAgreement) => void
+    onAgreementUpdated: (a: FinancialAgreement) => void
     onAgreementDeleted: (id: number) => void
     partners: Partner[]
     cardProjectPartners: ProjectPartnerFull[]
@@ -1512,7 +1460,7 @@ function SortableTab({ mode, label, icon, isActive, isEmpty, onActivate, onRemov
     )
 }
 
-export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementDeleted, onChangeProjectPartners, partners, cardProjectPartners, finances, onExpanseLinked, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged }: ProjectDetailSheetProps) {
+export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementUpdated, onAgreementDeleted, onChangeProjectPartners, partners, cardProjectPartners, finances, onExpanseLinked, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged }: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -1539,7 +1487,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [roleToAdd, setRoleToAdd] = useState<string>(ROLES[1])
     const [selectedKpi, setSelectedKpi] = useState<Kpi | null>(null)
     const pendingMemberIds = useRef(new Set<number>())
-    const [selectedAgreement, setSelectedAgreement] = useState<AgreementFull | null>()
     const [showAddPartner,   setShowAddPartner]   = useState(false)
     const [actionCards,      setActionCards]      = useState<(ActionCardFull & { linkId: number })[]>([])
     const [showLinkCard,       setShowLinkCard]       = useState(false)
@@ -1765,9 +1712,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
         setSaving(true)
         try {
             const patch = { title: draft.title, description: draft.description, budget: draft.budget, project_call_id: draft.project_call_id, status_id: draft.status_id, start_date: draft.start_date, end_date: draft.end_date }
-            console.log('[saveProject] patch envoyé à Grist :', patch)
             await updateProject(project.id, patch)
-            console.log('[saveProject] succès')
             onUpdated(draft)
             setEditing(false)
         } catch (err) {
@@ -1781,6 +1726,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
         if (editingAgreement) {
             setAgreements(prev => prev.map(x => x.id === a.id ? a : x))
             setEditingAgreement(null)
+            // Sans cette remontée, corriger un montant laissait la carte, la
+            // colonne AAP et le tableau sur l'ancien chiffre.
+            onAgreementUpdated(a)
         } else {
             setAgreements(prev => [...prev, a])
             setShowAddForm(false)
@@ -1855,12 +1803,17 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const TotalCofinancing   = finances.cofinanced
     const TotalAutofinancing = finances.selfFinanced
 
-    // Ces deux-là restent locaux : ils décrivent les conventions entre elles,
-    // pas le budget du projet. notCovered est la part que les conventions
-    // annoncent sans la financer, sans rapport avec le solde du projet.
-    const totalBudget = agreements.reduce((s, a) => s + a.budget, 0)
-    const totalGrant  = finances.granted
-    const notCovered = totalBudget - totalGrant
+    // Les totaux de conventions se lisent par sens : additionner ce que le
+    // laboratoire verse et ce qu'il reçoit ne donnerait aucun chiffre lisible.
+    const outgoingAgreements = agreements.filter(a => a.direction === 'depense')
+    const incomingAgreements = agreements.filter(a => a.direction === 'recette')
+    const totalIncoming = incomingAgreements.reduce((s, a) => s + a.grant, 0)
+    const totalGrant    = finances.granted
+
+    // Ces deux-là ne portent que sur les conventions sortantes : la part que
+    // le laboratoire s'engage à couvrir sans la subventionner.
+    const totalBudget = outgoingAgreements.reduce((s, a) => s + a.budget, 0)
+    const notCovered  = totalBudget - totalGrant
     const operationalExpanses  = projectExpanses.filter(e => !e.agreement_id)
     const reversementExpanses  = projectExpanses.filter(e => !!e.agreement_id)
     const totalExpanses = projectExpanses.reduce((s, e) => s + e.amount, 0)
@@ -2062,9 +2015,15 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         <Input type="date" value={draft.end_date ?? ''} onChange={e => setDraft(d => d ? { ...d, end_date: e.target.value } : d)} className="h-8 text-xs" />
                                     </div>
                                 </div>
+                                {/* Le champ doit porter son vrai sens dès la saisie : c'est la
+                                    part que le laboratoire met de sa poche, pas le total.
+                                    Le total se calcule, il ne se tape pas. */}
                                 <div className="flex flex-col gap-1">
-                                    <Label className="text-xs text-muted-foreground">Budget (€)</Label>
+                                    <Label className="text-xs text-muted-foreground"> Financement propre (€)</Label>
                                     <Input type="number" value={draft.budget} onChange={e => setDraft(d => d ? { ...d, budget: Number(e.target.value) } : d)} className="h-8 text-xs" />
+                                    <p className="text-[10px] text-muted-foreground leading-snug">
+                                        Part financée par sur financement propre. Les cofinancements s'y ajoutent pour former les recettes.
+                                    </p>
                                 </div>
                                 <div className="flex flex-col gap-1">
                                     <Label className="text-xs text-muted-foreground">Description</Label>
@@ -2090,11 +2049,11 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                         <span className="text-right">{project.start_date ? formatDate(project.start_date) : '—'} → {project.end_date ? formatDate(project.end_date) : '—'}</span>
                                     </div>
                                 )}
-                                {project.budget > 0 && (
+                                {(finances.budget > 0 || finances.spent > 0) && (
                                     <>
                                     <div className="flex justify-between gap-2 mt-4">
-                                        <span className="text-muted-foreground shrink-0">Budget total</span>
-                                        <span className="font-medium">{fmt(project.budget)}</span>
+                                        <span className="text-muted-foreground shrink-0">Recettes</span>
+                                        <span className="font-medium">{fmt(finances.budget)}</span>
                                     </div>
 
                                     <hr></hr>
@@ -2480,12 +2439,34 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                                 </TooltipContent>
                                             </Tooltip>
                                             <span className="text-xs text-muted-foreground">{pp.role}</span>
-                                            {pp.amount !== null && (
-                                                <span className="text-xs font-medium text-foreground">
-                                                    {pp.amount.toLocaleString('fr-FR')} €
-                                                    {pp.label && <span className="font-normal text-muted-foreground ml-1">· {pp.label}</span>}
-                                                </span>
-                                            )}
+                                            {pp.amount !== null && (() => {
+                                                // Une convention du même sens avec ce partenaire prend le
+                                                // pas sur le montant annoncé : on le montre barré plutôt
+                                                // que de laisser croire qu'il s'ajoute au total.
+                                                const direction = PARTNER_ROLE_DIRECTION[pp.role]
+                                                const covered = !!direction && agreements.some(
+                                                    a => a.partner_id === pp.partner_id && a.direction === direction
+                                                )
+                                                return (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className={`text-xs font-medium ${covered || !direction ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                                                                {pp.amount.toLocaleString('fr-FR')} €
+                                                                {pp.label && <span className="font-normal text-muted-foreground ml-1 no-underline">· {pp.label}</span>}
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p>
+                                                                {!direction
+                                                                    ? 'Non compté : seuls les Cofinanceurs et Bénéficiaires portent un montant.'
+                                                                    : covered
+                                                                        ? 'Non compté : une convention signée avec ce partenaire fait foi.'
+                                                                        : 'Montant annoncé, compté tant qu\'aucune convention ne le couvre.'}
+                                                            </p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )
+                                            })()}
                                         </div>
                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0 ml-2">
                                             <div className="h-5 w-5 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-foreground"
@@ -3219,7 +3200,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                             axe={axis.find(ax => ax.id === a.axis_id)}
                                             onEdit={setEditingAgreement}
                                             onDelete={handleDeleteAgreement}
-                                            onOpen={() => setSelectedAgreement(a)}
                                         />
                                     )
                                 )}
@@ -3273,12 +3253,14 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             <>
                                 <Separator />
                                 <div className="flex flex-col gap-1 text-xs">
+                                    {incomingAgreements.length > 0 && (
+                                        <div className="flex justify-between text-muted-foreground">
+                                            <span>Financements obtenus ({incomingAgreements.length})</span>
+                                            <span className="font-medium text-foreground">{fmt(totalIncoming)}</span>
+                                        </div>
+                                    )}
                                     <div className="flex justify-between text-muted-foreground">
-                                        <span>Budget total conventions</span>
-                                        <span className="font-medium text-foreground">{fmt(totalBudget)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-muted-foreground">
-                                        <span>Subventions accordées</span>
+                                        <span>Subventions accordées ({outgoingAgreements.length})</span>
                                         <span className="font-medium text-foreground">{fmt(totalGrant)}</span>
                                     </div>
                                     {reversementExpanses.length > 0 && (
@@ -3302,20 +3284,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                 </div>
             </SheetContent>
         </Sheet>
-
-        {/* Dialog détail convention */}
-        <AgreementDetailDialog
-            open={!!selectedAgreement}
-            onClose={() => setSelectedAgreement(null)}
-            agreement={selectedAgreement ?? null}
-            partners={partners}
-            statuses={statuses}
-            axes={axes}
-            projectId={project?.id ?? 0}
-            budgetDetails={budgetDetails}
-            onSaved={a => setAgreements(prev => prev.map(x => x.id === a.id ? a : x))}
-            onDeleted={id => { setAgreements(prev => prev.filter(x => x.id !== id)); setSelectedAgreement(null) }}
-        />
 
         {/* Dialog détail KPI */}
         <Dialog open={!!selectedKpi} onOpenChange={open => { if (!open) setSelectedKpi(null) }}>
@@ -3933,7 +3901,11 @@ export default function Projects() {
                 setPartners(pts as Partner[])
                 setProjectCalls(fullCalls)
                 setProjects(fullProjects)
-                setAllAgreements(agrs as FinancialAgreement[])
+                // Copie obligatoire : en mode mock, getFinancialAgreements rend le
+                // tableau source lui-même, et addAgreement y pousse. Sans copie,
+                // l'ajout arrive dans l'état sans passer par le setter, puis le
+                // callback l'ajoute une seconde fois.
+                setAllAgreements([...(agrs as FinancialAgreement[])])
                 setMembers(m)
                 setTimeEntries(te)
                 setAllProjectMembers(pm)
@@ -4051,14 +4023,9 @@ export default function Projects() {
     }
 
     function handleProjectUpdated(p: Project) {
-        console.log('handleProjectUpdated', p)
         const call = projectCalls.find(pc => pc.id === p.project_call_id)
         setProjects(prev => prev.map(x => x.id === p.id ? { ...x, ...p, projectCall: call ?? x.projectCall } : x))
-        setSelectedProject(prev => {
-            const updated = prev ? { ...prev, ...p, projectCall: call ?? prev.projectCall } : null
-            console.log('setSelectedProject =>', updated)
-            return updated
-        })
+        setSelectedProject(prev => prev ? { ...prev, ...p, projectCall: call ?? prev.projectCall } : null)
     }
 
     function handleProjectDeleted(id: number) {
@@ -4093,8 +4060,18 @@ export default function Projects() {
         navigator.clipboard.writeText(selectedProjects.map(p => p.title).join('\n'))
     }
 
+    // Ajout ou rattachement : dans les deux cas on veut une seule ligne par
+    // convention. Le rattachement porte un identifiant déjà présent, avec son
+    // ancien projet ; l'écraser vaut mieux que le laisser compter en double.
     function handleAgreementAdded(a: FinancialAgreement) {
-        setAllAgreements(prev => [...prev, a])
+        setAllAgreements(prev => prev.some(x => x.id === a.id)
+            ? prev.map(x => x.id === a.id ? a : x)
+            : [...prev, a]
+        )
+    }
+
+    function handleAgreementUpdated(a: FinancialAgreement) {
+        setAllAgreements(prev => prev.map(x => x.id === a.id ? a : x))
     }
 
     function handleAgreementDeleted(id: number) {
@@ -4325,18 +4302,22 @@ export default function Projects() {
                                                     const pcStatus = statuses.find(s => s.id === pc.status_id)
                                                     const pcColor = pcStatus?.label === "Terminé" ? "#f3f4f6" : "#d1fae5"
 
-                                                    // Somme des lignes projet, mais sur le budget de l'AAP :
-                                                    // c'est lui l'enveloppe, pas le cumul des budgets projets.
+                                                    // L'AAP garde son enveloppe : `budget` reste le montant alloué
+                                                    // au dispositif, pas la somme des recettes de ses projets. Les
+                                                    // deux chiffres répondent à deux questions différentes — ce qui
+                                                    // a été alloué, et ce que les projets ont réuni — et les
+                                                    // confondre ferait disparaître l'écart qu'on veut justement voir.
                                                     const pcFinances = pcProjects.reduce<ProjectFinancials>((acc, p) => {
                                                         const f = financialsByProject.get(p.id) ?? NO_FINANCIALS
-                                                        acc.cofinanced += f.cofinanced
-                                                        acc.granted    += f.granted
-                                                        acc.direct     += f.direct
+                                                        acc.selfFinanced += f.selfFinanced
+                                                        acc.cofinanced   += f.cofinanced
+                                                        acc.granted      += f.granted
+                                                        acc.direct       += f.direct
                                                         return acc
                                                     }, { ...NO_FINANCIALS, budget: pc.budget })
-                                                    pcFinances.selfFinanced = pcFinances.budget - pcFinances.cofinanced
-                                                    pcFinances.spent        = pcFinances.granted + pcFinances.direct
-                                                    pcFinances.balance      = pcFinances.budget - pcFinances.spent
+                                                    pcFinances.spent   = pcFinances.granted + pcFinances.direct
+                                                    pcFinances.balance = pcFinances.budget - pcFinances.spent
+                                                    const pcRevenue    = pcFinances.selfFinanced + pcFinances.cofinanced
 
                                                     const pcGrantLength = pcProjects.reduce((sum, p) =>
                                                         sum + (agreementsByProject.get(p.id) ?? []).length, 0
@@ -4371,7 +4352,7 @@ export default function Projects() {
                                                                         >
                                                                             <span className="flex items-center gap-1 text-muted-foreground">
                                                                                 {pcBudgetOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-                                                                                Solde{pcSpentPct !== null ? ` (${pcSpentPct} % engagé)` : ''}
+                                                                                Reste{pcSpentPct !== null ? ` (${pcSpentPct} % engagé)` : ''}
                                                                             </span>
                                                                             <span className={`font-medium ${balanceColor(pcFinances)}`}>
                                                                                 {fmt(pcFinances.balance)}
@@ -4385,13 +4366,20 @@ export default function Projects() {
                                                                                     <span className="text-muted-foreground">Budget alloué</span>
                                                                                     <span className="font-medium">{fmt(pcFinances.budget)}</span>
                                                                                 </div>
-                                                                                <div className="flex items-center justify-between text-[10px]">
-                                                                                    <span className="text-muted-foreground">Cofinancement</span>
-                                                                                    <span>{fmt(pcFinances.cofinanced)}</span>
+                                                                            </div>
+
+                                                                            <div className="mt-3 flex flex-col gap-0.5">
+                                                                                <div className="flex items-center justify-between text-xs">
+                                                                                    <span className="text-muted-foreground">Recettes des projets</span>
+                                                                                    <span className="font-medium">{fmt(pcRevenue)}</span>
                                                                                 </div>
                                                                                 <div className="flex items-center justify-between text-[10px]">
                                                                                     <span className="text-muted-foreground">Autofinancement</span>
                                                                                     <span>{fmt(pcFinances.selfFinanced)}</span>
+                                                                                </div>
+                                                                                <div className="flex items-center justify-between text-[10px]">
+                                                                                    <span className="text-muted-foreground">Cofinancement</span>
+                                                                                    <span>{fmt(pcFinances.cofinanced)}</span>
                                                                                 </div>
                                                                             </div>
 
@@ -4514,7 +4502,7 @@ export default function Projects() {
                                     </Button>
                                     <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md" onClick={() => exportToCsv(
                                         'projets.csv',
-                                        ['Titre', 'Appel à projets', 'Axe', 'Budget (€)'],
+                                        ['Titre', 'Appel à projets', 'Axe', 'Autofinancement (€)'],
                                         selectedProjects.map(p => [p.title, p.projectCall.title, p.projectCall.axis.name, p.budget])
                                     )}>
                                         <FileDown size={13} /> Exporter en CSV
@@ -4545,7 +4533,10 @@ export default function Projects() {
                     if (sortKey === 'call')       { va = a.projectCall.title;              vb = b.projectCall.title }
                     if (sortKey === 'axis')       { va = a.projectCall.axis.name;          vb = b.projectCall.axis.name }
                     if (sortKey === 'status')     { va = statusMap.get(a.status_id)?.label ?? ''; vb = statusMap.get(b.status_id)?.label ?? '' }
-                    if (sortKey === 'budget')     { va = a.budget;                         vb = b.budget }
+                    // La colonne affiche les recettes, pas le chiffre saisi : trier sur
+                    // `a.budget` rangerait les lignes dans un ordre que l'écran dément.
+                    if (sortKey === 'budget')     { va = (financialsByProject.get(a.id) ?? NO_FINANCIALS).budget
+                                                    vb = (financialsByProject.get(b.id) ?? NO_FINANCIALS).budget }
                     if (sortKey === 'start_date') { va = a.start_date;                     vb = b.start_date }
                     if (sortKey === 'end_date')   { va = a.end_date;                       vb = b.end_date }
                     if (va < vb) return sortDir === 'asc' ? -1 : 1
@@ -4593,9 +4584,10 @@ export default function Projects() {
                                             Statut <SortIcon col="status" />
                                         </TableHead>
                                         <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort('budget')}>
-                                            Dépenses <SortIcon col="budget" />
+                                            Recettes <SortIcon col="budget" />
                                         </TableHead>
-                                        <TableHead className="text-right">Subvention</TableHead>
+                                        <TableHead className="text-right">Dépenses</TableHead>
+                                        <TableHead className="text-right">Solde</TableHead>
                                         <TableHead className="cursor-pointer select-none" onClick={() => handleSort('start_date')}>
                                             Début <SortIcon col="start_date" />
                                         </TableHead>
@@ -4608,14 +4600,13 @@ export default function Projects() {
                                 <TableBody>
                                     {sorted.length === 0 && (
                                         <TableRow>
-                                            <TableCell colSpan={10} className="text-center text-muted-foreground py-12 italic">
+                                            <TableCell colSpan={11} className="text-center text-muted-foreground py-12 italic">
                                                 Aucun projet correspondant aux filtres
                                             </TableCell>
                                         </TableRow>
                                     )}
                                     {sorted.map(p => {
-                                        const agreements = agreementsByProject.get(p.id) ?? []
-                                        const totalGrant = agreements.reduce((s, a) => s + a.grant, 0)
+                                        const finances = financialsByProject.get(p.id) ?? NO_FINANCIALS
                                         const status = statusMap.get(p.status_id)
                                         const isSelected = !!selectedProjects.find(sp => sp.id === p.id)
                                         return (
@@ -4649,10 +4640,13 @@ export default function Projects() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right tabular-nums">
-                                                    {p.budget > 0 ? p.budget.toLocaleString('fr-FR') + ' €' : <span className="text-muted-foreground">—</span>}
+                                                    {finances.budget > 0 ? finances.budget.toLocaleString('fr-FR') + ' €' : <span className="text-muted-foreground">—</span>}
                                                 </TableCell>
-                                                <TableCell className="text-right tabular-nums text-green-700">
-                                                    {totalGrant > 0 ? totalGrant.toLocaleString('fr-FR') + ' €' : <span className="text-muted-foreground">—</span>}
+                                                <TableCell className="text-right tabular-nums">
+                                                    {finances.spent > 0 ? finances.spent.toLocaleString('fr-FR') + ' €' : <span className="text-muted-foreground">—</span>}
+                                                </TableCell>
+                                                <TableCell className={`text-right tabular-nums ${balanceColor(finances)}`}>
+                                                    {(finances.budget > 0 || finances.spent > 0) ? finances.balance.toLocaleString('fr-FR') + ' €' : <span className="text-muted-foreground">—</span>}
                                                 </TableCell>
                                                 <TableCell className="text-muted-foreground text-xs">
                                                     {formatDate(p.start_date) ?? '—'}
@@ -4702,12 +4696,15 @@ export default function Projects() {
                                         </Button>
                                         <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-full text-background hover:text-background hover:bg-white/10 rounded-md"
                                             onClick={() => exportToCsv('projets.csv',
-                                                ['Titre', 'Dispositif', 'Axe', 'Statut', 'Budget (€)', 'Subvention (€)', 'Début', 'Fin'],
+                                                ['Titre', 'Dispositif', 'Axe', 'Statut', 'Recettes (€)', 'Autofinancement (€)', 'Cofinancement (€)', 'Dépenses (€)', 'Subventions accordées (€)', 'Dépenses directes (€)', 'Solde (€)', 'Début', 'Fin'],
                                                 selectedProjects.map(p => {
-                                                    const agrs = agreementsByProject.get(p.id) ?? []
-                                                    const grant = agrs.reduce((s, a) => s + a.grant, 0)
+                                                    // Le même calcul qu'à l'écran : l'export ne refait pas ses totaux.
+                                                    const f = financialsByProject.get(p.id) ?? NO_FINANCIALS
                                                     const st = statusMap.get(p.status_id)?.label ?? ''
-                                                    return [p.title, p.projectCall.title, p.projectCall.axis.name, st, String(p.budget), String(grant), p.start_date, p.end_date]
+                                                    return [p.title, p.projectCall.title, p.projectCall.axis.name, st,
+                                                        String(f.budget), String(f.selfFinanced), String(f.cofinanced),
+                                                        String(f.spent), String(f.granted), String(f.direct), String(f.balance),
+                                                        p.start_date, p.end_date]
                                                 })
                                             )}>
                                             <FileDown size={13} /> Exporter en CSV
@@ -4903,6 +4900,7 @@ export default function Projects() {
                 onUpdated={handleProjectUpdated}
                 onDeleted={handleProjectDeleted}
                 onAgreementAdded={handleAgreementAdded}
+                onAgreementUpdated={handleAgreementUpdated}
                 onAgreementDeleted={handleAgreementDeleted}
                 partners={partners}
                 cardProjectPartners={projectPartners.filter(p=> p.project_id === selectedProject?.id)}

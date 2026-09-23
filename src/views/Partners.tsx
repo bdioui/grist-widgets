@@ -21,7 +21,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from '@/components/ui/avatar'
 import { Plus, Pencil, X, ChevronDown, Trash2, FlaskConical, Users, Trash, CopyIcon, Copy, ShareIcon, CheckIcon, ListChecks, FileDown, Building2 } from 'lucide-react'
-import { exportToCsv } from '@/lib/utils'
+import { exportToCsv, sumGrant } from '@/lib/utils'
+import { DirectionPill } from '@/components/DirectionPill'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuGroup, ContextMenuSeparator } from '@/components/ui/context-menu'
@@ -490,17 +491,23 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                             <div className="flex flex-col gap-4">
                                 {localPartner.projects.map(p => {
                                     const projectAgreements = localPartner.agreements.filter(a => a.project_id === p.id)
-                                    const projectGrant = projectAgreements.reduce((s, a) => s + a.grant, 0)
+                                    const projectGrant  = sumGrant(projectAgreements, 'depense')
+                                    const projectIncome = sumGrant(projectAgreements, 'recette')
                                     return (
                                         <div key={p.id} className="flex flex-col p-3 rounded-md border border-border cursor-pointer" onClick={() => setOpenProject(p)}>
                                             <div className="flex items-top justify-between">
                                                 <span className="text-sm font-medium">{p.title}</span>
                                                 <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0">
+                                                    {/* `budget` porte la part autofinancée, pas le total :
+                                                        le libellé doit dire laquelle des deux on affiche. */}
                                                     {p.budget > 0 && (
-                                                        <span>Budget : <span className="font-medium text-foreground">{p.budget.toLocaleString('fr-FR')} €</span></span>
+                                                        <span>Autofinancement : <span className="font-medium text-foreground">{p.budget.toLocaleString('fr-FR')} €</span></span>
                                                     )}
                                                     {projectGrant > 0 && (
-                                                        <span>Subvention : <span className="font-medium text-foreground">{projectGrant.toLocaleString('fr-FR')} €</span></span>
+                                                        <span>Versé : <span className="font-medium text-foreground">{projectGrant.toLocaleString('fr-FR')} €</span></span>
+                                                    )}
+                                                    {projectIncome > 0 && (
+                                                        <span>Reçu : <span className="font-medium text-green-700">{projectIncome.toLocaleString('fr-FR')} €</span></span>
                                                     )}
                                                 </div>
                                             </div>
@@ -511,7 +518,10 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                                                     {projectAgreements.map(a => (
                                                         <div key={a.id} className="flex items-center justify-between px-2 py-1.5 rounded">
                                                             <div className="flex flex-col min-w-0">
-                                                                <span className="text-sm">{a.title}</span>
+                                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                                    <span className="text-sm truncate">{a.title}</span>
+                                                                    <DirectionPill direction={a.direction} className="text-[10px]" />
+                                                                </div>
                                                                 {a.signed_date && <span className="text-xs text-muted-foreground">Signé le {formatDate(a.signed_date)}</span>}
                                                             </div>
                                                             <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0 ml-4">
@@ -531,7 +541,10 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                                     .map(a => (
                                         <div key={a.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted">
                                             <div className="flex flex-col min-w-0">
-                                                <span className="text-sm">{a.title}</span>
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <span className="text-sm truncate">{a.title}</span>
+                                                    <DirectionPill direction={a.direction} className="text-[10px]" />
+                                                </div>
                                                 {a.signed_date && <span className="text-xs text-muted-foreground">Signé le {a.signed_date}</span>}
                                             </div>
                                             <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0 ml-4">
@@ -566,7 +579,7 @@ export function PartnerDetailSheet({ partner, open, onClose, onUpdated, onDelete
                         {showProjectCreate && (
                             <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
                                 <Input placeholder="Titre du projet *" value={qProjectTitle} onChange={e => setQProjectTitle(e.target.value)} className="h-7 text-xs" />
-                                <Input type="number" placeholder="Budget (€)" value={qProjectBudget} onChange={e => setQProjectBudget(e.target.value)} className="h-7 text-xs" />
+                                <Input type="number" placeholder="Autofinancement (€)" value={qProjectBudget} onChange={e => setQProjectBudget(e.target.value)} className="h-7 text-xs" />
                                 <div className="flex gap-2">
                                     <Button variant="outline" size="sm" className="flex-1 h-7 text-xs" onClick={() => { setShowProjectCreate(false); setQProjectTitle(''); setQProjectBudget('') }}>Annuler</Button>
                                     <Button size="sm" className="flex-1 h-7 text-xs" disabled={!qProjectTitle.trim() || saving} onClick={handleProjectQuickAdd}>
@@ -933,8 +946,13 @@ function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete,
     selectedPartners: PartnerCardFull[]
     onSelectAll: () => void
 }) {
-    const totalBudget = partner.agreements.reduce((sum, a) => sum + a.budget, 0)
-    const totalGrant  = partner.agreements.reduce((sum, a) => sum + a.grant,  0)
+    // Un même partenaire peut apporter par une convention et recevoir par une
+    // autre : deux totaux séparés, jamais leur somme. Le taux de financement ne
+    // porte que sur le côté sortant, seul à avoir un budget conventionné.
+    const outgoing    = partner.agreements.filter(a => a.direction === 'depense')
+    const totalBudget = outgoing.reduce((sum, a) => sum + a.budget, 0)
+    const totalGrant  = sumGrant(partner.agreements, 'depense')
+    const totalIncome = sumGrant(partner.agreements, 'recette')
     const rate        = totalBudget > 0 ? Math.round((totalGrant / totalBudget) * 100) : null
 
     const [copied,        setCopied]        = useState(false)
@@ -1057,15 +1075,20 @@ function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete,
                         {partner.agreements.length > 0 && <span>{partner.agreements.length} convention{partner.agreements.length > 1 ? 's' : ''}</span>}
                         {partner.projects.length === 0 && partner.agreements.length === 0 && <span className="italic">Aucun projet lié</span>}
                     </div>
-                    {totalBudget > 0 && (
+                    {(totalGrant > 0 || totalIncome > 0) && (
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <span className="font-medium text-foreground cursor-default">{totalGrant.toLocaleString('fr-FR')} €</span>
+                                <span className="font-medium text-foreground cursor-default">
+                                    {totalGrant > 0 && `${totalGrant.toLocaleString('fr-FR')} € versés`}
+                                    {totalGrant > 0 && totalIncome > 0 && ' · '}
+                                    {totalIncome > 0 && <span className="text-green-700">{totalIncome.toLocaleString('fr-FR')} € reçus</span>}
+                                </span>
                             </TooltipTrigger>
                             <TooltipContent side="left" className="flex flex-col gap-1">
-                                <div className="text-xs whitespace-nowrap">Budget total : <span className="font-medium">{totalBudget.toLocaleString('fr-FR')} €</span></div>
-                                <div className="text-xs whitespace-nowrap">Subvention : <span className="font-medium">{totalGrant.toLocaleString('fr-FR')} €</span></div>
+                                {totalBudget > 0 && <div className="text-xs whitespace-nowrap">Budget conventionné : <span className="font-medium">{totalBudget.toLocaleString('fr-FR')} €</span></div>}
+                                {totalGrant > 0 && <div className="text-xs whitespace-nowrap">Subventions versées : <span className="font-medium">{totalGrant.toLocaleString('fr-FR')} €</span></div>}
                                 {rate !== null && <div className="text-xs whitespace-nowrap">Taux financé : <span className="font-medium text-green-600">{rate} %</span></div>}
+                                {totalIncome > 0 && <div className="text-xs whitespace-nowrap">Cofinancements reçus : <span className="font-medium">{totalIncome.toLocaleString('fr-FR')} €</span></div>}
                             </TooltipContent>
                         </Tooltip>
                     )}
@@ -1088,12 +1111,13 @@ function PartnerCard({ partner, onClick, selectOn, selected, onToggle, onDelete,
                             </ContextMenuItem>
                             <ContextMenuItem onClick={() => exportToCsv(
                                 'partenaires.csv',
-                                ['Nom', 'Type', 'Consortium', 'Description', 'Nb membres', 'Nb projets', 'Nb conventions', 'Budget total (€)', 'Subvention (€)'],
+                                ['Nom', 'Type', 'Consortium', 'Description', 'Nb membres', 'Nb projets', 'Nb conventions', 'Budget conventionné (€)', 'Subventions versées (€)', 'Cofinancements reçus (€)'],
                                 selectedPartners.map(p => [
                                     p.name, p.type, p.consortium ? 'Oui' : 'Non', p.description,
                                     p.members.length, p.projects.length, p.agreements.length,
-                                    p.agreements.reduce((s, a) => s + a.budget, 0),
-                                    p.agreements.reduce((s, a) => s + a.grant, 0),
+                                    p.agreements.filter(a => a.direction === 'depense').reduce((s, a) => s + a.budget, 0),
+                                    sumGrant(p.agreements, 'depense'),
+                                    sumGrant(p.agreements, 'recette'),
                                 ])
                             )}>
                                 <FileDown size={14} /> Exporter en CSV

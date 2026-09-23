@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import type { ToDoItem, ToDoList, MemberActionCard, ProjectPartner, FinancialAgreement, Expanse } from './types'
-import { WORKING_ROLES } from '../lib/constants'
+import type { ToDoItem, ToDoList, MemberActionCard, ProjectPartner, FinancialAgreement, Expanse, AgreementDirection } from './types'
+import { WORKING_ROLES, PARTNER_ROLE_DIRECTION } from '../lib/constants'
 
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
@@ -25,14 +25,21 @@ export function exportToCsv(filename: string, headers: string[], rows: (string |
     URL.revokeObjectURL(url)
 }
 
-// Vue financière d'un projet. Recettes : le budget, dont la part apportée par
-// les partenaires (cofinanced), le reste étant porté par le laboratoire
-// (selfFinanced). Dépenses : les subventions accordées (granted) et les
-// dépenses directes.
+// Vue financière d'un projet, en deux colonnes.
+//
+// Recettes : ce que le laboratoire met de sa poche (selfFinanced, saisi sur le
+// projet) et ce que les partenaires apportent (cofinanced, observé). Leur somme
+// est le budget total — il n'est pas saisi, il tombe de l'addition. Un
+// cofinancement qui arrive augmente le budget au lieu de manger l'apport du
+// laboratoire, ce qui est ce qui se passe vraiment.
+//
+// Dépenses : les subventions accordées (granted) et les dépenses directes.
+//
+// Les deux côtés étant de même nature, `balance` est un vrai solde.
 export type ProjectFinancials = {
-    budget:       number
-    cofinanced:   number
     selfFinanced: number
+    cofinanced:   number
+    budget:       number
     granted:      number
     direct:       number
     spent:        number
@@ -41,7 +48,7 @@ export type ProjectFinancials = {
 
 // Rendu quand un projet n'a encore aucune ligne financière.
 export const NO_FINANCIALS: ProjectFinancials = {
-    budget: 0, cofinanced: 0, selfFinanced: 0, granted: 0, direct: 0, spent: 0, balance: 0,
+    selfFinanced: 0, cofinanced: 0, budget: 0, granted: 0, direct: 0, spent: 0, balance: 0,
 }
 
 // Une seule arithmétique, deux appelants : la liste des projets la calcule pour
@@ -49,22 +56,40 @@ export const NO_FINANCIALS: ProjectFinancials = {
 // posés en premier pour que chacun ait sa ligne, même sans mouvement ; les
 // trois sources viennent ensuite l'alimenter et le dernier passage dérive.
 export function computeFinancials(
+    // `budget` porte ici la part autofinancée, pas le total : c'est le seul
+    // chiffre saisi à la main, le reste s'observe.
     projects:        { id: number; budget: number }[],
     projectPartners: ProjectPartner[],
     agreements:      FinancialAgreement[],
     expanses:        Expanse[],
 ): Map<number, ProjectFinancials> {
     const totals = new Map<number, ProjectFinancials>()
-    for (const p of projects) totals.set(p.id, { ...NO_FINANCIALS, budget: p.budget })
+    for (const p of projects) totals.set(p.id, { ...NO_FINANCIALS, selfFinanced: p.budget })
 
-    for (const pp of projectPartners) {
-        const f = totals.get(pp.project_id)
-        if (f) f.cofinanced += pp.amount ?? 0
-    }
-
+    // Les conventions d'abord : une convention signée fait foi sur le montant
+    // annoncé au tour de table. On retient au passage les couples
+    // (projet, partenaire, sens) déjà couverts, pour ne pas compter deux fois.
+    // Le sens fait partie de la clé : un partenaire peut très bien apporter
+    // par une convention et recevoir par une autre.
+    const settled = new Set<string>()
     for (const a of agreements) {
         const f = totals.get(a.project_id)
-        if (f) f.granted += a.grant
+        if (!f) continue
+        if (a.direction === 'recette') f.cofinanced += a.grant
+        else                           f.granted    += a.grant
+        settled.add(`${a.project_id}:${a.partner_id}:${a.direction}`)
+    }
+
+    // Le montant annoncé au tour de table ne vaut que tant qu'aucune
+    // convention ne le couvre : il tient la place en attendant la signature.
+    for (const pp of projectPartners) {
+        const direction = PARTNER_ROLE_DIRECTION[pp.role]
+        if (!direction) continue
+        if (settled.has(`${pp.project_id}:${pp.partner_id}:${direction}`)) continue
+        const f = totals.get(pp.project_id)
+        if (!f) continue
+        if (direction === 'recette') f.cofinanced += pp.amount ?? 0
+        else                         f.granted    += pp.amount ?? 0
     }
 
     // Une dépense rattachée à une convention n'est que le versement d'une
@@ -77,11 +102,21 @@ export function computeFinancials(
     }
 
     for (const f of totals.values()) {
-        f.selfFinanced = f.budget - f.cofinanced
-        f.spent        = f.granted + f.direct
-        f.balance      = f.budget - f.spent
+        f.budget  = f.selfFinanced + f.cofinanced
+        f.spent   = f.granted + f.direct
+        f.balance = f.budget - f.spent
     }
     return totals
+}
+
+// Additionner les deux sens donnerait un chiffre qui ne désigne rien : ce que le
+// laboratoire reçoit et ce qu'il verse ne se cumulent pas. Tout total de
+// conventions doit donc choisir son côté.
+export function sumGrant(
+    agreements: { direction: AgreementDirection; grant: number }[],
+    direction: AgreementDirection,
+) {
+    return agreements.reduce((s, a) => a.direction === direction ? s + a.grant : s, 0)
 }
 
 export function participantsByCard(memberLinks: MemberActionCard[], lists: ToDoList[], items: ToDoItem[]): Map<number, Set<number>> {

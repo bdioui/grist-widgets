@@ -13,6 +13,7 @@ import MemberGraph from '../components/memberGraphView'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { sumGrant } from '@/lib/utils'
 import CalendarHeatmap, { type ReactCalendarHeatmapValue } from 'react-calendar-heatmap'
 import 'react-calendar-heatmap/dist/styles.css'
 
@@ -211,8 +212,15 @@ export default function Dashboard() {
     const projectStatusMap = new Map(statuses.filter(s => s.context === 'project').map(s => [s.id, s]))
     const activeStatuses   = ['En cours', 'En attente', 'Suspendu']
     const activeProjects   = projects.filter(p => activeStatuses.includes(projectStatusMap.get(p.status_id)?.label ?? ''))
-    const totalGrant           = agreements.reduce((s, a) => s + a.grant, 0)
-    const totalBudget          = projects.reduce((s, p) => s + p.budget, 0)
+    // Deux totaux séparés : les conventions reçues et les conventions versées
+    // ne se cumulent pas, le mélange ne désignerait aucune somme réelle.
+    const totalGranted         = sumGrant(agreements, 'depense')
+    const totalCofinanced      = sumGrant(agreements, 'recette')
+    // Le chiffre saisi sur un projet est sa part autofinancée ; les recettes
+    // sont ce total plus les cofinancements reçus. Additionner les deux ici
+    // évite d'annoncer un « budget » qui ignorerait l'apport des partenaires.
+    const totalSelfFinanced    = projects.reduce((s, p) => s + p.budget, 0)
+    const totalRevenue         = totalSelfFinanced + totalCofinanced
     const totalExpanses        = expanses.reduce((s, e) => s + e.amount, 0)
     const totalReversements    = expanses.filter(e => e.agreement_id != null).reduce((s, e) => s + e.amount, 0)
 
@@ -270,8 +278,10 @@ export default function Dashboard() {
 
 
     // Top partenaires par subvention
+    // Les seules conventions sortantes : un cofinanceur et un bénéficiaire
+    // n'ont rien à faire dans le même classement, l'un apporte, l'autre reçoit.
     const grantByPartner = new Map<number, number>()
-    agreements.forEach(a => {
+    agreements.filter(a => a.direction === 'depense').forEach(a => {
         grantByPartner.set(a.partner_id, (grantByPartner.get(a.partner_id) ?? 0) + a.grant)
     })
     const topPartners = [...grantByPartner.entries()]
@@ -288,11 +298,6 @@ export default function Dashboard() {
         const label = projectStatusMap.get(p.status_id)?.label ?? ''
         return d >= 0 && d <= 60 && activeStatuses.includes(label)
     })
-
-    console.log(endingSoon)
-    console.log('statuses:', statuses.filter(s => s.context === 'project').map(s => s.label))
-    console.log('project end_dates:', projects.map(p => p.end_date))
-    console.log('endingSoon:', endingSoon)
 
     // Projets dont la date de fin est dépassée mais encore actifs
     const overdueProjects = projects.filter(p => {
@@ -480,14 +485,16 @@ export default function Dashboard() {
                     value={fmt(totalExpanses)}
                     sub={program?.budget
                         ? `${Math.round((totalExpanses / program.budget) * 100)} % du budget programme`
-                        : `sur ${fmt(totalBudget)} projets`
+                        : totalCofinanced > 0
+                            ? `sur ${fmt(totalRevenue)} de recettes, dont ${fmt(totalCofinanced)} cofinancés`
+                            : `sur ${fmt(totalRevenue)} de recettes`
                     }
                 />
                 <KpiCard
                     icon={<Receipt size={16} />}
                     label="Dépenses réalisées"
                     value={fmt(totalExpanses)}
-                    sub={totalReversements > 0 ? `dont ${fmt(totalReversements)} reversés aux partenaires` : totalGrant > 0 ? `${agreements.length} convention${agreements.length > 1 ? 's' : ''}` : undefined}
+                    sub={totalReversements > 0 ? `dont ${fmt(totalReversements)} reversés aux partenaires` : totalGranted > 0 ? `${fmt(totalGranted)} de subventions accordées` : undefined}
                 />
                 <KpiCard
                     icon={<Users size={16} />}
@@ -884,7 +891,7 @@ export default function Dashboard() {
                                             statusLabel={projectStatusMap.get(p.status_id)?.label ?? ''}
                                             daysLeft={daysFromNow(p.end_date)}
                                             memberCount={projectMembers.filter(pm => pm.project_id === p.id).length}
-                                            grant={agreements.filter(a => a.project_id === p.id).reduce((s, a) => s + a.grant, 0)}
+                                            grant={sumGrant(agreements.filter(a => a.project_id === p.id), 'depense')}
                                             onOpen={p => setOpenProject(p)}
                                         />
                                     ))}
@@ -906,7 +913,7 @@ export default function Dashboard() {
                                         statusLabel={projectStatusMap.get(p.status_id)?.label ?? ''}
                                         daysLeft={daysFromNow(p.end_date)}
                                         memberCount={projectMembers.filter(pm => pm.project_id === p.id).length}
-                                        grant={agreements.filter(a => a.project_id === p.id).reduce((s, a) => s + a.grant, 0)}
+                                        grant={sumGrant(agreements.filter(a => a.project_id === p.id), 'depense')}
                                         onOpen={p => setOpenProject(p)}
                                     />
                                 ))}

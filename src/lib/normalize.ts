@@ -280,6 +280,10 @@ export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): F
         grant: num(r.grant ?? r.Grant ?? r.Subvention ?? r.subvention),
         signed_date: str(r.signed_date),
         budget_detail_id: nullable(r.budget_detail_id),
+        // Une cellule vide retombe sur 'depense', le sens qu'avaient toutes
+        // les conventions avant l'ajout de la colonne : l'existant garde ses
+        // chiffres tant qu'il n'a pas été trié à la main.
+        direction: r.direction === 'recette' ? 'recette' : 'depense',
     }))
 }
 
