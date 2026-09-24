@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { X, Plus, Pencil, Check, Trash2, Copy, CheckIcon, ListChecks, Trash, FileDown, Users, MessageCircle, Calendar, LayoutGrid, ListTodo, Building2, MapPin, MessageSquare, Maximize2, Minimize2 } from 'lucide-react'
 import { exportToCsv } from '@/lib/utils'
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from '@/components/ui/context-menu'
 import {
     getMemberActionCardsByCard, getProjectActionCardsByCard, getToDoListsWithItemsByCard,
     getStatuses, getCategories, getMembers, getProjects, getPartners,
@@ -1798,6 +1798,8 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
 
 export default function ActionCard(props: ActionCardData & {
     onDeleted?: (id: number) => void
+    projects?: Project[]
+    projectLinks?:ProjectActionCard[]
     onUpdated?: (patch: Partial<ActionCardData>) => void
     selectOn?: boolean
     selected?: boolean
@@ -1807,8 +1809,9 @@ export default function ActionCard(props: ActionCardData & {
     selectedCards?: ActionCardData[]
     onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
     onMemberLinkChanged? : (cardId: number, links: MemberLink[]) => void
+    onProjectLinksAdded?: (links: (ProjectActionCard & { project: Project })[]) => void
 }) {
-    const { onDeleted, onUpdated: onUpdatedProp, selectOn, selected, onToggle, onSelectMultiple: _onSelectMultiple, onSelectAll, selectedCards = [], onTodosChanged, onMemberLinkChanged
+    const { onDeleted, projects, projectLinks, onUpdated: onUpdatedProp, onProjectLinksAdded, selectOn, selected, onToggle, onSelectMultiple: _onSelectMultiple, onSelectAll, selectedCards = [], onTodosChanged, onMemberLinkChanged
      } = props
     const [open, setOpen]         = useState(false)
     const [data, setData]         = useState<ActionCardData>(props)
@@ -1853,6 +1856,14 @@ export default function ActionCard(props: ActionCardData & {
         } finally {
             setDeleting(false)
         }
+    }
+
+    async function handleAddToProject(projectId: number) {
+        const targets = selectedCards.filter(c =>
+            !projectLinks?.some(l => l.action_card_id === c.id && l.project_id === projectId)
+        )
+        const created = await Promise.all(targets.map(c => addProjectToCard(c.id, projectId)))
+        onProjectLinksAdded?.(created)
     }
 
     return (
@@ -1903,6 +1914,26 @@ export default function ActionCard(props: ActionCardData & {
                     <>  <ContextMenuItem onClick={onSelectAll}>
                     <ListChecks size={13} className="mr-2" /> Tout sélectionner
                 </ContextMenuItem>
+                {projects && (
+                    <>
+                     <ContextMenuSub>
+                            <ContextMenuSubTrigger><Plus size={14} /> Ajouter au projet</ContextMenuSubTrigger>
+                            <ContextMenuSubContent>
+                                {projects.map(p => {
+                                    const actionIdsInProject = projectLinks?.filter(l => l.project_id === p.id).map(l => l.action_card_id) ?? []
+                                    const allInProject = selectedCards.length > 0 && selectedCards.every(c => actionIdsInProject.includes(c.id))
+                                    return (
+                                        <ContextMenuItem key={p.id} onSelect={e => e.preventDefault()} onClick={() => handleAddToProject(p.id)}>
+                                            {allInProject ? <CheckIcon size={14} /> : <div className="w-[14px]" />}
+                                            {p.title}
+                                        </ContextMenuItem>
+                                    )
+                                })}
+                            </ContextMenuSubContent>
+                        </ContextMenuSub>
+                    </>
+                )}
+               
                 <Separator />
                         <ContextMenuItem onSelect={e => e.preventDefault()} onClick={copyTitles}>
                             {copied ? <CheckIcon size={13} className="mr-2" /> : <Copy size={13} className="mr-2" />}
@@ -1919,7 +1950,7 @@ export default function ActionCard(props: ActionCardData & {
                             ])
                         )}>
                             <FileDown size={13} className="mr-2" /> Exporter en CSV
-                        </ContextMenuItem>
+                        </ContextMenuItem> 
                         <ContextMenuSeparator />
                         {confirming ? (
                             <ContextMenuItem onSelect={e => e.preventDefault()} className="flex gap-2 p-1">

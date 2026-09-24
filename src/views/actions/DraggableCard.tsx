@@ -1,10 +1,13 @@
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import ActionCard, { type ActionCardData } from './ActionCard'
+import ActionCard, { type ActionCardData} from './ActionCard'
+import type {Project, ProjectActionCard} from '../../lib/types'
 
 type Props = {
     card: ActionCardData
     onDeleted?: (id: number) => void
+    projects?: Project[]
+    projectLinks?: ProjectActionCard[]
     onUpdated?: (patch: Partial<ActionCardData>) => void
     selectOn?: boolean
     selected?: boolean
@@ -12,9 +15,10 @@ type Props = {
     onSelectMultiple?: () => void
     onSelectAll?: () => void
     selectedCards?: ActionCardData[]
+    onProjectLinksAdded?: (links: (ProjectActionCard & { project: Project })[]) => void
 }
 
-export default function DraggableCard({ card, onDeleted, onUpdated, selectOn, selected, onToggle, onSelectMultiple, onSelectAll, selectedCards }: Props) {
+export default function DraggableCard({ card, projects, projectLinks, onDeleted, onUpdated, onProjectLinksAdded, selectOn, selected, onToggle, onSelectMultiple, onSelectAll, selectedCards }: Props) {
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: card.id,
         disabled: selectOn,
@@ -29,6 +33,9 @@ export default function DraggableCard({ card, onDeleted, onUpdated, selectOn, se
         >
             <ActionCard
                 {...card}
+                projects={projects}
+                projectLinks={projectLinks}
+                onProjectLinksAdded={onProjectLinksAdded}
                 onDeleted={onDeleted}
                 onUpdated={onUpdated}
                 selectOn={selectOn}

@@ -16,8 +16,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SlidersHorizontal, Plus, Pencil, Search, Users, ListChecks, X, Copy, Trash, FileDown } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { getActionCardsFull, updateActionCard, deleteActionCard, getAxes, getMembers, getPartners, getAllAxisActionCards, getAllMemberActionCards, getToDoItems, getToDoLists } from '@/lib/api'
-import { type ActionCardFull, type Category, type Axis, type Member, type Partner, type AxisActionCard, type MemberActionCard, type ToDoItem, type ToDoList } from '@/lib/types'
+import { getActionCardsFull, updateActionCard, deleteActionCard, getAllProjectActionCards, getAxes, getMembers, getPartners, getProjects, getAllAxisActionCards, getAllMemberActionCards, getToDoItems, getToDoLists } from '@/lib/api'
+import { type ActionCardFull, type Category, type Axis, type Member, type Partner, type AxisActionCard, type MemberActionCard, type ProjectActionCard, type ToDoItem, type ToDoList, type Project } from '@/lib/types'
 import ActionCardSheet from './ActionCardSheet'
 import { useCurrentUser } from '@/lib/userContext'
 import { exportToCsv } from '@/lib/utils'
@@ -229,6 +229,8 @@ export default function Categories() {
     const [editingCategory, setEditingCategory] = useState<Category | undefined>()
     const [toDoItems, setTodoItems] = useState<ToDoItem[]>([])
     const [toDoLists, setTodoLists] = useState<ToDoList[]>([])
+    const [projects, setProjects]       = useState<Project[]>([])
+    const [projectLinks, setProjectLinks] = useState<ProjectActionCard[]>([])
 
 
     // Données de filtre
@@ -260,13 +262,15 @@ export default function Categories() {
             getAxes(),
             getMembers(),
             getPartners(),
+            getProjects(), 
+            getAllProjectActionCards(),
             getAllAxisActionCards(),
             getAllMemberActionCards(),
             getToDoLists(),
             getToDoItems()
             
         ])
-            .then(([data, axes, members, partners, axLinks, memLinks, tdl, tdi]) => {
+            .then(([data, axes, members, partners, projects, projectLinks, axLinks, memLinks, tdl, tdi]) => {
                 const memberMap = new Map(members.map(m => [m.id, m]))
                 const mapped = data.map(card => ({
                     ...toCardData(card),
@@ -284,6 +288,8 @@ export default function Categories() {
                 setAllAxes(axes)
                 setAllMembers(members)
                 setAllPartners(partners)
+                setProjects(projects)
+                setProjectLinks(projectLinks)
                 setAxisLinks(axLinks)
                 setMemberLinks(memLinks)
                 setTodoItems(tdi)
@@ -727,6 +733,9 @@ export default function Categories() {
                                                         <DraggableCard
                                                             key={card.id}
                                                             card={card}
+                                                            projects={projects}
+                                                            onProjectLinksAdded={links => setProjectLinks(prev => [...prev, ...links])}
+                                                            projectLinks={projectLinks}
                                                             onDeleted={id => {
                                                                 setCards(prev => prev.filter(c => c.id !== id))
                                                                 setSelectedCards(prev => prev.filter(c => c.id !== id))

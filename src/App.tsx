@@ -272,7 +272,7 @@ export default function App() {
           {/* Boutons alertes */}
           {currentMember ? (
             <DropdownMenu>
-              <DropdownMenuTrigger>
+              <DropdownMenuTrigger asChild>
                 <Button className="relative rounded-md px-3 pr-4" variant="outline" size="sm">
                   <Bell />
                   {alerts.some(a => !a.seen) && <div className="rounded-full bg-red-500 h-2 w-2 absolute top-1 right-1" />}

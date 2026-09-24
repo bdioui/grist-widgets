@@ -443,6 +443,13 @@ export async function getAllAxisActionCards(): Promise<AxisActionCard[]> {
     return rows.map(r => ({ id: Number(r.id), axis_id: Number(r.axis_id), action_card_id: Number(r.action_card_id) }))
 }
 
+
+export async function getAllProjectActionCards(): Promise<ProjectActionCard[]> {
+    if (USE_MOCK) return [...mockProjectActionCards]
+    const rows = await fetchTable(T.project_action_card)
+    return rows.map(r => ({ id: Number(r.id), project_id: Number(r.project_id), action_card_id: Number(r.action_card_id) }))
+}
+
 export async function getAllMemberActionCards(): Promise<MemberActionCard[]> {
     if (USE_MOCK) return [...mockMemberActionCards]
     const rows = await fetchTable(T.member_action_card)
