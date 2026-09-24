@@ -735,6 +735,7 @@ export default function Categories() {
                                                             card={card}
                                                             projects={projects}
                                                             onProjectLinksAdded={links => setProjectLinks(prev => [...prev, ...links])}
+                                                            onProjectLinksRemoved={ids => setProjectLinks(prev => prev.filter(l => !ids.includes(l.id)))}
                                                             projectLinks={projectLinks}
                                                             onDeleted={id => {
                                                                 setCards(prev => prev.filter(c => c.id !== id))

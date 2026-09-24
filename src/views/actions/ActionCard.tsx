@@ -1810,8 +1810,9 @@ export default function ActionCard(props: ActionCardData & {
     onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
     onMemberLinkChanged? : (cardId: number, links: MemberLink[]) => void
     onProjectLinksAdded?: (links: (ProjectActionCard & { project: Project })[]) => void
+    onProjectLinksRemoved?: (linkIds: number[]) => void
 }) {
-    const { onDeleted, projects, projectLinks, onUpdated: onUpdatedProp, onProjectLinksAdded, selectOn, selected, onToggle, onSelectMultiple: _onSelectMultiple, onSelectAll, selectedCards = [], onTodosChanged, onMemberLinkChanged
+    const { onDeleted, projects, projectLinks, onUpdated: onUpdatedProp, onProjectLinksAdded, onProjectLinksRemoved, selectOn, selected, onToggle, onSelectMultiple: _onSelectMultiple, onSelectAll, selectedCards = [], onTodosChanged, onMemberLinkChanged
      } = props
     const [open, setOpen]         = useState(false)
     const [data, setData]         = useState<ActionCardData>(props)
@@ -1858,14 +1859,21 @@ export default function ActionCard(props: ActionCardData & {
         }
     }
 
-    async function handleAddToProject(projectId: number) {
-        const targets = selectedCards.filter(c =>
-            !projectLinks?.some(l => l.action_card_id === c.id && l.project_id === projectId)
-        )
-        const created = await Promise.all(targets.map(c => addProjectToCard(c.id, projectId)))
-        onProjectLinksAdded?.(created)
+    async function handleToggleProject(projectId: number, alreadyIn: boolean) {
+        if (alreadyIn) {
+            const links = selectedCards
+                .map(c => projectLinks?.find(l => l.action_card_id === c.id && l.project_id === projectId))
+                .filter((l): l is ProjectActionCard => !!l)
+            await Promise.all(links.map(l => removeProjectFromCard(l.id)))
+            onProjectLinksRemoved?.(links.map(l => l.id))
+        } else {
+            const targets = selectedCards.filter(c =>
+                !projectLinks?.some(l => l.action_card_id === c.id && l.project_id === projectId)
+            )
+            const created = await Promise.all(targets.map(c => addProjectToCard(c.id, projectId)))
+            onProjectLinksAdded?.(created)
+        }
     }
-
     return (
         <>
         <ContextMenu onOpenChange={open => { if (!open) setConfirming(false) }}>
@@ -1923,7 +1931,7 @@ export default function ActionCard(props: ActionCardData & {
                                     const actionIdsInProject = projectLinks?.filter(l => l.project_id === p.id).map(l => l.action_card_id) ?? []
                                     const allInProject = selectedCards.length > 0 && selectedCards.every(c => actionIdsInProject.includes(c.id))
                                     return (
-                                        <ContextMenuItem key={p.id} onSelect={e => e.preventDefault()} onClick={() => handleAddToProject(p.id)}>
+                                        <ContextMenuItem key={p.id} onSelect={e => e.preventDefault()} onClick={() => handleToggleProject(p.id, allInProject)}>
                                             {allInProject ? <CheckIcon size={14} /> : <div className="w-[14px]" />}
                                             <span className="truncate">{p.title}</span>
                                         </ContextMenuItem>

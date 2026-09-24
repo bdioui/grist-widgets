@@ -16,9 +16,10 @@ type Props = {
     onSelectAll?: () => void
     selectedCards?: ActionCardData[]
     onProjectLinksAdded?: (links: (ProjectActionCard & { project: Project })[]) => void
+    onProjectLinksRemoved?: (linkIds: number[]) => void
 }
 
-export default function DraggableCard({ card, projects, projectLinks, onDeleted, onUpdated, onProjectLinksAdded, selectOn, selected, onToggle, onSelectMultiple, onSelectAll, selectedCards }: Props) {
+export default function DraggableCard({ card, projects, projectLinks, onDeleted, onUpdated, onProjectLinksAdded, onProjectLinksRemoved, selectOn, selected, onToggle, onSelectMultiple, onSelectAll, selectedCards }: Props) {
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: card.id,
         disabled: selectOn,
@@ -36,6 +37,7 @@ export default function DraggableCard({ card, projects, projectLinks, onDeleted,
                 projects={projects}
                 projectLinks={projectLinks}
                 onProjectLinksAdded={onProjectLinksAdded}
+                onProjectLinksRemoved={onProjectLinksRemoved}
                 onDeleted={onDeleted}
                 onUpdated={onUpdated}
                 selectOn={selectOn}
