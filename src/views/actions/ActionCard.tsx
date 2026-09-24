@@ -1640,17 +1640,6 @@ export function ActionCardDetailSheet({ card, open, onClose, onUpdated, onDelete
                                 )}
                             </section>
                         )}
-                       
-
-                        
-
-                        {/* L'onglet Conventions a été retiré volontairement : une action
-                            est une to-do, pas un poste budgétaire. L'argent se suit sur le
-                            projet, que l'action atteint déjà par l'onglet Projets — un lien
-                            financier direct ouvrirait une seconde route vers le même chiffre.
-                            Le rendu seul est retiré : la table `Agreement_action_card`, les
-                            fonctions d'api.ts et les rattachements déjà saisis sont intacts,
-                            le temps de voir si quelqu'un les réclame. */}
 
                         {/* Localisation */}
                         {acTab === 'location' && (

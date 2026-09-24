@@ -25,17 +25,9 @@ export function exportToCsv(filename: string, headers: string[], rows: (string |
     URL.revokeObjectURL(url)
 }
 
-// Vue financière d'un projet, en deux colonnes.
-//
-// Recettes : ce que le projet finance sur ses propres ressources (selfFinanced,
-// saisi sur le projet) et ce que les partenaires apportent (cofinanced, observé).
-// Leur somme est le budget total — il n'est pas saisi, il tombe de l'addition. Un
-// cofinancement qui arrive augmente le budget au lieu de manger le financement
-// propre, ce qui est ce qui se passe vraiment.
-//
-// Dépenses : les subventions accordées (granted) et les dépenses directes.
-//
-// Les deux côtés étant de même nature, `balance` est un vrai solde.
+// `budget` (recettes) n'est jamais saisi directement : il tombe de
+// selfFinanced + cofinanced. Recettes et dépenses étant de même nature,
+// `balance` est un vrai solde.
 export type ProjectFinancials = {
     selfFinanced: number
     cofinanced:   number

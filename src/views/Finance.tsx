@@ -676,17 +676,11 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         .sort((a,b) => a.flux_id.localeCompare(b.flux_id)),
         [sifacLines, keptFlux, paymentFrom, paymentTo])
 
-    // Les cartes du haut suivent la vue affichée et ses filtres. En mode groupé
-    // elles somment des dépenses entières ; en mode ligne, les écritures
-    // visibles, seules à porter une date de paiement exacte.
-    //
-    // La troisième carte change de sens d'une vue à l'autre, elle porte donc son
-    // libellé. En groupé, une dépense est engagée ou payée : le reste à payer se
-    // déduit du total, et le payé se somme sur les décaissements réels plutôt
-    // que sur le statut, pour qu'une commande partiellement réglée compte pour
-    // ce qui est sorti. En ligne, engagé et payé sont deux colonnes distinctes
-    // portées par des écritures différentes : les soustraire donnerait du
-    // négatif dès qu'un filtre de date écarte la ligne COMMANDE.
+    // La troisième carte change de sens d'une vue à l'autre. En groupé, le payé
+    // se somme sur les décaissements réels (pas le statut) et l'engagé s'en
+    // déduit. En ligne, engagé et payé sont deux colonnes distinctes : les
+    // soustraire donnerait du négatif dès qu'un filtre de date écarte la ligne
+    // COMMANDE.
     const totals = useMemo(() => {
         if (displayMode === 'detailed') {
             return {

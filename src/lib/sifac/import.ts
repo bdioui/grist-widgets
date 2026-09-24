@@ -29,13 +29,10 @@ export async function prepareSifacImport(file: File): Promise<SifacPreview> {
     }
 }
 
-// Garantit qu'une fiche fournisseur existe pour chaque code tiers rencontré, et
-// rend la table code → id que reconcile consultera.
-//
-// Le rapprochement se fait sur `sifac_code` seul, jamais sur le nom : SIFAC a
-// déjà dédoublonné ses tiers, son code est stable, un nom ne l'est pas. Les
-// fiches saisies à la main avant SIFAC n'ont pas de code — elles ne matchent
-// donc pas et l'import créera un doublon, à fusionner une fois à la main.
+// Garantit une fiche fournisseur par code tiers rencontré et rend la table
+// code → id. Rapprochement sur `sifac_code` seul, jamais sur le nom : les
+// fiches saisies à la main avant SIFAC n'ont pas de code et créeront un
+// doublon, à fusionner une fois à la main.
 async function resolveSuppliers(aggregates: FluxAggregate[]): Promise<SupplierIndex> {
     const byCode = new Map<string, number>()
     for (const s of await getSupliers()) {
