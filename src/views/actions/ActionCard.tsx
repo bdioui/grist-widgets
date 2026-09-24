@@ -1925,7 +1925,7 @@ export default function ActionCard(props: ActionCardData & {
                                     return (
                                         <ContextMenuItem key={p.id} onSelect={e => e.preventDefault()} onClick={() => handleAddToProject(p.id)}>
                                             {allInProject ? <CheckIcon size={14} /> : <div className="w-[14px]" />}
-                                            {p.title}
+                                            <span className="truncate">{p.title}</span>
                                         </ContextMenuItem>
                                     )
                                 })}
