@@ -2,6 +2,8 @@
   "name": "grist-widgets",
   "private": true,
   "version": "0.0.0",
+  "author": "Pierre Bdioui",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "vite",
