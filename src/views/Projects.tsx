@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from '@dnd-kit/core'
 import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Gantt, type Task as GanttTask, ViewMode as GanttViewMode } from 'gantt-task-react'
-import 'gantt-task-react/dist/index.css'
+import { type Task as GanttTask, ViewMode as GanttViewMode } from 'gantt-task-react'
+import ProjectsGantt from '@/views/ProjectsGantt'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -3864,7 +3864,7 @@ export default function Projects() {
     const [ganttYear, setGanttYear] = useState(new Date().getFullYear())
     const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>(GanttViewMode.Month)
     const [selectedActionCard, setSelectedActionCard] = useState<(ActionCardFull) | null>(null)
-    const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+    const [expanded, setExpanded] = useState<Set<string>>(new Set())
     const [viewDate, setViewDate] = useState(() => computeViewDate())
 
     useEffect(() => { setViewDate(computeViewDate()) }, [ganttViewMode])
@@ -4006,24 +4006,125 @@ export default function Projects() {
 
     // Filtres
 
-    const filteredCalls = projectCalls.filter(pc => {
+    const filteredCalls = useMemo(() => projectCalls.filter(pc => {
         if (selectedAxisIds.length > 0 && !selectedAxisIds.includes(pc.axis_id)) return false
         if (selectedCallIds.length > 0 && !selectedCallIds.includes(pc.id)) return false
         return true
-    })
+    }), [projectCalls, selectedAxisIds, selectedCallIds])
 
-    const filteredProjects = projects.filter(p => {
-        if (!filteredCalls.find(pc => pc.id === p.project_call_id)) return false
-        if (selectedStatuses.length > 0 && !selectedStatuses.includes(p.status_id)) return false
+    const filteredProjects = useMemo(() => {
+        const callIds = new Set(filteredCalls.map(pc => pc.id))
+        // membres par projet, construit une seule fois et seulement si le filtre membre est actif
+        const membersByProject = new Map<number, Set<number>>()
         if (selectedMemberIds.length > 0) {
-            const projectMemberIds = allProjectMembers
-                .filter(pm => pm.project_id === p.id)
-                .map(pm => pm.member_id)
-            if (!selectedMemberIds.some(id => projectMemberIds.includes(id))) return false
+            for (const pm of allProjectMembers) {
+                const set = membersByProject.get(pm.project_id) ?? new Set<number>()
+                set.add(pm.member_id)
+                membersByProject.set(pm.project_id, set)
+            }
         }
-        if (search.trim() && !p.title.toLowerCase().includes(search.toLowerCase())) return false
-        return true
-    })
+        const q = search.trim().toLowerCase()
+        return projects.filter(p => {
+            if (!callIds.has(p.project_call_id)) return false
+            if (selectedStatuses.length > 0 && !selectedStatuses.includes(p.status_id)) return false
+            if (selectedMemberIds.length > 0) {
+                const ids = membersByProject.get(p.id)
+                if (!ids || !selectedMemberIds.some(id => ids.has(id))) return false
+            }
+            if (q && !p.title.toLowerCase().includes(q)) return false
+            return true
+        })
+    }, [projects, filteredCalls, selectedStatuses, selectedMemberIds, allProjectMembers, search])
+
+    // Arbre du Gantt. Les enfants ne sont construits que pour les projets dépliés :
+    // la lib ignore de toute façon ceux d'un projet replié.
+    const ganttTree: GanttTask[] = useMemo(() => {
+        const yearStart = new Date(ganttYear, 0, 1)
+        const yearEnd   = new Date(ganttYear, 11, 31)
+
+        const actionsById = new Map(actionCards.map(a => [a.id, a]))
+        const actionsByProject = new Map<number, typeof actionCards>()
+        for (const l of actionLinks) {
+            const a = actionsById.get(l.action_card_id)
+            if (!a || !a.start_date || !a.end_date) continue
+            const list = actionsByProject.get(l.project_id) ?? []
+            list.push(a)
+            actionsByProject.set(l.project_id, list)
+        }
+        const milestonesByProject = new Map<number, typeof mileStones>()
+        for (const ms of mileStones) {
+            if (!ms.due_date) continue
+            const list = milestonesByProject.get(ms.project_id) ?? []
+            list.push(ms)
+            milestonesByProject.set(ms.project_id, list)
+        }
+
+        return filteredProjects
+            .filter(p => {
+                if (!p.start_date || !p.end_date) return false
+                const s = new Date(p.start_date)
+                const e = new Date(p.end_date)
+                return s < e && s <= yearEnd && e >= yearStart
+            })
+            .flatMap(p => {
+                const projectId = `p-${p.id}`
+                const isExpanded = expanded.has(projectId)
+
+                const projectTasks = {
+                    id:       projectId,
+                    name:     p.title,
+                    start:    new Date(p.start_date),
+                    end:      new Date(p.end_date),
+                    progress: 0,
+                    hideChildren: !isExpanded,
+                    type:     'project' as const,
+                    styles: {
+                        backgroundColor:         'oklch(85.5% 0.138 181.065)',
+                        backgroundSelectedColor:  'oklch(85.5% 0.138 181.065)',
+                        progressColor:            'oklch(85.5% 0.138 181.065)',
+                        progressSelectedColor:   'oklch(77.7% 0.152 181.912)',
+                    },
+                }
+                if (!isExpanded) return [projectTasks]
+
+                const milestonesTree = (milestonesByProject.get(p.id) ?? []).map(ms => ({
+                    project:  projectId,
+                    id:       `ms-${p.id}-${ms.id}`,
+                    name:     ms.title,
+                    start:    new Date(ms.due_date),
+                    end:      new Date(ms.due_date),
+                    progress: 0,
+                    type:     'milestone' as const,
+                    styles: {
+                        backgroundColor:         'oklch(82.3% 0.12 346.018)',
+                        backgroundSelectedColor: 'oklch(82.3% 0.12 346.018)',
+                        progressColor:           'oklch(82.3% 0.12 346.018)',
+                        progressSelectedColor:   'oklch(82.3% 0.12 346.018)',
+                    },
+                }))
+
+                const tasksTree = (actionsByProject.get(p.id) ?? []).map(t => ({
+                    project:  projectId,
+                    id:       `t-${p.id}-${t.id}`,
+                    name:     t.title,
+                    start:    new Date(t.start_date),
+                    end:      new Date(t.end_date),
+                    progress: 0,
+                    type:     'task' as const,
+                    styles: {
+                        backgroundColor:         'oklch(87% 0.065 274.039)',
+                        backgroundSelectedColor: 'oklch(87% 0.065 274.039)',
+                        progressColor:           'oklch(87% 0.065 274.039)',
+                        progressSelectedColor:   'oklch(78.5% 0.115 274.713)',
+                    },
+                }))
+
+                const children = [...tasksTree, ...milestonesTree]
+                    .sort((a, b) => a.start.getTime() - b.start.getTime())
+
+                return [projectTasks, ...children]
+            })
+    }, [filteredProjects, actionCards, actionLinks, mileStones, expanded, ganttYear])
 
 
     function handleProjectCreated(p: Project) {
@@ -4100,8 +4201,8 @@ export default function Projects() {
         setAllAgreements(prev => prev.filter(a => a.id !== id))
     }
 
-    async function handleGanttUpdate(task: GanttTask) {
-        try { 
+    const handleGanttUpdate = useCallback(async (task: GanttTask) => {
+        try {
             if(task.type === "project") {
                 const pId = Number(task.id.split("-")[1])
                 const newStartDate = task.start.toLocaleDateString('sv-SE')
@@ -4127,7 +4228,26 @@ export default function Projects() {
             console.error(error)
             return false
         }
-    }
+    }, [])
+
+    const handleToggleExpand = useCallback((task: GanttTask) => {
+        setExpanded(prev => {
+            const next = new Set(prev)
+            if (next.has(task.id)) next.delete(task.id)
+            else next.add(task.id)
+            return next
+        })
+    }, [])
+
+    const handleOpenGanttProject = useCallback((projectId: number) => {
+        const p = projects.find(p => p.id === projectId)
+        if (p) { setSelectedProject(p); setDetailOpen(true) }
+    }, [projects])
+
+    const handleOpenGanttAction = useCallback((actionId: number) => {
+        const a = actionCards.find(a => a.id === actionId)
+        if (a) setSelectedActionCard(a)
+    }, [actionCards])
 
     // Stats globales
     const activeAxisIds = [...new Set(filteredCalls.map(pc => pc.axis_id))]
@@ -4781,81 +4901,6 @@ export default function Projects() {
             {viewMode === 'calendar' && (() => {
                 const withoutDates = filteredProjects.filter(p => !p.start_date || !p.end_date)
 
-                // Projets qui chevauchent l'année sélectionnée
-                const yearStart = new Date(ganttYear, 0, 1)
-                const yearEnd   = new Date(ganttYear, 11, 31)
-                const ganttTree: GanttTask[] = filteredProjects
-                    .filter(p => {
-                        if (!p.start_date || !p.end_date) return false
-                        const s = new Date(p.start_date)
-                        const e = new Date(p.end_date)
-                        return s < e && s <= yearEnd && e >= yearStart
-                    })
-                    .flatMap(p => {
-                        // Project head
-
-                        const projectTasks = {
-                            id:       String(`p-${p.id}`),
-                            name:     p.title,
-                            start:    new Date(p.start_date),
-                            end:      new Date(p.end_date),
-                            progress: 0,
-                            hideChildren: collapsed.has(`p-${p.id}`),
-                            type:     'project' as const,
-                            styles: {
-                                backgroundColor:         'oklch(85.5% 0.138 181.065)',
-                                backgroundSelectedColor:  'oklch(85.5% 0.138 181.065)',
-                                progressColor:            'oklch(85.5% 0.138 181.065)',
-                                progressSelectedColor:   'oklch(77.7% 0.152 181.912)',
-                            },
-                        }
-
-                        // MileStones
-                        const milestones = mileStones.filter(ms => ms.due_date && ms.project_id === p.id).sort((a, b) => a.due_date.localeCompare(b.due_date))
-                        const milestonesTree = milestones.map(ms => {
-                            return {
-                                project: String(`p-${p.id}`),
-                                id:       String(`ms-${p.id}-${ms.id}`),
-                                name:     ms.title,
-                                start:    new Date(ms.due_date),
-                                end:      new Date(ms.due_date),
-                                progress: 0,
-                                type:     'milestone' as const,
-                                styles: {
-                                    backgroundColor:         'oklch(82.3% 0.12 346.018)',
-                                    backgroundSelectedColor:'oklch(82.3% 0.12 346.018)',
-                                    progressColor:          'oklch(82.3% 0.12 346.018)',
-                                    progressSelectedColor:   'oklch(82.3% 0.12 346.018)',
-                                },
-                            }
-                        })
-
-                        // Tasks
-                        const tasks = actionCards.filter(a => a.start_date && a.end_date && actionLinks.some(l => l.project_id === p.id && l.action_card_id === a.id)).sort((a, b) => a.end_date.localeCompare(b.end_date))
-                        const tasksTree = tasks.map(t => {
-                            return {
-                                project: String(`p-${p.id}`),
-                                id:       String(`t-${p.id}-${t.id}`),
-                                name:     t.title,
-                                start:    new Date(t.start_date),
-                                end:      new Date(t.end_date),
-                                progress: 0,
-                                type:     'task' as const,
-                                styles: {
-                                    backgroundColor:         "oklch(87% 0.065 274.039)",
-                                    backgroundSelectedColor: "oklch(87% 0.065 274.039)",
-                                    progressColor:           "oklch(87% 0.065 274.039)",
-                                    progressSelectedColor:   "oklch(78.5% 0.115 274.713)",
-                                },
-                            }
-                        })
-
-                        const children = [...tasksTree, ...milestonesTree]
-                                        .sort((a, b) => a.start.getTime() - b.start.getTime())
-
-
-                        return [projectTasks, ...children]
-                    })
 
                     
                 return (
@@ -4908,79 +4953,15 @@ export default function Projects() {
                         ) : ganttTree.length === 0 ? (
                             <p className="text-sm text-muted-foreground italic">Aucun projet sur {ganttYear}.</p>
                         ) : (
-                            <div className="gantt-dark-labels">
-                            <style>{`
-                                .gantt-dark-labels text { fill: #1e293b !important; }
-                                .gantt-dark-labels ._2RbVy { opacity: 1; }
-                                .gantt-dark-labels ._1KJ6x polygon { display: none; }
-                                .gantt-dark-labels ._2dZTy { fill: #ffffff; }
-                                .gantt-dark-labels ._2dZTy:nth-child(even) { fill: oklch(98.7% 0.002 197.1); }
-                                .gantt-dark-labels ._3rUKi { stroke: oklch(96.3% 0.002 197.1); }
-                                .gantt-dark-labels ._RuwuK { stroke: oklch(96.3% 0.002 197.1); }
-                                .gantt-dark-labels ._35nLX { fill: #f8fafc; stroke: #e2e8f0; stroke-width: 1; }
-                                .gantt-dark-labels ._2q1Kt { fill: #0f172a; font-weight: 600; }
-                                .gantt-dark-labels ._9w8d5 { fill: #64748b; font-size: 11px; }
-                                .gantt-dark-labels ._1rLuZ { stroke: #e2e8f0; }
-                            `}</style>
-                            <Gantt
+                            <ProjectsGantt
                                 tasks={ganttTree}
                                 viewMode={ganttViewMode}
                                 viewDate={viewDate}
-                                locale="fr"
-                                listCellWidth="40px"
-                                columnWidth={ganttViewMode === GanttViewMode.Month ? 80 : ganttViewMode === GanttViewMode.Week ? 60 : 60}
-                                rowHeight={40}
-                                fontSize="12px"
-                                headerHeight={50}
-                                todayColor="oklch(98.4% 0.014 180.72)"
-                                barCornerRadius={5}
                                 onDateChange={handleGanttUpdate}
-                                onExpanderClick={task => setCollapsed(prev => {
-                                    const next = new Set(prev)
-                                    next.has(task.id) ? next.delete(task.id) : next.add(task.id)
-                                    return next
-                                })}
-                                TaskListHeader={({ headerHeight }) => (
-                                    <div style={{ height: headerHeight, backgroundColor:"#f8fafc" ,borderBottom: '#e2e8f0 1px solid', borderTop: '#e2e8f0 1px solid', borderLeft: '#e2e8f0 1px solid', boxSizing: 'border-box' }} />
-                                )}
-                                TaskListTable={({ tasks, rowHeight, onExpanderClick }) => (
-                                    <div style={{display: 'table', borderLeft: '#e2e8f0 1px solid', backgroundColor: "#f8fafc", borderBottom: '#e2e8f0 1px solid' }}>
-                                        {tasks.map(t => {
-                                            return (
-                                                <div key={t.id} className="gantt-task-row" style={{ display: 'table-row', height: rowHeight, borderBottom: '1px solid #f1f5f9' }}>
-                                                    <div style={{ display: 'table-cell', width: 40, backgroundColor: "#f8fafc", borderRight:'#e2e8f0 1px solid', verticalAlign: 'middle', textAlign: 'center' }}>
-                                                        {t.hideChildren !== undefined && (
-                                                            <span
-                                                                    onClick={() => onExpanderClick(t)}
-                                                                    style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', height: rowHeight }}
-                                                                >
-                                                                {t.hideChildren ? <ChevronRight size={12}/> : <ChevronDown size={12}/>}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                                TooltipContent={() => null}
-                                onDoubleClick={task => {
-                                    if(task.type === 'project') {
-                                        const p = filteredProjects.find(p => String(p.id) === task.id.split('-')[1])
-                                        if (p) { setSelectedProject(p); setDetailOpen(true) }
-                                    } else {
-                                        if(task.type === 'milestone') {
-                                            const p = filteredProjects.find(p => String(p.id) === task.id.split('-')[1])
-                                            if (p) { setSelectedProject(p); setDetailOpen(true) }
-                                        } else {
-                                            const a = actionCards.find(a => String(a.id) === task.id.split('-')[2])
-                                            if (a) { setSelectedActionCard(a)}
-                                            }
-                                    }
-                                }}
+                                onToggleExpand={handleToggleExpand}
+                                onOpenProject={handleOpenGanttProject}
+                                onOpenAction={handleOpenGanttAction}
                             />
-                            </div>
                         )}
                     </div>
                 )
