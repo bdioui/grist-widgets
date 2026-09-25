@@ -55,8 +55,11 @@ import {
     getToDoLists,
     getToDoItems,
     getAllMemberActionCards,
+    getAllProjectActionCards,
+    getAllProjectMilestones,
+    updateActionCard
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard, type AgreementDirection } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard, type AgreementDirection, type ProjectActionCard } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
@@ -96,6 +99,7 @@ const STATUS_ORDER = ["En cours", "Suspendu", "En attente", "Terminé",]
 
 
 import { PARTNER_TYPES, WORKING_ROLES, PALETTE, FALLBACK_PARTNER, PARTNER_ROLES, PARTNER_ROLE_DIRECTION } from '@/lib/constants'
+
 
 
 const MEMBER_STATUSES = [
@@ -3815,6 +3819,9 @@ function KpiEntryForm({ kpi, projectId, currentUserId, initial, onSaved, onCance
 
 export default function Projects() {
     const [projects,      setProjects]      = useState<ProjectFull[]>([])
+    const [actionCards,   setActionCards]   = useState<ActionCardFull[]>([])
+    const [actionLinks,   setActionLinks]   = useState<ProjectActionCard[]>([])
+    const [mileStones,    setMileStones]    = useState<ProjectMilestone[]>([])
     const [projectCalls,  setProjectCalls]  = useState<ProjectCallFull[]>([])
     const [axes,          setAxes]          = useState<Axis[]>([])
     const [statuses,      setStatuses]      = useState<Status[]>([])
@@ -3851,14 +3858,28 @@ export default function Projects() {
     const [selectedProjects,         setSelectedProjects]         = useState<ProjectFull[]>([])
     const [confirmingDeleteProjects, setConfirmingDeleteProjects] = useState(false)
 
+    // Gantt
     type ViewMode = 'cards' | 'table' | 'calendar'
     const [viewMode, setViewMode] = useState<ViewMode>('cards')
     const [ganttYear, setGanttYear] = useState(new Date().getFullYear())
     const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>(GanttViewMode.Month)
+    const [selectedActionCard, setSelectedActionCard] = useState<(ActionCardFull) | null>(null)
+    const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+    const [viewDate, setViewDate] = useState(() => computeViewDate())
+
+    useEffect(() => { setViewDate(computeViewDate()) }, [ganttViewMode])
 
     type SortKey = 'title' | 'call' | 'axis' | 'status' | 'budget' | 'start_date' | 'end_date'
     const [sortKey,  setSortKey]  = useState<SortKey>('title')
     const [sortDir,  setSortDir]  = useState<'asc' | 'desc'>('asc')
+
+    function computeViewDate() {
+        const d = new Date()
+        if (ganttViewMode === GanttViewMode.Month) d.setMonth(d.getMonth() - 4)
+        else if (ganttViewMode === GanttViewMode.Week) d.setDate(d.getDate() - 35)
+        else d.setDate(d.getDate() - 10)
+        return d
+    }
 
     function handleSort(key: SortKey) {
         if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -3881,8 +3902,8 @@ export default function Projects() {
     }
 
     useEffect(() => {
-        Promise.all([getProjectCalls(), getProjects(), getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards(), getProjectPartners(), getExpanses()])
-            .then(([pcs, ps, axs, sts, pts, agrs, m, te, pm, formations, tdl, tdi, amac, pp, exp]) => {
+        Promise.all([getProjectCalls(), getProjects(), getActionCardsFull(), getAllProjectActionCards(),  getAllProjectMilestones(),getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards(), getProjectPartners(), getExpanses()])
+            .then(([pcs, ps, ac, pac, ms, axs, sts, pts, agrs, m, te, pm, formations, tdl, tdi, amac, pp, exp]) => {
                 const axisMap = new Map((axs as Axis[]).map(a => [a.id, a]))
 
                 const fullCalls: ProjectCallFull[] = (pcs as ProjectCall[]).map(pc => ({
@@ -3898,6 +3919,9 @@ export default function Projects() {
 
                 setAxes(axs as Axis[])
                 setStatuses(sts as Status[])
+                setActionCards(ac)
+                setActionLinks(pac)
+                setMileStones(ms)
                 setPartners(pts as Partner[])
                 setProjectCalls(fullCalls)
                 setProjects(fullProjects)
@@ -4008,8 +4032,6 @@ export default function Projects() {
         setProjectSheetOpen(false)
     }
 
-
-
     function handleCallCreated(pc: ProjectCall) {
         const axis = axes.find(a => a.id === pc.axis_id) ?? { id: 0, name: 'Inconnu', description: '' }
         const full: ProjectCallFull = { ...pc, axis }
@@ -4076,6 +4098,35 @@ export default function Projects() {
 
     function handleAgreementDeleted(id: number) {
         setAllAgreements(prev => prev.filter(a => a.id !== id))
+    }
+
+    async function handleGanttUpdate(task: GanttTask) {
+        try { 
+            if(task.type === "project") {
+                const pId = Number(task.id.split("-")[1])
+                const newStartDate = task.start.toLocaleDateString('sv-SE')
+                const newEndDate = task.end.toLocaleDateString('sv-SE')
+                await updateProject(pId, {start_date: newStartDate, end_date: newEndDate})
+                setProjects(prev => prev.map(a => a.id === pId ? {...a, start_date: newStartDate, end_date: newEndDate} : a))
+            } else {
+                const tId = Number(task.id.split("-")[2])
+                if(task.type === "milestone") {
+                    const newDate = task.end.toLocaleDateString('sv-SE')
+                    await updateProjectMilestone(tId, {due_date:newDate})
+                    setMileStones(prev => prev.map(m => m.id === tId ? { ...m, due_date: newDate } : m))
+                } else {
+                const newStartDate = task.start.toLocaleDateString('sv-SE')
+                const newEndDate = task.end.toLocaleDateString('sv-SE')
+                await updateActionCard(tId, {start_date: newStartDate, end_date: newEndDate})
+                setActionCards(prev => prev.map(a => a.id === tId ? {...a, start_date: newStartDate, end_date: newEndDate} : a))
+                }
+            }
+
+            return true
+        } catch (error) {
+            console.error(error)
+            return false
+        }
     }
 
     // Stats globales
@@ -4733,32 +4784,80 @@ export default function Projects() {
                 // Projets qui chevauchent l'année sélectionnée
                 const yearStart = new Date(ganttYear, 0, 1)
                 const yearEnd   = new Date(ganttYear, 11, 31)
-                const ganttTasks: GanttTask[] = filteredProjects
+                const ganttTree: GanttTask[] = filteredProjects
                     .filter(p => {
                         if (!p.start_date || !p.end_date) return false
                         const s = new Date(p.start_date)
                         const e = new Date(p.end_date)
                         return s < e && s <= yearEnd && e >= yearStart
                     })
-                    .map(p => {
-                        const status = statuses.find(s => s.id === p.status_id)
-                        const bg = PROJECT_STATUS_COLORS[status?.label ?? ''] ?? '#dbeafe'
-                        return {
-                            id:       String(p.id),
+                    .flatMap(p => {
+                        // Project head
+
+                        const projectTasks = {
+                            id:       String(`p-${p.id}`),
                             name:     p.title,
                             start:    new Date(p.start_date),
                             end:      new Date(p.end_date),
                             progress: 0,
-                            type:     'task' as const,
+                            hideChildren: collapsed.has(`p-${p.id}`),
+                            type:     'project' as const,
                             styles: {
-                                backgroundColor:         bg,
-                                backgroundSelectedColor: bg,
-                                progressColor:           bg,
-                                progressSelectedColor:   bg,
+                                backgroundColor:         'oklch(85.5% 0.138 181.065)',
+                                backgroundSelectedColor:  'oklch(85.5% 0.138 181.065)',
+                                progressColor:            'oklch(85.5% 0.138 181.065)',
+                                progressSelectedColor:   'oklch(77.7% 0.152 181.912)',
                             },
                         }
+
+                        // MileStones
+                        const milestones = mileStones.filter(ms => ms.due_date && ms.project_id === p.id).sort((a, b) => a.due_date.localeCompare(b.due_date))
+                        const milestonesTree = milestones.map(ms => {
+                            return {
+                                project: String(`p-${p.id}`),
+                                id:       String(`ms-${p.id}-${ms.id}`),
+                                name:     ms.title,
+                                start:    new Date(ms.due_date),
+                                end:      new Date(ms.due_date),
+                                progress: 0,
+                                type:     'milestone' as const,
+                                styles: {
+                                    backgroundColor:         'oklch(82.3% 0.12 346.018)',
+                                    backgroundSelectedColor:'oklch(82.3% 0.12 346.018)',
+                                    progressColor:          'oklch(82.3% 0.12 346.018)',
+                                    progressSelectedColor:   'oklch(82.3% 0.12 346.018)',
+                                },
+                            }
+                        })
+
+                        // Tasks
+                        const tasks = actionCards.filter(a => a.start_date && a.end_date && actionLinks.some(l => l.project_id === p.id && l.action_card_id === a.id)).sort((a, b) => a.end_date.localeCompare(b.end_date))
+                        const tasksTree = tasks.map(t => {
+                            return {
+                                project: String(`p-${p.id}`),
+                                id:       String(`t-${p.id}-${t.id}`),
+                                name:     t.title,
+                                start:    new Date(t.start_date),
+                                end:      new Date(t.end_date),
+                                progress: 0,
+                                type:     'task' as const,
+                                styles: {
+                                    backgroundColor:         "oklch(87% 0.065 274.039)",
+                                    backgroundSelectedColor: "oklch(87% 0.065 274.039)",
+                                    progressColor:           "oklch(87% 0.065 274.039)",
+                                    progressSelectedColor:   "oklch(78.5% 0.115 274.713)",
+                                },
+                            }
+                        })
+
+                        const children = [...tasksTree, ...milestonesTree]
+                                        .sort((a, b) => a.start.getTime() - b.start.getTime())
+
+
+                        return [projectTasks, ...children]
                     })
 
+                    
                 return (
                     <div className="flex-1 overflow-auto p-6 flex flex-col gap-4">
 
@@ -4769,6 +4868,13 @@ export default function Projects() {
                                 <Button variant="outline" size="sm" className="rounded-md h-7 w-7 p-0" onClick={() => setGanttYear(y => y - 1)}>‹</Button>
                                 <span className="text-sm font-medium tabular-nums w-12 text-center">{ganttYear}</span>
                                 <Button variant="outline" size="sm" className="rounded-md h-7 w-7 p-0" onClick={() => setGanttYear(y => y + 1)}>›</Button>
+                                <Button variant="outline" size="sm" className="rounded-md px-2" onClick={() => setViewDate(computeViewDate())}>Aujourd'hui</Button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <div className='flex items-center gap-1 text-[13px]'><div className='w-2 h-2 rounded-full bg-teal-200'></div><span>Projets</span></div>
+                                 <div className='flex items-center gap-1 text-[13px]'><div className='w-2 h-2 rounded-full bg-indigo-200'></div><span>Actions</span></div>
+                                  <div className='flex items-center gap-1 text-[13px]'><div className='w-2 h-2 rounded-full bg-pink-200'></div><span>Jalons</span></div>
                             </div>
 
                             {/* Granularité */}
@@ -4799,72 +4905,79 @@ export default function Projects() {
                             <div className="flex flex-col gap-2">
                                 {[1,2,3,4,5].map(i => <div key={i} className="h-10 w-full bg-muted animate-pulse rounded" />)}
                             </div>
-                        ) : ganttTasks.length === 0 ? (
+                        ) : ganttTree.length === 0 ? (
                             <p className="text-sm text-muted-foreground italic">Aucun projet sur {ganttYear}.</p>
                         ) : (
                             <div className="gantt-dark-labels">
                             <style>{`
                                 .gantt-dark-labels text { fill: #1e293b !important; }
-                                .gantt-task-row { cursor: pointer; transition: background 150ms; }
-                                .gantt-task-row:hover { background: #f8fafc; }
-                                .gantt-task-row:hover .gantt-task-title { color: #0f172a !important; }
+                                .gantt-dark-labels ._2RbVy { opacity: 1; }
+                                .gantt-dark-labels ._1KJ6x polygon { display: none; }
+                                .gantt-dark-labels ._2dZTy { fill: #ffffff; }
+                                .gantt-dark-labels ._2dZTy:nth-child(even) { fill: oklch(98.7% 0.002 197.1); }
+                                .gantt-dark-labels ._3rUKi { stroke: oklch(96.3% 0.002 197.1); }
+                                .gantt-dark-labels ._RuwuK { stroke: oklch(96.3% 0.002 197.1); }
+                                .gantt-dark-labels ._35nLX { fill: #f8fafc; stroke: #e2e8f0; stroke-width: 1; }
+                                .gantt-dark-labels ._2q1Kt { fill: #0f172a; font-weight: 600; }
+                                .gantt-dark-labels ._9w8d5 { fill: #64748b; font-size: 11px; }
+                                .gantt-dark-labels ._1rLuZ { stroke: #e2e8f0; }
                             `}</style>
                             <Gantt
-                                tasks={ganttTasks}
+                                tasks={ganttTree}
                                 viewMode={ganttViewMode}
+                                viewDate={viewDate}
                                 locale="fr"
-                                listCellWidth="200px"
+                                listCellWidth="40px"
                                 columnWidth={ganttViewMode === GanttViewMode.Month ? 80 : ganttViewMode === GanttViewMode.Week ? 60 : 60}
                                 rowHeight={40}
                                 fontSize="12px"
                                 headerHeight={50}
-                                barCornerRadius={15}
-                                TaskListHeader={({ headerHeight, fontFamily, fontSize }) => (
-                                    <div style={{ fontFamily, fontSize, display: 'table', borderBottom: '#e6e4e4 1px solid', borderTop: '#e6e4e4 1px solid', borderLeft: '#e6e4e4 1px solid' }}>
-                                        <div style={{ display: 'table-row', height: headerHeight - 2 }}>
-                                            <div style={{ display: 'table-cell', minWidth: '260px', verticalAlign: 'middle', paddingLeft: 12, fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Projet</div>
-                                        </div>
-                                    </div>
+                                todayColor="oklch(98.4% 0.014 180.72)"
+                                barCornerRadius={5}
+                                onDateChange={handleGanttUpdate}
+                                onExpanderClick={task => setCollapsed(prev => {
+                                    const next = new Set(prev)
+                                    next.has(task.id) ? next.delete(task.id) : next.add(task.id)
+                                    return next
+                                })}
+                                TaskListHeader={({ headerHeight }) => (
+                                    <div style={{ height: headerHeight, backgroundColor:"#f8fafc" ,borderBottom: '#e2e8f0 1px solid', borderTop: '#e2e8f0 1px solid', borderLeft: '#e2e8f0 1px solid', boxSizing: 'border-box' }} />
                                 )}
-                                TaskListTable={({ tasks, rowHeight, rowWidth, fontFamily, fontSize, locale }) => (
-                                    <div style={{ fontFamily, fontSize, display: 'table', borderLeft: '#e6e4e4 1px solid', borderBottom: '#e6e4e4 1px solid' }}>
+                                TaskListTable={({ tasks, rowHeight, onExpanderClick }) => (
+                                    <div style={{display: 'table', borderLeft: '#e2e8f0 1px solid', backgroundColor: "#f8fafc", borderBottom: '#e2e8f0 1px solid' }}>
                                         {tasks.map(t => {
-                                            const fmt = (d: Date) => d.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' })
                                             return (
                                                 <div key={t.id} className="gantt-task-row" style={{ display: 'table-row', height: rowHeight, borderBottom: '1px solid #f1f5f9' }}>
-                                                    <div style={{ display: 'table-cell', minWidth: rowWidth, maxWidth: rowWidth, verticalAlign: 'middle', paddingLeft: 12, paddingRight: 8, overflow: 'hidden' }}>
-                                                        <div className="gantt-task-title" style={{ fontWeight: 500, color: '#1e293b', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
-                                                        <div style={{ color: '#94a3b8', fontSize: '10px', marginTop: 1 }}>{fmt(t.start)} → {fmt(t.end)}</div>
+                                                    <div style={{ display: 'table-cell', width: 40, backgroundColor: "#f8fafc", borderRight:'#e2e8f0 1px solid', verticalAlign: 'middle', textAlign: 'center' }}>
+                                                        {t.hideChildren !== undefined && (
+                                                            <span
+                                                                    onClick={() => onExpanderClick(t)}
+                                                                    style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', height: rowHeight }}
+                                                                >
+                                                                {t.hideChildren ? <ChevronRight size={12}/> : <ChevronDown size={12}/>}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
+                                                
                                             )
                                         })}
                                     </div>
                                 )}
-                                TooltipContent={({ task }) => {
-                                    const p = filteredProjects.find(p => String(p.id) === task.id)
-                                    if (!p) return null
-                                    const status = statuses.find(s => s.id === p.status_id)
-                                    const participantCount = allProjectMembers.filter(m => m.project_id === p.id).length
-                                    const partnerCount = new Set(allAgreements.filter(a => a.project_id === p.id).map(a => a.partner_id)).size
-                                    const fmt = (d: Date) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
-                                    return (
-                                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: 220, maxWidth: 300, fontFamily: 'inherit' }}>
-                                            <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b', marginBottom: 6, lineHeight: 1.3 }}>{p.title}</div>
-                                            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{fmt(task.start)} → {fmt(task.end)}</div>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                                {status && (
-                                                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: PROJECT_STATUS_COLORS[status.label] ?? '#f1f5f9', color: '#475569', fontWeight: 500 }}>{status.label}</span>
-                                                )}
-                                                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#f1f5f9', color: '#475569' }}> {participantCount} participant{participantCount !== 1 ? 's' : ''}</span>
-                                                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#f1f5f9', color: '#475569' }}> {partnerCount} partenaire{partnerCount !== 1 ? 's' : ''}</span>
-                                            </div>
-                                        </div>
-                                    )
-                                }}
+                                TooltipContent={() => null}
                                 onDoubleClick={task => {
-                                    const p = filteredProjects.find(p => String(p.id) === task.id)
-                                    if (p) { setSelectedProject(p); setDetailOpen(true) }
+                                    if(task.type === 'project') {
+                                        const p = filteredProjects.find(p => String(p.id) === task.id.split('-')[1])
+                                        if (p) { setSelectedProject(p); setDetailOpen(true) }
+                                    } else {
+                                        if(task.type === 'milestone') {
+                                            const p = filteredProjects.find(p => String(p.id) === task.id.split('-')[1])
+                                            if (p) { setSelectedProject(p); setDetailOpen(true) }
+                                        } else {
+                                            const a = actionCards.find(a => String(a.id) === task.id.split('-')[2])
+                                            if (a) { setSelectedActionCard(a)}
+                                            }
+                                    }
                                 }}
                             />
                             </div>
@@ -4874,6 +4987,26 @@ export default function Projects() {
             })()}
 
             {/* Sheets */}
+            {selectedActionCard && (
+            <ActionCardDetailSheet
+                card={toActionCardData(selectedActionCard)}
+                open={!!selectedActionCard}
+                onClose={() => setSelectedActionCard(null)}
+                onUpdated={patch => {
+                    setActionCards(prev => prev.map(c =>
+                        c.id === selectedActionCard.id ? { ...c, ...patch } as (ActionCardFull & { linkId: number }) : c
+                    ))
+                    setSelectedActionCard(prev => prev ? { ...prev, ...patch } as (ActionCardFull & { linkId: number }) : null)
+                }}
+                onDeleted={id => {
+                    setActionCards(prev => prev.filter(c => c.id !== id))
+                    setSelectedActionCard(null)
+                }}
+                onTodosChanged= {onTodosChanged}
+                onMemberLinkChanged={onMemberLinkChanged}
+                />
+            )}
+
             <ProjectCallSheet
                 open={callSheetOpen}
                 onClose={() => { setCallSheetOpen(false); setEditingCall(undefined) }}
