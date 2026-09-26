@@ -3995,14 +3995,22 @@ export default function Projects() {
     },[members, memberActionCards])
 
     // Conventions enrichies par projet (pour les ProjectCards)
-    const partnerMap = new Map(partners.map(p => [p.id, p]))
-    const agreementsByProject = allAgreements.reduce<Map<number, AgreementFull[]>>((acc, a) => {
-        const partner = partnerMap.get(a.partner_id)
-        if (!partner) return acc
-        const list = acc.get(a.project_id) ?? []
-        acc.set(a.project_id, [...list, { ...a, partner }])
+    const partnerMap = useMemo(
+        () => new Map(partners.map(p => [p.id, p])),
+        [partners]
+    )
+
+    const agreementsByProject = useMemo(() => {
+        const acc = new Map<number, AgreementFull[]>()
+        for (const a of allAgreements) {
+            const partner = partnerMap.get(a.partner_id)
+            if (!partner) continue
+            const list = acc.get(a.project_id) ?? []
+            list.push({ ...a, partner })
+            acc.set(a.project_id, list)
+        }
         return acc
-    }, new Map())
+    }, [allAgreements, partnerMap])
 
     // Filtres
 

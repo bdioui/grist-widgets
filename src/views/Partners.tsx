@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo} from 'react'
 import {
     getPartnerCardsFull, addPartner, updatePartner, deletePartner,
     getLabCardsFull, addLab, updateLab, deleteLab,
@@ -1415,13 +1415,16 @@ export default function Partners() {
     }
 
     // Partners handlers
-    const filteredPartners = partners.filter(p => {
+    const filteredPartners = useMemo( () => {
+        return partners.filter(p => {
         const matchesQuery      = !query.trim() || p.name.toLowerCase().includes(query.toLowerCase()) || p.description.toLowerCase().includes(query.toLowerCase())
         const matchesType       = typeFilter.length === 0 || typeFilter.includes(p.type)
         const matchesConsortium = !consortiumOnly || p.consortium
         return matchesQuery && matchesType && matchesConsortium
-    })
-    const availablePartnerTypes = [...new Set(partners.map(p => p.type))].sort()
+        })
+    }, [partners, query, typeFilter, consortiumOnly])
+
+    const availablePartnerTypes = useMemo(() => [...new Set(partners.map(p => p.type))].sort(), [partners])
 
     function handlePartnerUpdated(updated: PartnerCardFull) {
         setPartners(prev => prev.map(p => p.id === updated.id ? updated : p))
@@ -1439,12 +1442,15 @@ export default function Partners() {
     }
 
     // Labs handlers
-    const filteredLabs = labs.filter(l => {
+    const filteredLabs = useMemo(() => {
+        return labs.filter(l => {
         const matchesQuery = !query.trim() || l.name.toLowerCase().includes(query.toLowerCase()) || l.description.toLowerCase().includes(query.toLowerCase())
         const matchesType  = typeFilter.length === 0 || typeFilter.includes(l.type)
         return matchesQuery && matchesType
-    })
-    const availableLabTypes = [...new Set(labs.map(l => l.type))].sort()
+        })
+    }, [query, typeFilter, labs])
+
+    const availableLabTypes = useMemo(()=>[...new Set(labs.map(l => l.type))].sort(), [labs])
 
     function handleLabUpdated(updated: LabCardFull) {
         setLabs(prev => prev.map(l => l.id === updated.id ? updated : l))

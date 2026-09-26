@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { getMembersFull, getPartners, getLabs, addMember, updateMember, deleteMember, addPartner, getGroups, getGroupMembers, removeMemberFromGroup, addMemberToGroup, addGroup, deleteGroup, getAllMemberActionCards, getAllProjectMembers, getActionCardsFull, getProjects, addMemberToCard, removeMemberFromCard, addProjectMember, removeProjectMember, createActionCardFull, addProject } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -1358,19 +1358,33 @@ export default function Members() {
         .finally(() => setLoading(false))
 }, [])
 
-    const availableStatuses = [...new Set(members.map(m => m.status))].sort()
 
-    const filtered = members.filter(m => {
+    const availableStatuses = useMemo(() => [... new Set(members.map(m => m.status))].sort(), [members])
+
+    const membersByGroup = useMemo(() => {
+        const map = new Map<number, Set<number>>()
+        for(const l of groupLinks){
+            const set = map.get(l.group_id) ?? new Set<number>()
+            set.add(l.member_id)
+            map.set(l.group_id, set)
+        }
+        return map
+    }, [groupLinks])
+
+    const filtered = useMemo(() => {
+        return members.filter(m => {
         const matchesQuery = !query.trim() ||
             `${m.first_name} ${m.last_name}`.toLowerCase().includes(query.toLowerCase()) ||
             m.position.toLowerCase().includes(query.toLowerCase()) ||
             m.email.toLowerCase().includes(query.toLowerCase())
         const matchesStatus  = statusFilter.length === 0 || statusFilter.includes(m.status)
         const matchesPartner = partnerFilter.length === 0 || partnerFilter.includes(m.partner_id)
-        const matchesGroup = groupFilter.length === 0 || groupLinks.some(l => groupFilter.includes(l.group_id) && l.member_id === m.id)
+        const matchesGroup = groupFilter.length === 0 || groupFilter.some(gid => membersByGroup.get(gid)?.has(m.id))
         const isStaff = isStaffFilter === true ? m.is_staff === true : true
         return matchesQuery && matchesStatus && matchesPartner && matchesGroup && isStaff
-    })
+        })
+    }, [members, query, statusFilter, partnerFilter, groupFilter, isStaffFilter, membersByGroup])    
+
 
     function handleUpdated(updated: MemberFull) {
         setMembers(prev => prev.map(m => m.id === updated.id ? updated : m))
