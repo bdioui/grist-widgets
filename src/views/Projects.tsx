@@ -57,7 +57,8 @@ import {
     getAllMemberActionCards,
     getAllProjectActionCards,
     getAllProjectMilestones,
-    updateActionCard
+    updateActionCard, 
+    createFormation
 } from '@/lib/api'
 import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard, type AgreementDirection, type ProjectActionCard } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -1141,13 +1142,15 @@ type ActionCardQuickCreateFormProps = {
     partners: Partner[]
     onSaved: (card: ActionCardFull & { linkId: number }) => void
     onCancel: () => void
+    onActionLinkAdded?: (link: ProjectActionCard) => void
 }
 
-function ActionCardQuickCreateForm({ projectId, statuses, members, partners, onSaved, onCancel }: ActionCardQuickCreateFormProps) {
+function ActionCardQuickCreateForm({ projectId, statuses, members, partners, onSaved, onCancel, onActionLinkAdded}: ActionCardQuickCreateFormProps) {
     const [categories,  setCategories]  = useState<Category[]>([])
     const [title,       setTitle]       = useState('')
     const [categoryId,  setCategoryId]  = useState<number>(0)
     const [statusId,    setStatusId]    = useState<number>(0)
+    const [startDate,   setStartDate]   = useState('')
     const [endDate,     setEndDate]     = useState('')
     const [ownerId,     setOwnerId]     = useState<number>(members[0]?.id ?? 0)
     const [submitting,  setSubmitting]  = useState(false)
@@ -1164,17 +1167,18 @@ function ActionCardQuickCreateForm({ projectId, statuses, members, partners, onS
     }, [])
 
     async function handleSubmit() {
-        if (!title.trim() || !categoryId || !ownerId) return
+        if (!title.trim() || !categoryId || !ownerId || !startDate) return
         setSubmitting(true)
         try {
             const card = await createActionCardFull({
-                title, description: '', start_date: '', end_date: endDate,
+                title, description: '', start_date: startDate, end_date: endDate,
                 status_id: statusId, category_id: categoryId, axis_id: null,
                 owner_id: ownerId, members: [], project_id: null,
                 todo_title: '', todo_items: [],
             })
             const linkId = await linkActionCardToProject(projectId, card.id)
             onSaved({ ...card, linkId })
+            onActionLinkAdded?.({ id: linkId, project_id: projectId, action_card_id: card.id })
         } finally {
             setSubmitting(false)
         }
@@ -1227,6 +1231,12 @@ function ActionCardQuickCreateForm({ projectId, statuses, members, partners, onS
                 </div>
                 <Input
                     type="date"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    className="h-8 text-xs w-36 shrink-0"
+                />
+                <Input
+                    type="date"
                     value={endDate}
                     onChange={e => setEndDate(e.target.value)}
                     className="h-8 text-xs w-36 shrink-0"
@@ -1234,13 +1244,70 @@ function ActionCardQuickCreateForm({ projectId, statuses, members, partners, onS
             </div>
             <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={onCancel} disabled={submitting} className="rounded-md">Annuler</Button>
-                <Button size="sm" onClick={handleSubmit} disabled={submitting || !title.trim()} className="rounded-md">
+                <Button size="sm" onClick={handleSubmit} disabled={submitting || !title.trim() || !startDate} className="rounded-md">
                     <Check size={13} className="mr-1" />{submitting ? '...' : 'Créer'}
                 </Button>
             </div>
         </div>
     )
 }
+
+// --- Formulaire création rapide Formation ---
+function FormationQuickCreateForm({ projectId, onSaved, onCancel }: {
+    projectId: number
+    onSaved: (f: Formation, link: ProjectFormation) => void
+    onCancel: () => void
+}) {
+    const [title, setTitle] = useState('')
+    const [level, setLevel] = useState('')
+    const [submitting, setSubmitting] = useState(false)
+    const LEVELS = [
+        { niveau: 'Niveau 3', type: 'CAP' },
+        { niveau: 'Niveau 4', type: 'Bac' },
+        { niveau: 'Niveau 5', type: 'BUT' },
+        { niveau: 'Niveau 6', type: 'Licence' },
+        { niveau: 'Niveau 7', type: 'Master' },
+        { niveau: 'Niveau 8', type: 'Doctorat' },
+    ]
+    const degreeType = LEVELS.find(l => l.niveau === level)?.type ?? ''
+
+    async function handleSubmit() {
+        if (!title.trim()) return
+        setSubmitting(true)
+        try {
+            const f = await createFormation({ title, code: '', level, degree_type: degreeType })
+            const link = await addProjectFormation(projectId, f.id)
+            onSaved(f, link)
+        } finally {
+            setSubmitting(false)
+        }
+    }
+    return (
+        <>
+        <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-muted/30">
+            <div className="flex gap-2">
+                <Input value={title} onChange={e => setTitle(e.target.value)}
+                    placeholder="Intitulé *" className="h-8 text-xs flex-1" autoFocus />
+            </div>
+            <div className="flex gap-2">
+                <Select value={level} onValueChange={setLevel}>
+                    <SelectTrigger className="h-8 text-xs flex-1"><SelectValue className="text-muted-foreground" placeholder="Niveau *" /> </SelectTrigger>
+                    <SelectContent>
+                        {LEVELS.map(l => <SelectItem key={l.niveau} value={l.niveau}>{l.niveau} : {l.type}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={onCancel} disabled={submitting} className="rounded-md">Annuler</Button>
+                <Button size="sm" onClick={handleSubmit} disabled={submitting || !title.trim() || !level.trim()} className="rounded-md">
+                    <Check size={13} className="mr-1" />{submitting ? '...' : 'Créer et ajouter'}
+                </Button>
+            </div>
+        </div>
+        </>
+    )
+}
+
 
 // --- Formulaire création rapide membre ---
 
@@ -1417,6 +1484,8 @@ export type ProjectDetailSheetProps = {
     onTimeEntryAdded?: (e: TimeEntry) => void
     onTimeEntryUpdated?: (e: TimeEntry) => void
     onTimeEntryDeleted?: (id: number) => void
+    onActionLinkAdded?: (link: ProjectActionCard) => void
+    onActionLinkRemoved?: (linkId: number) => void
     onChangeProjectPartners: (cardId: number, list: ProjectPartnerFull[]) => void
     allFormations: Formation[]
     onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
@@ -1464,7 +1533,7 @@ function SortableTab({ mode, label, icon, isActive, isEmpty, onActivate, onRemov
     )
 }
 
-export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementUpdated, onAgreementDeleted, onChangeProjectPartners, partners, cardProjectPartners, finances, onExpanseLinked, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged }: ProjectDetailSheetProps) {
+export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementUpdated, onAgreementDeleted, onChangeProjectPartners, partners, cardProjectPartners, finances, onExpanseLinked, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged, onActionLinkAdded, onActionLinkRemoved}: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -1495,6 +1564,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [actionCards,      setActionCards]      = useState<(ActionCardFull & { linkId: number })[]>([])
     const [showLinkCard,       setShowLinkCard]       = useState(false)
     const [showCreateCard,     setShowCreateCard]     = useState(false)
+    const [showCreateFormation, setShowCreateFormation] = useState(false)
     const [allActionCards,     setAllActionCards]     = useState<ActionCardFull[]>([])
     const [selectedActionCard, setSelectedActionCard] = useState<(ActionCardFull & { linkId: number }) | null>(null)
     const [selectedPartner,    setSelectedPartner]    = useState<PartnerCardFull | null>(null)
@@ -1782,6 +1852,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     async function handleUnlinkCard(linkId: number) {
         await removeProjectFromCard(linkId)
         setActionCards(prev => prev.filter(c => c.linkId !== linkId))
+        onActionLinkRemoved?.(linkId)
     }
 
     async function handleRoleChange(pmId: number, role: string) {
@@ -2702,7 +2773,22 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
 
                     {/* Formations */}
                     <section className="flex flex-col gap-3 bg-white border border-border rounded-xl p-4">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Formations</p>
+                        <div className='flex justify-between'>
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Formations</p>
+                            <Button variant="ghost" onClick={() => setShowCreateFormation(true)}><Plus size={12}/> Ajouter </Button>
+                        </div>
+                        
+                        {showCreateFormation && (
+                            <FormationQuickCreateForm 
+                                projectId={project.id}
+                                onSaved={(f, link) => {
+                                    setFormations(prev => [...prev, f])
+                                    setFormationLinks(prev => [...prev, link])
+                                    setShowCreateFormation(false)
+                                }}
+                                onCancel={() => setShowCreateFormation(false)}
+                            />
+                        )}
                         <div className="flex flex-col gap-2">
                             <SearchInput
                                 data={allFormations.filter(f => !formations.find(pf => pf.id === f.id))}
@@ -2775,6 +2861,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     </div>
                                 )
                             })}
+                           
                         </div>
                     </section>
 
@@ -2815,6 +2902,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                             data={allActionCards.filter(c => !actionCards.some(ac => ac.id === c.id))}
                                             onSelect={async card => {
                                                 const linkId = await linkActionCardToProject(project.id, card.id)
+                                                onActionLinkAdded?.({ id: linkId, project_id: project.id, action_card_id: card.id })
                                                 setActionCards(prev => [...prev, { ...card, linkId }])
                                                 setShowLinkCard(false)
                                             }}
@@ -2843,6 +2931,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                             setActionCards(prev => [...prev, card])
                                             setShowCreateCard(false)
                                         }}
+                                        onActionLinkAdded={onActionLinkAdded}
                                         onCancel={() => setShowCreateCard(false)}
                                     />
                                 )}
@@ -5044,6 +5133,8 @@ export default function Projects() {
                 onTimeEntryDeleted={id => setTimeEntries(prev => prev.filter(e => e.id !== id))}
                 allFormations={allFormations}
                 onTodosChanged={onTodosChanged}
+                onActionLinkAdded={link => setActionLinks(prev => [...prev, link])}
+                onActionLinkRemoved={linkId => setActionLinks(prev => prev.filter(l => l.id !== linkId))}
                 onMemberLinkChanged={onMemberLinkChanged}
                 finances={(selectedProject && financialsByProject.get(selectedProject.id)) ?? NO_FINANCIALS}
                 onExpanseLinked={e => setAllExpanses(prev => prev.map(x => x.id === e.id ? e : x))}

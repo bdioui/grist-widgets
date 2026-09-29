@@ -1543,6 +1543,18 @@ export async function getFormations(): Promise<Formation[]> {
     return USE_MOCK ? mockFormations : normalizeFormations(await fetchTable(T.formation))
 }
 
+export async function createFormation(data: { title: string; code: string; level: string; degree_type: string }): Promise<Formation> {
+    const full = { ...data, type: '', partner_id: null, formacode: '', rome: '', nsf: '', status: '', expiry_date: '', is_national: false }
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockFormations.map(f => f.id)) + 1
+        const f = { id, ...full }
+        mockFormations.push(f)
+        return f
+    }
+    const id = await addRecord(T.formation, full)
+    return { id, ...full }
+}
+
 export async function getProjectFormationLinks(projectId: number): Promise<ProjectFormation[]> {
     return USE_MOCK
         ? mockProjectFormations.filter(pf => pf.project_id === projectId)

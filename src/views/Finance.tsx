@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -570,6 +570,107 @@ interface DepensesTabProps {
     agreements: FinancialAgreement[]
 }
 
+type ExpanseRowProps = {
+    expanse: Expanse
+    isSelected: boolean
+    isExpanded: boolean
+    detailTitle: string | null
+    detailCategoryTitle: string | null
+    supplierName: string | null
+    projectTitle: string | null
+    agreementTitle: string | null
+    // Fournies seulement à la ligne dépliée : les autres reçoivent undefined,
+    // pour ne pas être re-rendues quand les écritures se chargent.
+    sifacLines?: SifacLine[] | null
+    onToggleRow: (id: number) => void
+    onToggleDetail: (id: number) => void
+    onStartEdit: (e: Expanse) => void
+}
+
+// Ligne en lecture seule. En memo : cocher une case ne re-rend que sa propre
+// ligne, à condition que les callbacks reçus soient stables (useCallback).
+const ExpanseRow = React.memo(function ExpanseRow({
+    expanse: e, isSelected, isExpanded, detailTitle, detailCategoryTitle,
+    supplierName, projectTitle, agreementTitle, sifacLines,
+    onToggleRow, onToggleDetail, onStartEdit,
+}: ExpanseRowProps) {
+    return (
+        <React.Fragment>
+            <TableRow className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
+                <TableCell className="px-3">
+                    <Checkbox checked={isSelected} onCheckedChange={() => onToggleRow(e.id)} />
+                </TableCell>
+                <TableCell className="font-medium max-w-xs">
+                    <div className="flex items-center gap-1">
+                        {e.flux_id ? (
+                            <button
+                                onClick={() => onToggleDetail(e.id)}
+                                className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground"
+                                title="Lignes comptables SIFAC"
+                            >
+                                {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                            </button>
+                        ) : <span className="shrink-0 w-[18px]" />}
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="truncate block max-w-xs cursor-default">{e.title}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs text-xs">{e.description}</TooltipContent>
+                        </Tooltip>
+                    </div>
+                </TableCell>
+                <TableCell>
+                    {e.category && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
+                        {e.category}
+                    </span>}
+                </TableCell>
+                <TableCell>
+                    {e.label && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
+                        {e.label}
+                    </span>}
+                </TableCell>
+                <TableCell className="truncate max-w-44">
+                    <span className="text-foreground">{detailTitle ?? '—'}</span>
+                    {detailCategoryTitle && <p className="text-[10px] text-muted-foreground leading-tight">{detailCategoryTitle}</p>}
+                </TableCell>
+                <TableCell className="text-right font-medium tabular-nums">{formatAmount(e.amount)}</TableCell>
+                <TableCell className="text-muted-foreground truncate">{supplierName ?? '—'}</TableCell>
+                <TableCell className="text-muted-foreground truncate">{projectTitle ?? '—'}</TableCell>
+                <TableCell className="text-muted-foreground truncate">
+                    {e.agreement_id ? (
+                        <span className="text-[10px] text-blue-600 font-medium">
+                            ↳ {agreementTitle ?? '—'}
+                        </span>
+                    ) : '—'}
+                </TableCell>
+                <TableCell>
+                    <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: EXPANSE_STATUS_COLORS[e.status] ?? '#f3f4f6' }}>
+                        {e.status}
+                    </span>
+                </TableCell>
+                <TableCell className="text-muted-foreground tabular-nums">{formatDate(e.purchase_date)}</TableCell>
+                <TableCell className="text-muted-foreground tabular-nums">{formatDate(e.payment_date)}</TableCell>
+                <TableCell>
+                    <button onClick={() => onStartEdit(e)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-opacity">
+                        <Pencil size={12} className="text-muted-foreground" />
+                    </button>
+                </TableCell>
+            </TableRow>
+            {isExpanded && (
+                <TableRow className="bg-muted/20 hover:bg-muted/20">
+                    <TableCell colSpan={13} className="p-0">
+                        <div className="px-10 py-3">
+                            {sifacLines == null
+                                ? <p className="text-[11px] text-muted-foreground">Chargement des lignes comptables…</p>
+                                : <SifacLineDetail lines={sifacLines.filter(l => l.flux_id === e.flux_id)} />}
+                        </div>
+                    </TableCell>
+                </TableRow>
+            )}
+        </React.Fragment>
+    )
+})
+
 function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, suppliers, setSuppliers, projects, agreements }: DepensesTabProps) {
     type Display = 'grouped' | 'detailed'
     const [search, setSearch] = useState('')
@@ -611,7 +712,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         if (displayMode === 'detailed') void loadSifacLines()
     }, [displayMode])
 
-    async function toggleDetail(id: number) {
+    const toggleDetail = useCallback(async (id: number) => {
         if (expandedId === id) { setExpandedId(null); return }
         setExpandedId(id)
         if (sifacLines !== null || loadingLines) return
@@ -621,7 +722,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         } finally {
             setLoadingLines(false)
         }
-    }
+    }, [expandedId, sifacLines, loadingLines])
 
     const budgetDetailMap    = useMemo(() => new Map(budgetDetails.map(d => [d.id, d])), [budgetDetails])
     const leafBudgetDetails  = useMemo(() => budgetDetails.filter(d => d.parent_id !== null), [budgetDetails])
@@ -733,9 +834,9 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const allFilteredSelected = filtered.length > 0 && filtered.every(e => selected.has(e.id))
     const someSelected = filtered.some(e => selected.has(e.id))
 
-    function toggleRow(id: number) {
+    const toggleRow = useCallback((id: number) => {
         setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
-    }
+    }, [])
 
     function toggleAll() {
         if (allFilteredSelected) {
@@ -766,10 +867,10 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
 
     function cancelAdd() { setIsAdding(false); setNewDraft({}) }
 
-    function startEdit(e: Expanse) {
+    const startEdit = useCallback((e: Expanse) => {
         setEditingId(e.id)
         setDraft({ ...e })
-    }
+    }, [])
 
     async function saveEdit() {
         if (editingId == null) return
@@ -1247,79 +1348,21 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                             )
 
                             return (
-                                <React.Fragment key={e.id}>
-                                <TableRow className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
-                                    <TableCell className="px-3">
-                                        <Checkbox checked={isSelected} onCheckedChange={() => toggleRow(e.id)} />
-                                    </TableCell>
-                                    <TableCell className="font-medium max-w-xs">
-                                        <div className="flex items-center gap-1">
-                                            {e.flux_id ? (
-                                                <button
-                                                    onClick={() => toggleDetail(e.id)}
-                                                    className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground"
-                                                    title="Lignes comptables SIFAC"
-                                                >
-                                                    {expandedId === e.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                                                </button>
-                                            ) : <span className="shrink-0 w-[18px]" />}
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <span className="truncate block max-w-xs cursor-default">{e.title}</span>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="bottom" className="max-w-xs text-xs">{e.description}</TooltipContent>
-                                            </Tooltip>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        {e.category && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
-                                            {e.category}
-                                        </span>}
-                                    </TableCell>
-                                    <TableCell>
-                                        {e.label && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
-                                            {e.label}
-                                        </span>}
-                                    </TableCell>
-                                    <TableCell className="truncate max-w-44">
-                                        <span className="text-foreground">{detail?.title ?? '—'}</span>
-                                        {detailCategory && <p className="text-[10px] text-muted-foreground leading-tight">{detailCategory.title}</p>}
-                                    </TableCell>
-                                    <TableCell className="text-right font-medium tabular-nums">{formatAmount(e.amount)}</TableCell>
-                                    <TableCell className="text-muted-foreground truncate">{supplier?.name ?? '—'}</TableCell>
-                                    <TableCell className="text-muted-foreground truncate">{project?.title ?? '—'}</TableCell>
-                                    <TableCell className="text-muted-foreground truncate">
-                                        {e.agreement_id ? (
-                                            <span className="text-[10px] text-blue-600 font-medium">
-                                                ↳ {agreementMap.get(e.agreement_id)?.title ?? '—'}
-                                            </span>
-                                        ) : '—'}
-                                    </TableCell>
-                                    <TableCell>
-                                        <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: EXPANSE_STATUS_COLORS[e.status] ?? '#f3f4f6' }}>
-                                            {e.status}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground tabular-nums">{formatDate(e.purchase_date)}</TableCell>
-                                    <TableCell className="text-muted-foreground tabular-nums">{formatDate(e.payment_date)}</TableCell>
-                                    <TableCell>
-                                        <button onClick={() => startEdit(e)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-opacity">
-                                            <Pencil size={12} className="text-muted-foreground" />
-                                        </button>
-                                    </TableCell>
-                                </TableRow>
-                                {expandedId === e.id && (
-                                    <TableRow className="bg-muted/20 hover:bg-muted/20">
-                                        <TableCell colSpan={13} className="p-0">
-                                            <div className="px-10 py-3">
-                                                {sifacLines === null
-                                                    ? <p className="text-[11px] text-muted-foreground">Chargement des lignes comptables…</p>
-                                                    : <SifacLineDetail lines={sifacLines.filter(l => l.flux_id === e.flux_id)} />}
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                                </React.Fragment>
+                                <ExpanseRow
+                                    key={e.id}
+                                    expanse={e}
+                                    isSelected={isSelected}
+                                    isExpanded={expandedId === e.id}
+                                    detailTitle={detail?.title ?? null}
+                                    detailCategoryTitle={detailCategory?.title ?? null}
+                                    supplierName={supplier?.name ?? null}
+                                    projectTitle={project?.title ?? null}
+                                    agreementTitle={e.agreement_id ? (agreementMap.get(e.agreement_id)?.title ?? null) : null}
+                                    sifacLines={expandedId === e.id ? sifacLines : undefined}
+                                    onToggleRow={toggleRow}
+                                    onToggleDetail={toggleDetail}
+                                    onStartEdit={startEdit}
+                                />
                             )
                         })}
                     </TableBody>
@@ -1426,6 +1469,74 @@ interface ConventionsTabProps {
     budgetDetails: BudgetDetail[]
 }
 
+type ConventionRowProps = {
+    agreement: FinancialAgreement
+    isSelected: boolean
+    partner: Partner | undefined
+    projectTitle: string | null
+    statusLabel: string | undefined
+    detailTitle: string | null
+    detailCategoryTitle: string | null
+    onToggleRow: (id: number) => void
+    onStartEdit: (a: FinancialAgreement) => void
+}
+
+// Ligne en lecture seule. En memo : cocher une case ne re-rend que sa propre
+// ligne, à condition que les callbacks reçus soient stables (useCallback).
+const ConventionRow = React.memo(function ConventionRow({
+    agreement: a, isSelected, partner, projectTitle, statusLabel,
+    detailTitle, detailCategoryTitle, onToggleRow, onStartEdit,
+}: ConventionRowProps) {
+    return (
+        <TableRow className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
+            <TableCell className="px-3">
+                <Checkbox checked={isSelected} onCheckedChange={() => onToggleRow(a.id)} />
+            </TableCell>
+            <TableCell className="font-medium max-w-xs">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className="truncate block max-w-xs cursor-default">{a.title}</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs text-xs">{a.description}</TooltipContent>
+                </Tooltip>
+            </TableCell>
+            <TableCell>
+                {partner ? (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium truncate block max-w-32" style={{ backgroundColor: partner.color + 50, color: 'black'}}>
+                        {partner.name}
+                    </span>
+                ) : '—'}
+            </TableCell>
+            <TableCell className="text-muted-foreground truncate max-w-36">{projectTitle ?? '—'}</TableCell>
+            <TableCell>
+                {detailTitle ? (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="truncate block max-w-36 cursor-default text-muted-foreground">{detailTitle}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">{detailCategoryTitle} › {detailTitle}</TooltipContent>
+                    </Tooltip>
+                ) : <span className="text-muted-foreground/50">—</span>}
+            </TableCell>
+            <TableCell className="text-right font-medium tabular-nums">{formatAmount(a.grant)}</TableCell>
+            <TableCell>
+                <DirectionPill direction={a.direction} className="text-[10px] rounded" />
+            </TableCell>
+            <TableCell>
+                <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: AGREEMENT_STATUS_COLORS[statusLabel ?? ''] ?? '#f3f4f6' }}>
+                    {statusLabel ?? '—'}
+                </span>
+            </TableCell>
+            <TableCell className="text-muted-foreground tabular-nums">{formatDate(a.signed_date)}</TableCell>
+            <TableCell>
+                <button onClick={() => onStartEdit(a)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-opacity">
+                    <Pencil size={12} className="text-muted-foreground" />
+                </button>
+            </TableCell>
+        </TableRow>
+    )
+})
+
 function ConventionsTab({ agreements, setAgreements, partners, projects, statuses, budgetCategories, budgetDetails }: ConventionsTabProps) {
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
@@ -1475,9 +1586,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
     const allFilteredSelected = filtered.length > 0 && filtered.every(a => selected.has(a.id))
     const someSelected = filtered.some(a => selected.has(a.id))
 
-    function toggleRow(id: number) {
+    const toggleRow = useCallback((id: number) => {
         setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
-    }
+    }, [])
 
     function toggleAll() {
         if (allFilteredSelected) {
@@ -1510,7 +1621,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
 
     function cancelAdd() { setIsAdding(false); setNewDraft({}) }
 
-    function startEdit(a: FinancialAgreement) { setEditingId(a.id); setDraft({ ...a }) }
+    const startEdit = useCallback((a: FinancialAgreement) => { setEditingId(a.id); setDraft({ ...a }) }, [])
 
     async function saveEdit() {
         if (editingId == null) return
@@ -1842,52 +1953,18 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                             const detail   = a.budget_detail_id ? budgetDetailMap.get(a.budget_detail_id) : null
                             const detailCat = detail ? budgetCategoryMap.get(detail.budget_category_id) : null
                             return (
-                                <TableRow key={a.id} className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
-                                    <TableCell className="px-3">
-                                        <Checkbox checked={isSelected} onCheckedChange={() => toggleRow(a.id)} />
-                                    </TableCell>
-                                    <TableCell className="font-medium max-w-xs">
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <span className="truncate block max-w-xs cursor-default">{a.title}</span>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="bottom" className="max-w-xs text-xs">{a.description}</TooltipContent>
-                                        </Tooltip>
-                                    </TableCell>
-                                    <TableCell>
-                                        {partner ? (
-                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium truncate block max-w-32" style={{ backgroundColor: partner.color + 50, color: 'black'}}>
-                                                {partner.name}
-                                            </span>
-                                        ) : '—'}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground truncate max-w-36">{project?.title ?? '—'}</TableCell>
-                                    <TableCell>
-                                        {detail ? (
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <span className="truncate block max-w-36 cursor-default text-muted-foreground">{detail.title}</span>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="bottom" className="text-xs">{detailCat?.title} › {detail.title}</TooltipContent>
-                                            </Tooltip>
-                                        ) : <span className="text-muted-foreground/50">—</span>}
-                                    </TableCell>
-                                    <TableCell className="text-right font-medium tabular-nums">{formatAmount(a.grant)}</TableCell>
-                                    <TableCell>
-                                        <DirectionPill direction={a.direction} className="text-[10px] rounded" />
-                                    </TableCell>
-                                    <TableCell>
-                                        <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: AGREEMENT_STATUS_COLORS[status?.label ?? ''] ?? '#f3f4f6' }}>
-                                            {status?.label ?? '—'}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground tabular-nums">{formatDate(a.signed_date)}</TableCell>
-                                    <TableCell>
-                                        <button onClick={() => startEdit(a)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-opacity">
-                                            <Pencil size={12} className="text-muted-foreground" />
-                                        </button>
-                                    </TableCell>
-                                </TableRow>
+                                <ConventionRow
+                                    key={a.id}
+                                    agreement={a}
+                                    isSelected={isSelected}
+                                    partner={partner}
+                                    projectTitle={project?.title ?? null}
+                                    statusLabel={status?.label}
+                                    detailTitle={detail?.title ?? null}
+                                    detailCategoryTitle={detailCat?.title ?? null}
+                                    onToggleRow={toggleRow}
+                                    onStartEdit={startEdit}
+                                />
                             )
                         })}
                     </TableBody>
@@ -1936,6 +2013,125 @@ function periodLabel(d: BudgetDetail): string | null {
     if (d.start_date) return `Dès ${fmt(d.start_date)}`
     return `Jusqu'à ${fmt(d.end_date!)}`
 }
+
+type BudgetCategoryRowProps = {
+    cat: BudgetCategory
+    budget: number
+    alloue: number
+    spent: number
+    onEdit: (c: BudgetCategory) => void
+    onDelete: (c: BudgetCategory) => void
+    onCreateGroup: (categoryId: number) => void
+}
+
+// Les trois niveaux du tableau budgétaire sont en memo : les montants arrivent
+// déjà calculés, donc taper dans une modale ne re-rend pas les lignes.
+const BudgetCategoryRow = React.memo(function BudgetCategoryRow({ cat, budget, alloue, spent, onEdit, onDelete, onCreateGroup }: BudgetCategoryRowProps) {
+    const reste = budget - spent
+    const pct   = budget > 0 ? Math.round(spent / budget * 100) : 0
+    return (
+        <tr className="border-b bg-muted/30 group/cat">
+            <td className="px-4 py-2.5 font-semibold">
+                <span className="flex items-center gap-1.5">
+                    {cat.title}
+                    <span className="inline-flex gap-1 opacity-0 group-hover/cat:opacity-100 transition-opacity">
+                        <button onClick={() => onEdit(cat)} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
+                        <button onClick={() => onDelete(cat)} className="text-muted-foreground hover:text-red-500"><Trash2 size={11} /></button>
+                    </span>
+                </span>
+            </td>
+            <td className="px-4 py-2.5 text-right tabular-nums font-medium">
+                {formatAmount(budget)}
+                {alloue !== budget && budget > 0 && (
+                    <div className="text-[10px] text-muted-foreground font-normal">alloué : {formatAmount(alloue)}</div>
+                )}
+            </td>
+            <td className="px-4 py-2.5 text-right tabular-nums font-medium">{formatAmount(spent)}</td>
+            <td className="px-4 py-2.5 text-right tabular-nums font-medium" style={{ color: reste < 0 ? '#ef4444' : undefined }}>{formatAmount(reste)}</td>
+            <td className="px-4 py-2.5 text-right tabular-nums font-medium" style={{ color: reste < 0 ? '#ef4444' : pct > 80 ? '#f59e0b' : '#22c55e' }}>{pct} %</td>
+            <td className="px-4 py-2.5 text-right">
+                <button onClick={() => onCreateGroup(cat.id)} className="text-muted-foreground hover:text-foreground" title="Ajouter un groupe"><Plus size={14} /></button>
+            </td>
+        </tr>
+    )
+})
+
+type BudgetGroupRowProps = {
+    grp: BudgetDetail
+    budget: number
+    alloue: number
+    spent: number
+    onEdit: (d: BudgetDetail) => void
+    onDelete: (d: BudgetDetail) => void
+    onCreateChild: (parentId: number, categoryId: number) => void
+}
+
+const BudgetGroupRow = React.memo(function BudgetGroupRow({ grp, budget, alloue, spent, onEdit, onDelete, onCreateChild }: BudgetGroupRowProps) {
+    const reste = budget - spent
+    const pct   = budget > 0 ? Math.round(spent / budget * 100) : 0
+    return (
+        <tr className="border-b bg-muted/10 group/grp">
+            <td className="px-4 pl-8 py-2 font-medium text-sm">
+                <span className="flex items-center gap-1.5">
+                    {grp.title}
+                    <span className="inline-flex gap-1 opacity-0 group-hover/grp:opacity-100 transition-opacity">
+                        <button onClick={() => onEdit(grp)} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
+                        <button onClick={() => onDelete(grp)} className="text-muted-foreground hover:text-red-500"><Trash2 size={11} /></button>
+                    </span>
+                </span>
+            </td>
+            <td className="px-4 py-2 text-right tabular-nums text-sm">
+                {budget > 0 ? formatAmount(budget) : '—'}
+                {grp.budget > 0 && alloue !== budget && (
+                    <div className="text-[10px] text-muted-foreground">alloué : {formatAmount(alloue)}</div>
+                )}
+            </td>
+            <td className="px-4 py-2 text-right tabular-nums text-sm">{spent > 0 ? formatAmount(spent) : '—'}</td>
+            <td className="px-4 py-2 text-right tabular-nums text-sm" style={{ color: reste < 0 ? '#ef4444' : undefined }}>{budget > 0 ? formatAmount(reste) : '—'}</td>
+            <td className="px-4 py-2 text-right tabular-nums text-sm" style={{ color: reste < 0 ? '#ef4444' : pct > 80 ? '#f59e0b' : pct > 0 ? '#22c55e' : undefined }}>{budget > 0 ? `${pct} %` : '—'}</td>
+            <td className="px-4 py-2 text-right">
+                <button onClick={() => onCreateChild(grp.id, grp.budget_category_id)} className="text-muted-foreground hover:text-foreground" title="Ajouter une ligne"><Plus size={13} /></button>
+            </td>
+        </tr>
+    )
+})
+
+type BudgetLeafRowProps = {
+    leaf: BudgetDetail
+    yearFilter: number | null
+    spent: number
+    onEdit: (d: BudgetDetail) => void
+    onDelete: (d: BudgetDetail) => void
+}
+
+const BudgetLeafRow = React.memo(function BudgetLeafRow({ leaf, yearFilter, spent, onEdit, onDelete }: BudgetLeafRowProps) {
+    const budget = proratedBudget(leaf, yearFilter)
+    const reste  = budget - spent
+    const pct    = budget > 0 ? Math.round(spent / budget * 100) : 0
+    const period = periodLabel(leaf)
+    return (
+        <tr className="border-b border-muted/20 group">
+            <td className="px-4 pl-12 py-2 text-muted-foreground text-xs">
+                <span className="flex items-center gap-2 flex-wrap">
+                    <span>{leaf.title}</span>
+                    {period && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-medium">{period}</span>}
+                    {yearFilter && leaf.start_date && leaf.end_date && (
+                        <span className="text-[10px] text-muted-foreground/60 italic">proratisé</span>
+                    )}
+                    <span className="inline-flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => onEdit(leaf)} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
+                        <button onClick={() => onDelete(leaf)} className="text-muted-foreground hover:text-red-500"><Trash2 size={11} /></button>
+                    </span>
+                </span>
+            </td>
+            <td className="px-4 py-2 text-right tabular-nums text-xs text-muted-foreground">{formatAmount(budget)}</td>
+            <td className="px-4 py-2 text-right tabular-nums text-xs text-muted-foreground">{formatAmount(spent)}</td>
+            <td className="px-4 py-2 text-right tabular-nums text-xs" style={{ color: reste < 0 ? '#ef4444' : '#6b7280' }}>{formatAmount(reste)}</td>
+            <td className="px-4 py-2 text-right tabular-nums text-xs" style={{ color: reste < 0 ? '#ef4444' : pct > 80 ? '#f59e0b' : '#6b7280' }}>{pct} %</td>
+            <td />
+        </tr>
+    )
+})
 
 function BudgetTab({
     program,
@@ -1988,19 +2184,19 @@ function BudgetTab({
     const [detailForm, setDetailForm] = useState({ title: '', description: '', budget: 0, start_date: null as string | null, end_date: null as string | null })
     const [detailSaving, setDetailSaving] = useState(false)
 
-    function openCreateGroup(categoryId: number) {
+    const openCreateGroup = useCallback((categoryId: number) => {
         setDetailForm({ title: '', description: '', budget: 0, start_date: null, end_date: null })
         setDetailModal({ mode: 'create-group', categoryId })
-    }
-    function openCreateChild(parentId: number, categoryId: number) {
+    }, [])
+    const openCreateChild = useCallback((parentId: number, categoryId: number) => {
         setDetailForm({ title: '', description: '', budget: 0, start_date: null, end_date: null })
         setDetailModal({ mode: 'create-child', parentId, categoryId })
-    }
-    function openEdit(d: BudgetDetail) {
+    }, [])
+    const openEdit = useCallback((d: BudgetDetail) => {
         setDetailForm({ title: d.title, description: d.description, budget: d.budget, start_date: d.start_date, end_date: d.end_date })
         setDetailModal({ mode: 'edit', detail: d })
-    }
-    function openDelete(d: BudgetDetail) { setDetailModal({ mode: 'delete', detail: d }) }
+    }, [])
+    const openDelete = useCallback((d: BudgetDetail) => { setDetailModal({ mode: 'delete', detail: d }) }, [])
 
     async function handleSaveDetail() {
         if (!detailModal) return
@@ -2035,8 +2231,8 @@ function BudgetTab({
     const [catSaving, setCatSaving] = useState(false)
 
     function openCatCreate() { setCatForm({ title: '' }); setCatModal({ mode: 'create' }) }
-    function openCatEdit(c: BudgetCategory) { setCatForm({ title: c.title }); setCatModal({ mode: 'edit', cat: c }) }
-    function openCatDelete(c: BudgetCategory) { setCatModal({ mode: 'delete', cat: c }) }
+    const openCatEdit = useCallback((c: BudgetCategory) => { setCatForm({ title: c.title }); setCatModal({ mode: 'edit', cat: c }) }, [])
+    const openCatDelete = useCallback((c: BudgetCategory) => { setCatModal({ mode: 'delete', cat: c }) }, [])
 
     async function handleSaveCat() {
         if (!catModal) return
@@ -2061,10 +2257,22 @@ function BudgetTab({
     }
 
     // ── Totaux ──────────────────────────────────────────────────────────────────
-    const baseExpanses      = budgetMode === 'paid' ? expanses.filter(e => e.status === 'Payé') : expanses
-    const visibleExpanses   = baseExpanses
-        .filter(e => e.budget_detail_id === null || visibleLeafIds.has(e.budget_detail_id))
-        .filter(e => yearFilter === null || !e.purchase_date || new Date(e.purchase_date).getFullYear() === yearFilter)
+    const visibleExpanses = useMemo(() => {
+        const base = budgetMode === 'paid' ? expanses.filter(e => e.status === 'Payé') : expanses
+        return base
+            .filter(e => e.budget_detail_id === null || visibleLeafIds.has(e.budget_detail_id))
+            .filter(e => yearFilter === null || !e.purchase_date || new Date(e.purchase_date).getFullYear() === yearFilter)
+    }, [budgetMode, expanses, visibleLeafIds, yearFilter])
+    // Dépensé par ligne budgétaire, calculé une fois : chaque ligne du tableau lit ici
+    // au lieu de re-parcourir toutes les dépenses.
+    const spentByDetail = useMemo(() => {
+        const map = new Map<number, number>()
+        for (const e of visibleExpanses) {
+            if (e.budget_detail_id === null) continue
+            map.set(e.budget_detail_id, (map.get(e.budget_detail_id) ?? 0) + e.amount)
+        }
+        return map
+    }, [visibleExpanses])
     const totalBudgetLines  = visibleLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
     const totalSpent        = visibleExpanses.reduce((s, e) => s + e.amount, 0)
     const totalReversements = visibleExpanses.filter(e => e.agreement_id != null).reduce((s, e) => s + e.amount, 0)
@@ -2111,106 +2319,31 @@ function BudgetTab({
                             </thead>
                             <tbody>
                                 {budgetCategories.map(cat => {
-                                    const catGroups   = groupDetails.filter(g => g.budget_category_id === cat.id)
-                                    const catLeafs    = visibleLeafs.filter(l => l.budget_category_id === cat.id)
-                                    const catAlloue   = catLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
-                                    const catEnvelope = catGroups.reduce((s, grp) => {
+                                    const catGroups = groupDetails.filter(g => g.budget_category_id === cat.id)
+                                    const catLeafs  = visibleLeafs.filter(l => l.budget_category_id === cat.id)
+                                    const catAlloue = catLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
+                                    const catBudget = catGroups.reduce((s, grp) => {
                                         const grpLeafs = visibleLeafs.filter(l => l.parent_id === grp.id)
                                         return s + (grp.budget > 0 ? proratedBudget(grp, yearFilter) : grpLeafs.reduce((gs, d) => gs + proratedBudget(d, yearFilter), 0))
                                     }, 0)
-                                    const catBudget   = catEnvelope
-                                    const catSpent    = visibleExpanses.filter(e => catLeafs.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
-                                    const catReste    = catBudget - catSpent
-                                    const catPct      = catBudget > 0 ? Math.round(catSpent / catBudget * 100) : 0
+                                    const catSpent  = catLeafs.reduce((s, d) => s + (spentByDetail.get(d.id) ?? 0), 0)
                                     return (
                                         <React.Fragment key={cat.id}>
                                             {/* ── Niveau 1 : Catégorie ── */}
-                                            <tr className="border-b bg-muted/30 group/cat">
-                                                <td className="px-4 py-2.5 font-semibold">
-                                                    <span className="flex items-center gap-1.5">
-                                                        {cat.title}
-                                                        <span className="inline-flex gap-1 opacity-0 group-hover/cat:opacity-100 transition-opacity">
-                                                            <button onClick={() => openCatEdit(cat)} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
-                                                            <button onClick={() => openCatDelete(cat)} className="text-muted-foreground hover:text-red-500"><Trash2 size={11} /></button>
-                                                        </span>
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-2.5 text-right tabular-nums font-medium">
-                                                    {formatAmount(catBudget)}
-                                                    {catAlloue !== catEnvelope && catEnvelope > 0 && (
-                                                        <div className="text-[10px] text-muted-foreground font-normal">alloué : {formatAmount(catAlloue)}</div>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-2.5 text-right tabular-nums font-medium">{formatAmount(catSpent)}</td>
-                                                <td className="px-4 py-2.5 text-right tabular-nums font-medium" style={{ color: catReste < 0 ? '#ef4444' : undefined }}>{formatAmount(catReste)}</td>
-                                                <td className="px-4 py-2.5 text-right tabular-nums font-medium" style={{ color: catReste < 0 ? '#ef4444' : catPct > 80 ? '#f59e0b' : '#22c55e' }}>{catPct} %</td>
-                                                <td className="px-4 py-2.5 text-right">
-                                                    <button onClick={() => openCreateGroup(cat.id)} className="text-muted-foreground hover:text-foreground" title="Ajouter un groupe"><Plus size={14} /></button>
-                                                </td>
-                                            </tr>
+                                            <BudgetCategoryRow cat={cat} budget={catBudget} alloue={catAlloue} spent={catSpent} onEdit={openCatEdit} onDelete={openCatDelete} onCreateGroup={openCreateGroup} />
                                             {catGroups.map(grp => {
-                                                const grpLeafs    = visibleLeafs.filter(l => l.parent_id === grp.id)
-                                                const grpAlloue   = grpLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
-                                                const grpEnvelope = grp.budget > 0 ? proratedBudget(grp, yearFilter) : grpAlloue
-                                                const grpBudget   = grpEnvelope
-                                                const grpSpent    = visibleExpanses.filter(e => grpLeafs.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
-                                                const grpReste    = grpBudget - grpSpent
-                                                const grpPct      = grpBudget > 0 ? Math.round(grpSpent / grpBudget * 100) : 0
+                                                const grpLeafs  = visibleLeafs.filter(l => l.parent_id === grp.id)
+                                                const grpAlloue = grpLeafs.reduce((s, d) => s + proratedBudget(d, yearFilter), 0)
+                                                const grpBudget = grp.budget > 0 ? proratedBudget(grp, yearFilter) : grpAlloue
+                                                const grpSpent  = grpLeafs.reduce((s, d) => s + (spentByDetail.get(d.id) ?? 0), 0)
                                                 return (
                                                     <React.Fragment key={`grp-${grp.id}`}>
                                                         {/* ── Niveau 2 : Groupe ── */}
-                                                        <tr className="border-b bg-muted/10 group/grp">
-                                                            <td className="px-4 pl-8 py-2 font-medium text-sm">
-                                                                <span className="flex items-center gap-1.5">
-                                                                    {grp.title}
-                                                                    <span className="inline-flex gap-1 opacity-0 group-hover/grp:opacity-100 transition-opacity">
-                                                                        <button onClick={() => openEdit(grp)} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
-                                                                        <button onClick={() => openDelete(grp)} className="text-muted-foreground hover:text-red-500"><Trash2 size={11} /></button>
-                                                                    </span>
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-2 text-right tabular-nums text-sm">
-                                                                {grpBudget > 0 ? formatAmount(grpBudget) : '—'}
-                                                                {grp.budget > 0 && grpAlloue !== grpEnvelope && (
-                                                                    <div className="text-[10px] text-muted-foreground">alloué : {formatAmount(grpAlloue)}</div>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-4 py-2 text-right tabular-nums text-sm">{grpSpent > 0 ? formatAmount(grpSpent) : '—'}</td>
-                                                            <td className="px-4 py-2 text-right tabular-nums text-sm" style={{ color: grpReste < 0 ? '#ef4444' : undefined }}>{grpBudget > 0 ? formatAmount(grpReste) : '—'}</td>
-                                                            <td className="px-4 py-2 text-right tabular-nums text-sm" style={{ color: grpReste < 0 ? '#ef4444' : grpPct > 80 ? '#f59e0b' : grpPct > 0 ? '#22c55e' : undefined }}>{grpBudget > 0 ? `${grpPct} %` : '—'}</td>
-                                                            <td className="px-4 py-2 text-right">
-                                                                <button onClick={() => openCreateChild(grp.id, grp.budget_category_id)} className="text-muted-foreground hover:text-foreground" title="Ajouter une ligne"><Plus size={13} /></button>
-                                                            </td>
-                                                        </tr>
-                                                        {grpLeafs.map(leaf => {
-                                                            const leafBudget = proratedBudget(leaf, yearFilter)
-                                            const leafSpent  = visibleExpanses.filter(e => e.budget_detail_id === leaf.id).reduce((s, e) => s + e.amount, 0)
-                                                            const leafReste  = leafBudget - leafSpent
-                                                            const leafPct    = leafBudget > 0 ? Math.round(leafSpent / leafBudget * 100) : 0
-                                                            const period     = periodLabel(leaf)
-                                                            return (
-                                                                <tr key={`leaf-${leaf.id}`} className="border-b border-muted/20 group">
-                                                                    <td className="px-4 pl-12 py-2 text-muted-foreground text-xs">
-                                                                        <span className="flex items-center gap-2 flex-wrap">
-                                                                            <span>{leaf.title}</span>
-                                                                            {period && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-medium">{period}</span>}
-                                                                            {yearFilter && leaf.start_date && leaf.end_date && (
-                                                                                <span className="text-[10px] text-muted-foreground/60 italic">proratisé</span>
-                                                                            )}
-                                                                            <span className="inline-flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                                <button onClick={() => openEdit(leaf)} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
-                                                                                <button onClick={() => openDelete(leaf)} className="text-muted-foreground hover:text-red-500"><Trash2 size={11} /></button>
-                                                                            </span>
-                                                                        </span>
-                                                                    </td>
-                                                                    <td className="px-4 py-2 text-right tabular-nums text-xs text-muted-foreground">{formatAmount(leafBudget)}</td>
-                                                                    <td className="px-4 py-2 text-right tabular-nums text-xs text-muted-foreground">{formatAmount(leafSpent)}</td>
-                                                                    <td className="px-4 py-2 text-right tabular-nums text-xs" style={{ color: leafReste < 0 ? '#ef4444' : '#6b7280' }}>{formatAmount(leafReste)}</td>
-                                                                    <td className="px-4 py-2 text-right tabular-nums text-xs" style={{ color: leafReste < 0 ? '#ef4444' : leafPct > 80 ? '#f59e0b' : '#6b7280' }}>{leafPct} %</td>
-                                                                    <td />
-                                                                </tr>
-                                                            )
-                                                        })}
+                                                        <BudgetGroupRow grp={grp} budget={grpBudget} alloue={grpAlloue} spent={grpSpent} onEdit={openEdit} onDelete={openDelete} onCreateChild={openCreateChild} />
+                                                        {/* ── Niveau 3 : Lignes ── */}
+                                                        {grpLeafs.map(leaf => (
+                                                            <BudgetLeafRow key={`leaf-${leaf.id}`} leaf={leaf} yearFilter={yearFilter} spent={spentByDetail.get(leaf.id) ?? 0} onEdit={openEdit} onDelete={openDelete} />
+                                                        ))}
                                                     </React.Fragment>
                                                 )
                                             })}
