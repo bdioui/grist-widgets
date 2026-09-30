@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarDays, AlertTriangle, Receipt, FilePenLine, Scale } from 'lucide-react'
 import { Search, FileDown, Trash2, Trash, Pencil, Check, X, Plus, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight, FolderInput, Tag, Upload } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { exportToCsv, sumGrant } from '@/lib/utils'
+import { exportToCsv, sumGrant, paidAmount } from '@/lib/utils'
 import SearchInput from '@/components/SearchInput'
 import {
     getProgram, getExpanses, getBudgetCategories, getBudgetDetails, getSupliers, getProjects,
@@ -69,13 +69,6 @@ function parseAmount(raw: string): number {
 function formatDate(d: string) {
     if (!d) return '—'
     return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
-// Le montant réellement décaissé. SIFAC le connaît à l'euro près, y compris pour
-// une commande partiellement payée ; une saisie manuelle ne renseigne pas ce
-// compteur, on retombe alors sur le montant global si le statut dit « Payé ».
-function paidAmount(e: Expanse): number {
-    return e.source === 'sifac' ? e.amount_paid : (e.status === 'Payé' ? e.amount : 0)
 }
 
 // ─── Date range popover ─────────────────────────────────────────────────────
@@ -1467,6 +1460,7 @@ interface ConventionsTabProps {
     statuses: Status[]
     budgetCategories: BudgetCategory[]
     budgetDetails: BudgetDetail[]
+    expanses: Expanse[]
 }
 
 type ConventionRowProps = {
@@ -1477,6 +1471,8 @@ type ConventionRowProps = {
     statusLabel: string | undefined
     detailTitle: string | null
     detailCategoryTitle: string | null
+    paid: number
+    remaining: number
     onToggleRow: (id: number) => void
     onStartEdit: (a: FinancialAgreement) => void
 }
@@ -1485,7 +1481,7 @@ type ConventionRowProps = {
 // ligne, à condition que les callbacks reçus soient stables (useCallback).
 const ConventionRow = React.memo(function ConventionRow({
     agreement: a, isSelected, partner, projectTitle, statusLabel,
-    detailTitle, detailCategoryTitle, onToggleRow, onStartEdit,
+    detailTitle, detailCategoryTitle, paid, remaining, onToggleRow, onStartEdit,
 }: ConventionRowProps) {
     return (
         <TableRow className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
@@ -1519,6 +1515,14 @@ const ConventionRow = React.memo(function ConventionRow({
                 ) : <span className="text-muted-foreground/50">—</span>}
             </TableCell>
             <TableCell className="text-right font-medium tabular-nums">{formatAmount(a.grant)}</TableCell>
+            <TableCell className="text-right tabular-nums">
+                {formatAmount(paid)}
+                {a.direction === 'depense' && remaining !== 0 && (
+                    <div className="text-[10px] font-normal" style={{ color: remaining < 0 ? '#ef4444' : undefined }}>
+                        reste : {formatAmount(remaining)}
+                    </div>
+                )}
+            </TableCell>
             <TableCell>
                 <DirectionPill direction={a.direction} className="text-[10px] rounded" />
             </TableCell>
@@ -1537,7 +1541,7 @@ const ConventionRow = React.memo(function ConventionRow({
     )
 })
 
-function ConventionsTab({ agreements, setAgreements, partners, projects, statuses, budgetCategories, budgetDetails }: ConventionsTabProps) {
+function ConventionsTab({ agreements, setAgreements, partners, projects, statuses, budgetCategories, budgetDetails, expanses }: ConventionsTabProps) {
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [partnerFilter, setPartnerFilter] = useState<number | null>(null)
@@ -1559,6 +1563,17 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
     const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
     const statusMap = useMemo(() => new Map(statuses.map(s => [s.id, s])), [statuses])
     const agreementStatuses = useMemo(() => statuses.filter(s => s.context === 'financial_agreement'), [statuses])
+
+    // Versé par convention : ce que les dépenses de reversement qui lui sont
+    // rattachées ont réellement payé (paidAmount, pas leur montant engagé).
+    const paidByAgreement = useMemo(() => {
+        const map = new Map<number, number>()
+        for (const e of expanses) {
+            if (!e.agreement_id) continue
+            map.set(e.agreement_id, (map.get(e.agreement_id) ?? 0) + paidAmount(e))
+        }
+        return map
+    }, [expanses])
 
     const filtered = useMemo(() => agreements.filter(a => {
         if (search) {
@@ -1664,13 +1679,17 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
             else if (sortKey === 'project') { va = projectMap.get(a.project_id)?.title ?? ''; vb = projectMap.get(b.project_id)?.title ?? '' }
             else if (sortKey === 'budget')  { va = a.budget; vb = b.budget }
             else if (sortKey === 'grant')   { va = a.grant; vb = b.grant }
+            else if (sortKey === 'paid')    {
+                va = a.direction === 'recette' ? a.grant : (paidByAgreement.get(a.id) ?? 0)
+                vb = b.direction === 'recette' ? b.grant : (paidByAgreement.get(b.id) ?? 0)
+            }
             else if (sortKey === 'direction') { va = a.direction; vb = b.direction }
             else if (sortKey === 'status')  { va = statusMap.get(a.status_id)?.label ?? ''; vb = statusMap.get(b.status_id)?.label ?? '' }
             else if (sortKey === 'signed')  { va = a.signed_date ?? ''; vb = b.signed_date ?? '' }
             const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb), 'fr', { sensitivity: 'base' })
             return sortDir === 'asc' ? cmp : -cmp
         })
-    }, [filtered, sortKey, sortDir, partnerMap, projectMap, statusMap])
+    }, [filtered, sortKey, sortDir, partnerMap, projectMap, statusMap, paidByAgreement])
 
     function toggleSort(key: string) {
         if (sortKey === key) {
@@ -1777,6 +1796,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                 { key: 'project', label: 'Projet',          className: 'h-8 w-36' },
                                 { key: 'detail',  label: 'Ligne budgétaire',className: 'h-8 w-40' },
                                 { key: 'grant',   label: 'Montant',         className: 'h-8 w-28 text-right' },
+                                { key: 'paid',    label: 'Versé',           className: 'h-8 w-28 text-right' },
                                 { key: 'direction', label: 'Sens',          className: 'h-8 w-24' },
                                 { key: 'status',  label: 'Statut',          className: 'h-8 w-28' },
                                 { key: 'signed',  label: 'Date signature',  className: 'h-8 w-28' },
@@ -1838,6 +1858,8 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                 <TableCell>
                                     <Input type="number" step="0.01" value={newDraft.grant ?? ''} onChange={ev => setNewDraft(d => ({ ...d, grant: parseAmount(ev.target.value) }))} placeholder="0" className="h-7 text-xs text-right" />
                                 </TableCell>
+                                {/* Versé : rien à saisir, une convention qui n'existe pas encore n'a aucune dépense rattachée */}
+                                <TableCell />
                                 <TableCell>
                                     <Select value={newDraft.direction ?? 'depense'} onValueChange={v => setNewDraft(d => ({ ...d, direction: v as AgreementDirection }))}>
                                         <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
@@ -1868,7 +1890,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                         )}
                         {filtered.length === 0 && !isAdding ? (
                             <TableRow>
-                                <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-8">
+                                <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-8">
                                     Aucune convention trouvée
                                 </TableCell>
                             </TableRow>
@@ -1920,6 +1942,8 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     <TableCell>
                                         <Input type="number" step="0.01" value={draft.grant ?? ''} onChange={ev => setDraft(d => ({ ...d, grant: parseAmount(ev.target.value) }))} className="h-7 text-xs text-right" />
                                     </TableCell>
+                                    {/* Versé : lecture seule, pas de saisie ici — reste visible dans la ligne normale */}
+                                    <TableCell className="text-right tabular-nums text-muted-foreground">{formatAmount(paidByAgreement.get(a.id) ?? 0)}</TableCell>
                                     <TableCell>
                                         <Select value={draft.direction ?? 'depense'} onValueChange={v => setDraft(d => ({ ...d, direction: v as AgreementDirection }))}>
                                             <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
@@ -1952,6 +1976,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
 
                             const detail   = a.budget_detail_id ? budgetDetailMap.get(a.budget_detail_id) : null
                             const detailCat = detail ? budgetCategoryMap.get(detail.budget_category_id) : null
+                            // Recette : signé = comptabilisé (rien ne trace un encaissement réel).
+                            // Dépense : versé = somme des dépenses de reversement rattachées.
+                            const paid = a.direction === 'recette' ? a.grant : (paidByAgreement.get(a.id) ?? 0)
                             return (
                                 <ConventionRow
                                     key={a.id}
@@ -1962,6 +1989,8 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     statusLabel={status?.label}
                                     detailTitle={detail?.title ?? null}
                                     detailCategoryTitle={detailCat?.title ?? null}
+                                    paid={paid}
+                                    remaining={a.grant - paid}
                                     onToggleRow={toggleRow}
                                     onStartEdit={startEdit}
                                 />
@@ -2656,6 +2685,7 @@ export default function Finance() {
                     statuses={statuses}
                     budgetCategories={budgetCategories}
                     budgetDetails={budgetDetails}
+                    expanses={expanses}
                 />
             )}
 

@@ -21,8 +21,8 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, LayoutGrid, Table2, Paperclip, Receipt, EllipsisIcon, Building2, BarChart2, BookOpen, GraduationCap, ScrollText, ChartGantt, ChevronDown, ChevronRight } from 'lucide-react'
-import { exportToCsv, computeFinancials, NO_FINANCIALS, type ProjectFinancials } from '@/lib/utils'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, LayoutGrid, Table2, Paperclip, Receipt, EllipsisIcon, Building2, BarChart2, BookOpen, GraduationCap, ScrollText, ChartGantt, ChevronDown, ChevronRight, Cross } from 'lucide-react'
+import { exportToCsv, computeFinancials, agreementAmounts, NO_FINANCIALS, type ProjectFinancials } from '@/lib/utils'
 import { DirectionPill } from '@/components/DirectionPill'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
 import { ActionCardDetailSheet } from '@/views/actions/ActionCard'
@@ -668,12 +668,14 @@ type AgreementRowProps = {
     agreement: AgreementFull
     statuses: Status[]
     axe?: Axis
+    paid: number
+    remaining: number
     onEdit: (a: AgreementFull) => void
     onDelete: (id: number) => void
 }
 
 
-function AgreementRow({ agreement: a, statuses, axe, onEdit, onDelete }: AgreementRowProps) {
+function AgreementRow({ agreement: a, statuses, axe, paid, remaining, onEdit, onDelete }: AgreementRowProps) {
     const rate   = financingRate(a.budget, a.grant)
     const status = statuses.find(s => s.id === a.status_id)
     return (
@@ -727,6 +729,13 @@ function AgreementRow({ agreement: a, statuses, axe, onEdit, onDelete }: Agreeme
                         ? <span className="text-[11px] text-muted-foreground">{rate} % de {fmt(a.budget)}</span>
                         : a.budget > 0 && <span className="text-[11px] text-muted-foreground">coût {fmt(a.budget)}</span>
                     }
+                    {/* Versé / reste : uniquement les reversements (recette = signé
+                        comptabilisé d'office, remaining vaut toujours 0). */}
+                    {a.direction === 'depense' && remaining !== 0 && (
+                        <span className="text-[11px]" style={{ color: remaining < 0 ? '#ef4444' : undefined }}>
+                            versé {fmt(paid)} · reste {fmt(remaining)}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -1864,6 +1873,12 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     async function handleParticipationStatusChange(pmId: number, statusId: number | null) {
         await updateProjectMemberParticipationStatus(pmId, statusId)
         setProjectMembers(prev => prev.map(pm => pm.id === pmId ? { ...pm, participation_status_id: statusId ?? undefined } : pm))
+    }
+
+    async function handleUnlinkExpanse(e: Expanse) {
+        await updateExpanse(e.id, {project_id : null})
+        setProjectExpanses(prev => prev.filter(expanse => expanse.id !== e.id))
+        onExpanseLinked({ ...e, project_id: null })
     }
 
     if (!project) return null
@@ -3200,6 +3215,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                                         <TableCell className="text-muted-foreground tabular-nums">
                                                             {e.purchase_date ? new Date(e.purchase_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
                                                         </TableCell>
+                                                        <TableCell className="text-muted-foreground tabular-nums">
+                                                            <Button onClick={() => {handleUnlinkExpanse(e)}} variant="ghost" size="icon"><X size={12} /></Button>
+                                                        </TableCell>
                                                     </TableRow>
                                                 )
                                             })}
@@ -3271,8 +3289,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             </div>
                         ) : (
                             <div className="flex flex-col gap-2">
-                                {agreements.map(a =>
-                                    editingAgreement?.id === a.id ? (
+                                {agreements.map(a => {
+                                    const { paid, remaining } = agreementAmounts(a, projectExpanses)
+                                    return editingAgreement?.id === a.id ? (
                                         <AgreementForm
                                             key={a.id}
                                             partners={partners}
@@ -3291,11 +3310,13 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                             agreement={a}
                                             statuses={statuses}
                                             axe={axis.find(ax => ax.id === a.axis_id)}
+                                            paid={paid}
+                                            remaining={remaining}
                                             onEdit={setEditingAgreement}
                                             onDelete={handleDeleteAgreement}
                                         />
                                     )
-                                )}
+                                })}
 
                                 {showAddForm && (
                                     <AgreementForm

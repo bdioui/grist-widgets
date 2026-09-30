@@ -58,17 +58,30 @@ export function computeFinancials(
     const totals = new Map<number, ProjectFinancials>()
     for (const p of projects) totals.set(p.id, { ...NO_FINANCIALS, selfFinanced: p.budget })
 
-    // Les conventions d'abord : une convention signée fait foi sur le montant
-    // annoncé au tour de table. On retient au passage les couples
-    // (projet, partenaire, sens) déjà couverts, pour ne pas compter deux fois.
-    // Le sens fait partie de la clé : un partenaire peut très bien apporter
-    // par une convention et recevoir par une autre.
+    // Versé par convention de reversement, calculé une fois pour toutes les
+    // conventions plutôt que reparcouru pour chacune (même résultat que
+    // agreementAmounts(a, expanses).paid, sans le O(agréments × dépenses)).
+    const paidByAgreement = new Map<number, number>()
+    for (const e of expanses) {
+        if (!e.agreement_id) continue
+        paidByAgreement.set(e.agreement_id, (paidByAgreement.get(e.agreement_id) ?? 0) + paidAmount(e))
+    }
+
+    // Les conventions d'abord. Coté recettes, une convention signée fait foi
+    // sur le montant annoncé au tour de table : rien dans le modèle ne trace
+    // un encaissement réel. Côté reversements, le signé n'est qu'un
+    // engagement — ce qui compte dans le solde est ce qui a réellement été
+    // versé aux partenaires, lu sur les dépenses qui lui sont rattachées.
+    // On retient au passage les couples (projet, partenaire, sens) déjà
+    // couverts, pour ne pas compter deux fois. Le sens fait partie de la clé :
+    // un partenaire peut très bien apporter par une convention et recevoir
+    // par une autre.
     const settled = new Set<string>()
     for (const a of agreements) {
         const f = totals.get(a.project_id)
         if (!f) continue
         if (a.direction === 'recette') f.cofinanced += a.grant
-        else                           f.granted    += a.grant
+        else                           f.granted    += paidByAgreement.get(a.id) ?? 0
         settled.add(`${a.project_id}:${a.partner_id}:${a.direction}`)
     }
 
@@ -109,6 +122,34 @@ export function sumGrant(
     direction: AgreementDirection,
 ) {
     return agreements.reduce((s, a) => a.direction === direction ? s + a.grant : s, 0)
+}
+
+// Ce qu'une dépense compte comme réellement payé, distinct de son montant
+// engagé. Un flux SIFAC porte son propre `amount_paid` ; une saisie manuelle
+// ne compte que si son statut est passé à Payé.
+export function paidAmount(e: Expanse): number {
+    return e.source === 'sifac' ? e.amount_paid : (e.status === 'Payé' ? e.amount : 0)
+}
+
+export type AgreementAmounts = { engaged: number; paid: number; remaining: number }
+
+// Engagé / Versé / Reste d'une convention. Pour un reversement (direction
+// 'depense'), le signé n'est qu'un engagement : ce qui a été réellement versé
+// se lit sur les dépenses qui lui sont rattachées, au même sens que partout
+// ailleurs (paidAmount — une dépense Engagée ou Livrée ne compte pas).
+// Une convention 'recette' n'a pas d'équivalent : rien dans le modèle ne trace
+// un encaissement réel, donc le signé reste la seule vérité disponible.
+export function agreementAmounts(
+    agreement: { id: number; direction: AgreementDirection; grant: number },
+    expanses: Expanse[],
+): AgreementAmounts {
+    if (agreement.direction === 'recette') {
+        return { engaged: agreement.grant, paid: agreement.grant, remaining: 0 }
+    }
+    const paid = expanses
+        .filter(e => e.agreement_id === agreement.id)
+        .reduce((s, e) => s + paidAmount(e), 0)
+    return { engaged: agreement.grant, paid, remaining: agreement.grant - paid }
 }
 
 export function participantsByCard(memberLinks: MemberActionCard[], lists: ToDoList[], items: ToDoItem[]): Map<number, Set<number>> {
