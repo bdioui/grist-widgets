@@ -21,7 +21,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, LayoutGrid, Table2, Paperclip, Receipt, EllipsisIcon, Building2, BarChart2, BookOpen, GraduationCap, ScrollText, ChartGantt, ChevronDown, ChevronRight, Cross } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Pencil, Trash2, Check, X, ListChecks, Copy, FileDown, CheckIcon, Trash, Maximize2, Minimize2, Users, ExternalLink, LayoutGrid, Table2, Paperclip, Receipt, EllipsisIcon, Building2, BarChart2, BookOpen, GraduationCap, ScrollText, ChartGantt, ChevronDown, ChevronRight } from 'lucide-react'
 import { exportToCsv, computeFinancials, agreementAmounts, NO_FINANCIALS, type ProjectFinancials } from '@/lib/utils'
 import { DirectionPill } from '@/components/DirectionPill'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu'
