@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CalendarDays, AlertTriangle, Receipt, FilePenLine, Scale } from 'lucide-react'
+import { CalendarDays, AlertTriangle, Receipt, FilePenLine, Scale} from 'lucide-react'
 import { Search, FileDown, Trash2, Trash, Pencil, Check, X, Plus, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight, FolderInput, Tag, Upload } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { exportToCsv, sumGrant, paidAmount } from '@/lib/utils'
@@ -18,15 +18,16 @@ import {
     getFinancialAgreements, getPartners, getStatuses, getSifacLines,
     deleteExpanse, deleteAgreement, updateExpanse, createExpanse, createSupplier, updateAgreement, addAgreement,
     createBudgetCategory, updateBudgetCategory, deleteBudgetCategory,
-    createBudgetDetail, updateBudgetDetail, deleteBudgetDetail,
-    ORPHAN_STATUS,
+    createBudgetDetail, updateBudgetDetail, deleteBudgetDetail, getProjectExpanses,
+    ORPHAN_STATUS, setExpanseAllocations
 } from '@/lib/api'
 import type { ImportSummary } from '@/lib/api'
 import { prepareSifacImport, commitSifacImport } from '@/lib/sifac/import'
 import type { SifacPreview } from '@/lib/sifac/import'
 import { sifacCategory } from '@/lib/sifac/aggregate'
-import type { Program, Expanse, BudgetCategory, BudgetDetail, Supplier, Project, FinancialAgreement, Partner, Status, SifacLine, AgreementDirection } from '@/lib/types'
+import { type Program, type Expanse, type BudgetCategory, type BudgetDetail, type Supplier, type Project, type FinancialAgreement, type Partner, type Status, type SifacLine, type AgreementDirection, type ProjectExpanse, type Allocation } from '@/lib/types'
 import { DirectionPill } from '@/components/DirectionPill'
+import AllocationDialog from '../components/AllocationDialog'
 
 const EXPANSE_CATEGORIES = ['Fonctionnement', 'Investissement', 'Personnel', 'Autre'] as const
 
@@ -561,6 +562,74 @@ interface DepensesTabProps {
     setSuppliers: React.Dispatch<React.SetStateAction<Supplier[]>>
     projects: Project[]
     agreements: FinancialAgreement[]
+    projectExpanses: ProjectExpanse[]
+    onAllocationsChange: (expanseId: number, rows: ProjectExpanse[]) => void
+}
+
+// Ce que la colonne Projet affiche pour une dépense. Calculé une fois par dépense
+// (useMemo dans DepensesTab) : la référence reste stable d'un rendu à l'autre,
+// donc les lignes en memo ne se redessinent pas à chaque case cochée.
+type ProjectCellData = {
+    parts: { title: string; amount: number }[]   // la plus grosse part d'abord
+    allocated: number
+    status: 'none' | 'ok' | 'mismatch'            // mismatch : Σ parts ≠ montant de la dépense
+}
+const NO_PROJECT_CELL: ProjectCellData = { parts: [], allocated: 0, status: 'none' }
+
+// Un seul bouton pour toute la cellule : il résume la répartition et ouvre la modale.
+function ProjectCell({ data, amount, onClick }: { data: ProjectCellData; amount: number; onClick: () => void }) {
+    const { parts, allocated, status } = data
+    const extra = parts.length - 1
+    const detail = parts.length > 1 || status === 'mismatch'
+
+    const button = (
+        <button
+            type="button"
+            onClick={onClick}
+            className="group/proj -mx-1 flex max-w-full items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-muted"
+        >
+            {parts.length === 0 ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-muted-foreground/40 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors group-hover/proj:border-foreground/50 group-hover/proj:text-foreground">
+                    <Plus size={10} /> Répartir
+                </span>
+            ) : (
+                <>
+                    <span
+                        title={parts[0].title}
+                        className={`max-w-[10.5rem] truncate rounded-full px-2 py-0.5 text-[10px] font-medium ${status === 'mismatch' ? 'bg-amber-100 text-amber-900' : 'bg-teal-100 text-teal-900'}`}
+                    >
+                        {parts[0].title}
+                    </span>
+                    {extra > 0 && (
+                        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">+{extra}</span>
+                    )}
+                    {status === 'mismatch' && <AlertTriangle size={11} className="shrink-0 text-amber-600" />}
+                </>
+            )}
+        </button>
+    )
+
+    if (!detail) return button
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>{button}</TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+                <div className="flex flex-col gap-0.5">
+                    {parts.map((p, i) => (
+                        <div key={i} className="flex justify-between gap-4">
+                            <span>{p.title}</span>
+                            <span className="tabular-nums">{formatAmount(p.amount)}</span>
+                        </div>
+                    ))}
+                    {status === 'mismatch' && (
+                        <div className="mt-1 border-t border-background/20 pt-1">
+                            Réparti {formatAmount(allocated)} sur {formatAmount(amount)} : répartition à revoir
+                        </div>
+                    )}
+                </div>
+            </TooltipContent>
+        </Tooltip>
+    )
 }
 
 type ExpanseRowProps = {
@@ -570,8 +639,9 @@ type ExpanseRowProps = {
     detailTitle: string | null
     detailCategoryTitle: string | null
     supplierName: string | null
-    projectTitle: string | null
     agreementTitle: string | null
+    projectCell: ProjectCellData
+    onAllocate: (e: Expanse) => void
     // Fournies seulement à la ligne dépliée : les autres reçoivent undefined,
     // pour ne pas être re-rendues quand les écritures se chargent.
     sifacLines?: SifacLine[] | null
@@ -584,8 +654,8 @@ type ExpanseRowProps = {
 // ligne, à condition que les callbacks reçus soient stables (useCallback).
 const ExpanseRow = React.memo(function ExpanseRow({
     expanse: e, isSelected, isExpanded, detailTitle, detailCategoryTitle,
-    supplierName, projectTitle, agreementTitle, sifacLines,
-    onToggleRow, onToggleDetail, onStartEdit,
+    supplierName, agreementTitle, sifacLines,
+    onToggleRow, onToggleDetail, onStartEdit, onAllocate, projectCell
 }: ExpanseRowProps) {
     return (
         <React.Fragment>
@@ -613,6 +683,10 @@ const ExpanseRow = React.memo(function ExpanseRow({
                     </div>
                 </TableCell>
                 <TableCell>
+                    {e.otp ? (<span className="px-1.5 py-0.5 rounded text-[10px] font-medium">{e.otp} </span>) : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium"> - </span>}
+                </TableCell>
+                <TableCell className="font-mono text-[10px] text-muted-foreground">{e.flux_id ?? '—'}</TableCell>
+                <TableCell>
                     {e.category && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
                         {e.category}
                     </span>}
@@ -628,7 +702,9 @@ const ExpanseRow = React.memo(function ExpanseRow({
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">{formatAmount(e.amount)}</TableCell>
                 <TableCell className="text-muted-foreground truncate">{supplierName ?? '—'}</TableCell>
-                <TableCell className="text-muted-foreground truncate">{projectTitle ?? '—'}</TableCell>
+                <TableCell className="max-w-56">
+                    <ProjectCell data={projectCell} amount={e.amount} onClick={() => onAllocate(e)} />
+                </TableCell>
                 <TableCell className="text-muted-foreground truncate">
                     {e.agreement_id ? (
                         <span className="text-[10px] text-blue-600 font-medium">
@@ -651,7 +727,7 @@ const ExpanseRow = React.memo(function ExpanseRow({
             </TableRow>
             {isExpanded && (
                 <TableRow className="bg-muted/20 hover:bg-muted/20">
-                    <TableCell colSpan={13} className="p-0">
+                    <TableCell colSpan={15} className="p-0">
                         <div className="px-10 py-3">
                             {sifacLines == null
                                 ? <p className="text-[11px] text-muted-foreground">Chargement des lignes comptables…</p>
@@ -664,8 +740,8 @@ const ExpanseRow = React.memo(function ExpanseRow({
     )
 })
 
-function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, suppliers, setSuppliers, projects, agreements }: DepensesTabProps) {
-    type Display = 'grouped' | 'detailed'
+function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, suppliers, setSuppliers, projects, agreements, projectExpanses, onAllocationsChange }: DepensesTabProps) {
+    type Display = 'grouped'|'detailed'
     const [search, setSearch] = useState('')
     const [categoryFilter, setCategoryFilter] = useState('all')
     const [labelFilter, setLabelFilter] = useState('all')
@@ -686,6 +762,8 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [expandedId, setExpandedId] = useState<number | null>(null)
     const [displayMode, setDisplayMode] = useState<Display>('grouped')
+    const [allocTarget, setAllocTarget] = useState<Pick<Expanse, 'id' | 'title' | 'amount'> | null>(null)
+    const onAllocate = useCallback((e: Expanse) => setAllocTarget({ id: e.id, title: e.title, amount: e.amount }), [])
     // Les lignes comptables ne servent qu'au dépliage : on ne les charge qu'au
     // premier clic, et une seule fois pour toutes les dépenses.
     const [sifacLines, setSifacLines] = useState<SifacLine[] | null>(null)
@@ -723,6 +801,28 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const supplierMap        = useMemo(() => new Map(suppliers.map(s => [s.id, s])), [suppliers])
     const projectMap         = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
     const agreementMap       = useMemo(() => new Map(agreements.map(a => [a.id, a])), [agreements])
+    const expanseMap = useMemo(() => {
+        const map = new Map<number, Allocation[]>()
+        for(const pe of projectExpanses) {
+            const list = map.get(pe.expanse_id) ?? []
+            list.push({project_id: pe.project_id, amount:pe.amount})
+            map.set(pe.expanse_id, list)
+        }
+        return map
+        }, [projectExpanses])
+
+    const projectCellByExpanse = useMemo(() => {
+        const map = new Map<number, ProjectCellData>()
+        for (const e of expanses) {
+            const parts = (expanseMap.get(e.id) ?? [])
+                .map(a => ({ title: projectMap.get(a.project_id)?.title ?? 'Projet inconnu', amount: a.amount }))
+                .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+            const allocated = parts.reduce((sum, p) => sum + p.amount, 0)
+            const status = parts.length === 0 ? 'none' : Math.abs(allocated - e.amount) < 0.005 ? 'ok' : 'mismatch'
+            map.set(e.id, { parts, allocated, status })
+        }
+        return map
+    }, [expanses, expanseMap, projectMap])
 
     const labels = useMemo(() => [...new Set(expanses.map(e => e.label))].filter(Boolean).sort(), [expanses])
     const labelsByCategory = useMemo(() => {
@@ -801,19 +901,25 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         return [...filtered].sort((a, b) => {
             let va: string | number = '', vb: string | number = ''
             if (sortKey === 'title')         { va = a.title; vb = b.title }
+            else if (sortKey === 'otp')      { va = a.otp ?? ''; vb = b.otp ?? '' }
+            else if (sortKey === 'flux')     { va = a.flux_id ?? ''; vb = b.flux_id ?? '' }
+            else if (sortKey === 'convention') {
+                va = a.agreement_id ? (agreementMap.get(a.agreement_id)?.title ?? '') : ''
+                vb = b.agreement_id ? (agreementMap.get(b.agreement_id)?.title ?? '') : ''
+            }
             else if (sortKey === 'category') { va = a.category; vb = b.category }
             else if (sortKey === 'label')    { va = a.label; vb = b.label }
             else if (sortKey === 'detail')   { va = a.budget_detail_id ? (budgetDetailMap.get(a.budget_detail_id)?.title ?? '') : ''; vb = b.budget_detail_id ? (budgetDetailMap.get(b.budget_detail_id)?.title ?? '') : '' }
             else if (sortKey === 'amount')   { va = a.amount; vb = b.amount }
             else if (sortKey === 'supplier') { va = a.supplier_id ? (supplierMap.get(a.supplier_id)?.name ?? '') : ''; vb = b.supplier_id ? (supplierMap.get(b.supplier_id)?.name ?? '') : '' }
-            else if (sortKey === 'project')  { va = a.project_id ? (projectMap.get(a.project_id)?.title ?? '') : ''; vb = b.project_id ? (projectMap.get(b.project_id)?.title ?? '') : '' }
+            else if (sortKey === 'project')  { va = projectCellByExpanse.get(a.id)?.parts[0]?.title ?? ''; vb = projectCellByExpanse.get(b.id)?.parts[0]?.title ?? '' }
             else if (sortKey === 'status')   { va = a.status; vb = b.status }
             else if (sortKey === 'purchase') { va = a.purchase_date ?? ''; vb = b.purchase_date ?? '' }
             else if (sortKey === 'payment')  { va = a.payment_date ?? ''; vb = b.payment_date ?? '' }
             const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb), 'fr', { sensitivity: 'base' })
             return sortDir === 'asc' ? cmp : -cmp
         })
-    }, [filtered, sortKey, sortDir, budgetDetailMap, supplierMap, projectMap])
+    }, [filtered, sortKey, sortDir, budgetDetailMap, supplierMap, projectCellByExpanse, agreementMap])
 
     function toggleSort(key: string) {
         if (sortKey === key) {
@@ -841,7 +947,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
 
     function startAdd() {
         setIsAdding(true)
-        setNewDraft({ title: '', category: 'Fonctionnement', label: '', status: 'Engagé', amount: 0, purchase_date: '', payment_date: '', delivery_date: '', description: '', budget_detail_id: leafBudgetDetails[0]?.id ?? null, supplier_id: null, project_id: null, agreement_id: null })
+        setNewDraft({ title: '', category: 'Fonctionnement', label: '', status: 'Engagé', amount: 0, purchase_date: '', payment_date: '', delivery_date: '', description: '', budget_detail_id: leafBudgetDetails[0]?.id ?? null, supplier_id: null, agreement_id: null })
         setEditingId(null)
     }
 
@@ -880,6 +986,8 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
         const ids = [...selected]
         await Promise.all(ids.map(id => deleteExpanse(id)))
         setExpanses(prev => prev.filter(e => !selected.has(e.id)))
+        // deleteExpanse a déjà retiré les parts en base : on vide aussi l'état local.
+        ids.forEach(id => onAllocationsChange(id, []))
         setSelected(new Set())
         setConfirmDelete(false)
     }
@@ -921,14 +1029,17 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     }
 
     function exportExpanses(rows: Expanse[], filename: string) {
-        exportToCsv(filename, ['Intitulé', 'Catégorie', 'Libellé', 'Ligne budgétaire', 'Montant', 'Fournisseur', 'Projet', 'Statut', 'Date achat'], rows.map(e => [
+        exportToCsv(filename, ['Intitulé', 'OTP', 'Flux', 'Catégorie', 'Libellé', 'Ligne budgétaire', 'Montant', 'Fournisseur', 'Projet', 'Convention', 'Statut', 'Date achat'], rows.map(e => [
             e.title,
+            e.otp ?? '',
+            e.flux_id ?? '',
             e.category,
             e.label,
             e.budget_detail_id ? (budgetDetailMap.get(e.budget_detail_id)?.title ?? '') : '',
             String(e.amount),
             e.supplier_id ? (supplierMap.get(e.supplier_id)?.name ?? '') : '',
-            e.project_id ? (projectMap.get(e.project_id)?.title ?? '') : '',
+            (projectCellByExpanse.get(e.id)?.parts ?? []).map(p => `${p.title} (${p.amount})`).join(' ; '),
+            e.agreement_id ? (agreementMap.get(e.agreement_id)?.title ?? '') : '',
             e.status,
             e.purchase_date,
         ]))
@@ -1118,6 +1229,8 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                             </TableHead>
                             {([
                                 { key: 'title',    label: 'Intitulé',          className: 'h-8' },
+                                { key: 'otp',    label: 'OTP',          className: 'h-8 w-32' },
+                                { key: 'flux',   label: 'Flux',         className: 'h-8 w-36' },
                                 { key: 'category', label: 'Catégorie',         className: 'h-8 w-36' },
                                 { key: 'label',    label: 'Libellé dépense',   className: 'h-8 w-36' },
                                 { key: 'detail',   label: 'Ligne budgétaire',  className: 'h-8 w-44' },
@@ -1152,6 +1265,11 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                 <TableCell>
                                     <Input autoFocus value={newDraft.title ?? ''} onChange={ev => setNewDraft(d => ({ ...d, title: ev.target.value }))} placeholder="Intitulé" className="h-7 text-xs" />
                                 </TableCell>
+                                <TableCell>
+                                    <Input value={newDraft.otp ?? ''} onChange={ev => setNewDraft(d => ({ ...d, otp: ev.target.value }))} placeholder="OTP" className="h-7 text-xs" />
+                                </TableCell>
+                                {/* Flux : une saisie manuelle n'en a pas, il vient de l'import SIFAC */}
+                                <TableCell className="text-muted-foreground">—</TableCell>
                                 <TableCell>
                                     <Select value={newDraft.category ?? ''} onValueChange={v => setNewDraft(d => ({ ...d, category: v }))}>
                                         <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="Catégorie" /></SelectTrigger>
@@ -1195,14 +1313,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <SearchInput
-                                        data={projects}
-                                        onSelect={p => setNewDraft(d => ({ ...d, project_id: p.id }))}
-                                        getLabel={p => p.title}
-                                        value={newDraft.project_id ? (projectMap.get(newDraft.project_id)?.title ?? '') : ''}
-                                        placeholder="Projet…"
-                                        dropdownClassName="min-w-[260px]"
-                                    />
+                                    <span className='text-[12px] text-muted-foreground'>Répartition après création</span>
                                 </TableCell>
                                 <TableCell>
                                     <Select value={newDraft.agreement_id != null ? String(newDraft.agreement_id) : '__none__'} onValueChange={v => setNewDraft(d => ({ ...d, agreement_id: v === '__none__' ? null : Number(v) }))}>
@@ -1231,7 +1342,7 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                         )}
                         {filtered.length === 0 && !isAdding ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-8">
+                                <TableCell colSpan={15} className="text-center text-sm text-muted-foreground py-8">
                                     Aucune dépense trouvée
                                 </TableCell>
                             </TableRow>
@@ -1241,7 +1352,8 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                             const detail = e.budget_detail_id ? budgetDetailMap.get(e.budget_detail_id) : null
                             const detailCategory = detail ? budgetCategoryMap.get(detail.budget_category_id) : null
                             const supplier = e.supplier_id ? supplierMap.get(e.supplier_id) : null
-                            const project = e.project_id ? projectMap.get(e.project_id) : null
+                            const projectCell = projectCellByExpanse.get(e.id) ?? NO_PROJECT_CELL
+                            
 
                             if (isEditing) return (
                                 <TableRow key={e.id} className="text-xs bg-blue-50/60">
@@ -1251,6 +1363,11 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                     <TableCell>
                                         <Input value={draft.title ?? ''} onChange={ev => setDraft(d => ({ ...d, title: ev.target.value }))} className="h-7 text-xs" />
                                     </TableCell>
+                                    <TableCell>
+                                        {/* L'OTP d'un flux SIFAC est réécrit à chaque import : inutile de le laisser éditable */}
+                                        <Input value={draft.otp ?? ''} disabled={draft.source === 'sifac'} onChange={ev => setDraft(d => ({ ...d, otp: ev.target.value }))} className="h-7 text-xs" />
+                                    </TableCell>
+                                    <TableCell className="font-mono text-[10px] text-muted-foreground">{draft.flux_id ?? '—'}</TableCell>
                                     <TableCell>
                                         <Select value={draft.category ?? ''} onValueChange={v => setDraft(d => ({ ...d, category: v }))}>
                                             <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
@@ -1268,15 +1385,17 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                         </Select>
                                     </TableCell>
                                     <TableCell>
-                                        <SearchInput
-                                            data={leafBudgetDetails}
-                                            onSelect={d => setDraft(prev => ({ ...prev, budget_detail_id: d.id }))}
-                                            getLabel={d => d.title}
-                                            value={draft.budget_detail_id ? (budgetDetailMap.get(draft.budget_detail_id)?.title ?? '') : ''}
-                                            placeholder="Ligne budgétaire…"
-                                            dropdownClassName="min-w-[260px]"
-                                            groupBy={d => ({ primary: budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
-                                        />
+                                         <div className="flex items-center gap-1">
+                                            <SearchInput
+                                                data={leafBudgetDetails}
+                                                onSelect={d => setDraft(prev => ({ ...prev, budget_detail_id: d.id }))}
+                                                getLabel={d => d.title}
+                                                value={draft.budget_detail_id ? (budgetDetailMap.get(draft.budget_detail_id)?.title ?? '') : ''}
+                                                placeholder="Ligne budgétaire…"
+                                                dropdownClassName="min-w-[260px]"
+                                                groupBy={d => ({ primary: budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
+                                            />          
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         <Input type="number" step="0.01" value={draft.amount ?? ''} onChange={ev => setDraft(d => ({ ...d, amount: parseAmount(ev.target.value) }))} className="h-7 text-xs text-right" />
@@ -1297,15 +1416,8 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                             />
                                         </div>
                                     </TableCell>
-                                    <TableCell>
-                                        <SearchInput
-                                            data={projects}
-                                            onSelect={p => setDraft(d => ({ ...d, project_id: p.id }))}
-                                            getLabel={p => p.title}
-                                            value={draft.project_id ? (projectMap.get(draft.project_id)?.title ?? '') : ''}
-                                            placeholder="Projet…"
-                                            dropdownClassName="min-w-[260px]"
-                                        />
+                                    <TableCell className="max-w-56">
+                                        <ProjectCell data={projectCell} amount={e.amount} onClick={() => onAllocate(e)} />
                                     </TableCell>
                                     <TableCell>
                                         <Select value={draft.agreement_id != null ? String(draft.agreement_id) : '__none__'} onValueChange={v => setDraft(d => ({ ...d, agreement_id: v === '__none__' ? null : Number(v) }))}>
@@ -1349,12 +1461,13 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                     detailTitle={detail?.title ?? null}
                                     detailCategoryTitle={detailCategory?.title ?? null}
                                     supplierName={supplier?.name ?? null}
-                                    projectTitle={project?.title ?? null}
                                     agreementTitle={e.agreement_id ? (agreementMap.get(e.agreement_id)?.title ?? null) : null}
                                     sifacLines={expandedId === e.id ? sifacLines : undefined}
                                     onToggleRow={toggleRow}
                                     onToggleDetail={toggleDetail}
                                     onStartEdit={startEdit}
+                                    projectCell={projectCell}
+                                    onAllocate={onAllocate}
                                 />
                             )
                         })}
@@ -1446,8 +1559,23 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <AllocationDialog
+                open={allocTarget !== null}
+                expanse={allocTarget}
+                projects={projects}
+                initialParts={(allocTarget && expanseMap.get(allocTarget.id)?.map(p => ({ project_id: p.project_id, amount: p.amount }))) ?? []}
+                onSave={async parts => {
+                    const id = allocTarget!.id
+                    const rows = await setExpanseAllocations(id, parts)
+                    onAllocationsChange(id, rows)
+                }}
+                onClose={() => setAllocTarget(null)}
+            />
         </div>
+
     )
+
 }
 
 // ─── Onglet Conventions ─────────────────────────────────────────────────────
@@ -1489,12 +1617,20 @@ const ConventionRow = React.memo(function ConventionRow({
                 <Checkbox checked={isSelected} onCheckedChange={() => onToggleRow(a.id)} />
             </TableCell>
             <TableCell className="font-medium max-w-xs">
+                     <span className="truncate block max-w-xs cursor-default">{a.title}</span>
+            </TableCell>
+            <TableCell className="font-medium max-w-xs">
+                {a.description ? (
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <span className="truncate block max-w-xs cursor-default">{a.title}</span>
+                        <span className="truncate block max-w-xs cursor-default">{a.description ?? '-'}</span>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs text-xs">{a.description}</TooltipContent>
+                    <TooltipContent side="bottom" className="max-w-xs text-xs">{a.description ?? '-'}</TooltipContent>
                 </Tooltip>
+                ) : (
+                   <span className="truncate block max-w-xs cursor-default">-</span>  
+                )}
+                
             </TableCell>
             <TableCell>
                 {partner ? (
@@ -1675,6 +1811,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
         return [...filtered].sort((a, b) => {
             let va: string | number = '', vb: string | number = ''
             if (sortKey === 'title')    { va = a.title; vb = b.title }
+            else if (sortKey === 'description') { va = a.description ?? ''; vb = b.description ?? '' }
             else if (sortKey === 'partner') { va = partnerMap.get(a.partner_id)?.name ?? ''; vb = partnerMap.get(b.partner_id)?.name ?? '' }
             else if (sortKey === 'project') { va = projectMap.get(a.project_id)?.title ?? ''; vb = projectMap.get(b.project_id)?.title ?? '' }
             else if (sortKey === 'budget')  { va = a.budget; vb = b.budget }
@@ -1683,13 +1820,17 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                 va = a.direction === 'recette' ? a.grant : (paidByAgreement.get(a.id) ?? 0)
                 vb = b.direction === 'recette' ? b.grant : (paidByAgreement.get(b.id) ?? 0)
             }
+            else if (sortKey === 'detail')  {
+                va = a.budget_detail_id ? (budgetDetailMap.get(a.budget_detail_id)?.title ?? '') : ''
+                vb = b.budget_detail_id ? (budgetDetailMap.get(b.budget_detail_id)?.title ?? '') : ''
+            }
             else if (sortKey === 'direction') { va = a.direction; vb = b.direction }
             else if (sortKey === 'status')  { va = statusMap.get(a.status_id)?.label ?? ''; vb = statusMap.get(b.status_id)?.label ?? '' }
             else if (sortKey === 'signed')  { va = a.signed_date ?? ''; vb = b.signed_date ?? '' }
             const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb), 'fr', { sensitivity: 'base' })
             return sortDir === 'asc' ? cmp : -cmp
         })
-    }, [filtered, sortKey, sortDir, partnerMap, projectMap, statusMap, paidByAgreement])
+    }, [filtered, sortKey, sortDir, partnerMap, projectMap, statusMap, paidByAgreement, budgetDetailMap])
 
     function toggleSort(key: string) {
         if (sortKey === key) {
@@ -1792,6 +1933,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                             </TableHead>
                             {([
                                 { key: 'title',   label: 'Intitulé',        className: 'h-8' },
+                                { key: 'description',   label: 'Description',        className: 'h-8' },
                                 { key: 'partner', label: 'Partenaire',      className: 'h-8 w-36' },
                                 { key: 'project', label: 'Projet',          className: 'h-8 w-36' },
                                 { key: 'detail',  label: 'Ligne budgétaire',className: 'h-8 w-40' },
@@ -1823,6 +1965,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                 <TableCell className="px-3" />
                                 <TableCell>
                                     <Input autoFocus value={newDraft.title ?? ''} onChange={ev => setNewDraft(d => ({ ...d, title: ev.target.value }))} placeholder="Intitulé" className="h-7 text-xs" />
+                                </TableCell>
+                                <TableCell>
+                                    <Input value={newDraft.description ?? ''} onChange={ev => setNewDraft(d => ({ ...d, description: ev.target.value }))} placeholder="Déscription" className="h-7 text-xs" />
                                 </TableCell>
                                 <TableCell>
                                     <SearchInput
@@ -1890,7 +2035,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                         )}
                         {filtered.length === 0 && !isAdding ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-8">
+                                <TableCell colSpan={12} className="text-center text-sm text-muted-foreground py-8">
                                     Aucune convention trouvée
                                 </TableCell>
                             </TableRow>
@@ -1907,6 +2052,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     </TableCell>
                                     <TableCell>
                                         <Input value={draft.title ?? ''} onChange={ev => setDraft(d => ({ ...d, title: ev.target.value }))} className="h-7 text-xs" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Input value={draft.description ?? ''} onChange={ev => setDraft(d => ({ ...d, description: ev.target.value }))} className="h-7 text-xs" />
                                     </TableCell>
                                     <TableCell>
                                         <SearchInput
@@ -2001,7 +2149,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
             </div>
             {filtered.length > 0 && (
                 <p className="text-xs text-muted-foreground text-right">
-                    {filtered.length} convention{filtered.length > 1 ? 's' : ''} · {formatAmount(sumGrant(filtered, 'depense'))} versés · {formatAmount(sumGrant(filtered, 'recette'))} reçus
+                    {filtered.length} convention{filtered.length > 1 ? 's' : ''} · {formatAmount(sumGrant(filtered, 'depense'))} engagés · {formatAmount(sumGrant(filtered, 'recette'))} reçus
                 </p>
             )}
 
@@ -2603,6 +2751,7 @@ export default function Finance() {
     const [statuses, setStatuses] = useState<Status[]>([])
     const [loading, setLoading] = useState(true)
     const [viewMode, setViewMode] = useState<ViewMode>('depenses')
+    const [allocations, setAllocations] = useState<ProjectExpanse[]>([])
 
     useEffect(() => {
         Promise.all([
@@ -2615,13 +2764,15 @@ export default function Finance() {
             getFinancialAgreements(),
             getPartners(),
             getStatuses(),
-        ]).then(([prog, exp, cats, details, sups, projs, agrs, parts, stats]) => {
+            getProjectExpanses()
+        ]).then(([prog, exp, cats, details, sups, projs, agrs, parts, stats, pe]) => {
             setProgram((prog as Program[])[0] ?? null)
             setExpanses(exp)
             setBudgetCategories(cats)
             setBudgetDetails(details)
             setSuppliers(sups)
             setProjects(projs)
+            setAllocations(pe)
             // Copie : en mock, getFinancialAgreements rend le tableau source et
             // addAgreement y pousse. Sans elle, la première convention créée
             // entre deux fois dans la liste.
@@ -2632,7 +2783,11 @@ export default function Finance() {
         })
     }, [])
 
-    if (loading) {
+    const handleAllocationsChange = useCallback((expanseId: number, rows: ProjectExpanse[]) => {
+        setAllocations(prev => [...prev.filter(a => a.expanse_id !== expanseId), ...rows])
+    }, [])
+
+     if (loading) {
         return <div className="p-6 flex items-center justify-center text-sm text-muted-foreground">Chargement…</div>
     }
 
@@ -2673,6 +2828,8 @@ export default function Finance() {
                     setSuppliers={setSuppliers}
                     projects={projects}
                     agreements={agreements}
+                    projectExpanses={allocations}
+                    onAllocationsChange={handleAllocationsChange}
                 />
             )}
 

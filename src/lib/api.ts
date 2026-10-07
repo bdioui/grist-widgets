@@ -1,4 +1,4 @@
-import { fetchTable, updateRecord, updateRecords, addRecord, addRecords, deleteRecord, replaceRecords } from '@/lib/grist'
+import { fetchTable, updateRecord, updateRecords, addRecord, addRecords, deleteRecord, replaceRecords, deleteRecords } from '@/lib/grist'
 import { SIFAC_OWNED_COLUMNS } from '@/lib/sifac/reconcile'
 import type { Reconciliation } from '@/lib/sifac/reconcile'
 import {
@@ -13,7 +13,7 @@ import {
     mockTimeEntry,
     mockFormations, mockProjectFormations, mockProjectAttachments,
     mockProgram, mockExpanses, mockSuppliers, mockSifacLines,
-    mockPublications, mockPublicationMembers,
+    mockPublications, mockPublicationMembers, mockProjectExpanses
 } from '@/lib/mock'
 import {
     normalizeStatuses, normalizeCategories, normalizeMembers, normalizePartners,
@@ -29,7 +29,7 @@ import {
     normalizeTimeEntry,
     normalizeFormations, normalizeProjectFormations, normalizeProjectAttachments,
     normalizeProgram, normalizeExpanse, normalizeSuplier, normalizeSifacLine,
-    normalizePublications, normalizePublicationMembers,
+    normalizePublications, normalizePublicationMembers, normalizeProjectExpanse
 } from '@/lib/normalize'
 import type {
     Status, Category, Member, Partner, Axis, Lab, PartnerLab, LabCardFull,
@@ -46,6 +46,7 @@ import type {
     Supplier,
     Publication,
     PublicationMember,
+    ProjectExpanse, Allocation
 } from '@/lib/types'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
@@ -94,6 +95,7 @@ const T = {
     supplier: 'Supplier',
     publication: 'Publication',
     publication_member: 'Publication_member',
+    project_expanse: 'Project_expanse'
 }
 
 // --- Tables de référence ---
@@ -119,6 +121,7 @@ export async function getPartnerLabs(): Promise<PartnerLab[]> { return USE_MOCK 
 
 // Budget & expanses
 export async function getExpanses(): Promise<Expanse[]> { return USE_MOCK ? mockExpanses : normalizeExpanse(await fetchTable(T.expanse)) }
+export async function getProjectExpanses(): Promise<ProjectExpanse[]> { return USE_MOCK ? mockProjectExpanses : normalizeProjectExpanse(await fetchTable(T.project_expanse)) }
 export async function getSupliers(): Promise<Supplier[]> { return USE_MOCK ? mockSuppliers : normalizeSuplier(await fetchTable(T.supplier)) }
 export async function getSifacLines(): Promise<SifacLine[]> { return USE_MOCK ? mockSifacLines : normalizeSifacLine(await fetchTable(T.sifac_line)) }
 
@@ -141,8 +144,20 @@ export async function deleteExpanse(expanseId: number): Promise<void> {
         if (idx !== -1) {
             mockExpanses.splice(idx, 1)
         }
+
+        const kept = mockProjectExpanses.filter(pe => pe.expanse_id !== expanseId) // Cascade deleting links
+        mockProjectExpanses.splice(0, mockProjectExpanses.length, ...kept)
+        return
     }
-    await deleteRecord(T.expanse, expanseId)
+
+    const existingRows = normalizeProjectExpanse(await (fetchTable(T.project_expanse))) // Cascade deleting links
+    const idsToDelete = existingRows.filter(pe => pe.expanse_id === expanseId).map(pe => pe.id)
+
+    await deleteRecords(T.project_expanse, idsToDelete)
+
+    await deleteRecord(T.expanse, expanseId) // deleting records
+
+    return
 }
 
 export async function updateExpanse(id: number, patch: Partial<Expanse>): Promise<void> {
@@ -152,6 +167,67 @@ export async function updateExpanse(id: number, patch: Partial<Expanse>): Promis
         return
     }
     await updateRecord(T.expanse, id, patch)
+}
+
+
+export async function linkProjectExpanse(data: Omit<ProjectExpanse, "id">): Promise<ProjectExpanse> {
+    if (USE_MOCK) {
+        if (mockProjectExpanses.some(pe => pe.expanse_id === data.expanse_id && pe.project_id === data.project_id))
+            throw new Error('Cette dépense est déjà rattachée à ce projet')
+
+        const id = Math.max(0, ...mockProjectExpanses.map(e => e.id)) + 1
+        const project_expanse = { id, ...data }
+        mockProjectExpanses.push(project_expanse)
+        return project_expanse
+    }
+
+    const records = normalizeProjectExpanse(await fetchTable(T.project_expanse))
+    if (records.some(record => record.expanse_id === data.expanse_id && record.project_id === data.project_id))
+        throw new Error('Cette dépense est déjà rattachée à ce projet')
+
+    const id = await addRecord(T.project_expanse, data)
+    return { id, ...data }
+}
+
+export async function unlinkProjectExpanse(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const idx = mockProjectExpanses.findIndex(pe => pe.id === id)
+        if (idx !== -1) {
+            mockProjectExpanses.splice(idx, 1)
+        }
+        return
+    }
+    await deleteRecord(T.project_expanse, id)
+}
+
+export async function setExpanseAllocations(expanseId: number, parts: Allocation[]): Promise<ProjectExpanse[]> { // mets à jour les allocations d'une dépense. 
+    if (new Set(parts.map(p => p.project_id)).size !== parts.length) {
+        throw new Error('Un projet ne peut apparaître qu\'une fois dans la répartition')
+    }
+
+    if (USE_MOCK) {
+        const kept = mockProjectExpanses.filter(pe => pe.expanse_id !== expanseId)
+        mockProjectExpanses.splice(0, mockProjectExpanses.length, ...kept)
+
+        const created: ProjectExpanse[] = []
+
+        for (const p of parts) {
+            const id = Math.max(0, ...mockProjectExpanses.map(pe => pe.id)) + 1 // create new
+            const part: ProjectExpanse = { id: id, project_id: p.project_id, amount: p.amount, expanse_id: expanseId }
+            mockProjectExpanses.push(part)
+            created.push(part)
+        }
+        return created
+    }
+
+    const existingRows = normalizeProjectExpanse(await (fetchTable(T.project_expanse)))
+    const idsToDelete = existingRows.filter(pe => pe.expanse_id === expanseId).map(pe => pe.id)
+
+
+    await replaceRecords(T.project_expanse, idsToDelete, parts.map(p => ({ ...p, expanse_id: expanseId })), ['expanse_id', 'project_id', 'amount'])
+    const created = normalizeProjectExpanse(await (fetchTable(T.project_expanse))).filter(pe => pe.expanse_id === expanseId)
+
+    return created
 }
 
 // Lignes SIFAC
@@ -1045,9 +1121,18 @@ export async function deleteProject(id: number): Promise<void> {
     if (USE_MOCK) {
         const i = mockProjects.findIndex(p => p.id === id)
         if (i !== -1) mockProjects.splice(i, 1)
+
+        const kept = mockProjectExpanses.filter(pe => pe.project_id !== id) // Cascade deleting links
+        mockProjectExpanses.splice(0, mockProjectExpanses.length, ...kept)
         return
     }
+    const existingRows = normalizeProjectExpanse(await (fetchTable(T.project_expanse)))
+    const idsToDelete = existingRows.filter(pe => pe.project_id === id).map(pe => pe.id)
+
+    await deleteRecords(T.project_expanse, idsToDelete)
     await deleteRecord(T.project, id)
+
+    return
 }
 
 export async function getProjectMembers(projectId: number): Promise<ProjectMember[]> {
@@ -1543,8 +1628,8 @@ export async function getFormations(): Promise<Formation[]> {
     return USE_MOCK ? mockFormations : normalizeFormations(await fetchTable(T.formation))
 }
 
-export async function createFormation(data: { title: string; code: string; level: string; degree_type: string }): Promise<Formation> {
-    const full = { ...data, type: '', partner_id: null, formacode: '', rome: '', nsf: '', status: '', expiry_date: '', is_national: false }
+export async function createFormation(data: { title: string; code: string; level: string; degree_type: string, partner_id: number | null }): Promise<Formation> {
+    const full = { ...data, type: '', formacode: '', rome: '', nsf: '', status: '', expiry_date: '', is_national: false }
     if (USE_MOCK) {
         const id = Math.max(0, ...mockFormations.map(f => f.id)) + 1
         const f = { id, ...full }

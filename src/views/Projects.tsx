@@ -16,7 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle} from '@/components/ui/dialog'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Avatar, AvatarImage, AvatarFallback, AvatarGroup } from '@/components/ui/avatar'
+import { Avatar, AvatarImage, AvatarFallback, AvatarGroup, AvatarGroupCount } from '@/components/ui/avatar'
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
     DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem,
@@ -47,7 +47,7 @@ import {
     getAllProjectMembers,
     getFormations, getFormationsByProject, getProjectFormationLinks, addProjectFormation, removeProjectFormation,
     getProjectAttachments, addProjectAttachment, deleteProjectAttachment,
-    getExpanses, getSupliers, updateExpanse,
+    getExpanses, getSupliers,
     getBudgetCategories, getBudgetDetails,
     getPublicationsByProject, addPublication, updatePublication, deletePublication,
     getPublicationMembersByProject, addPublicationMember, deletePublicationMember,
@@ -58,14 +58,16 @@ import {
     getAllProjectActionCards,
     getAllProjectMilestones,
     updateActionCard, 
-    createFormation
+    createFormation,
+    getProjectExpanses, setExpanseAllocations
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard, type AgreementDirection, type ProjectActionCard } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard, type AgreementDirection, type ProjectActionCard, type ProjectExpanse } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
 import MemberSearchInput from '@/components/MemberSearchInput'
 import { ScrollableTabBar } from '@/components/ScrollableTabBar'
+import AllocationDialog from '../components/AllocationDialog'
 
 // --- Couleurs de statut ---
 
@@ -1262,13 +1264,15 @@ function ActionCardQuickCreateForm({ projectId, statuses, members, partners, onS
 }
 
 // --- Formulaire création rapide Formation ---
-function FormationQuickCreateForm({ projectId, onSaved, onCancel }: {
+function FormationQuickCreateForm({ projectId, onSaved, onCancel, partners }: {
     projectId: number
     onSaved: (f: Formation, link: ProjectFormation) => void
     onCancel: () => void
+    partners: Partner[]
 }) {
     const [title, setTitle] = useState('')
     const [level, setLevel] = useState('')
+    const [partner, setPartner] = useState<Partner | null>(null)
     const [submitting, setSubmitting] = useState(false)
     const LEVELS = [
         { niveau: 'Niveau 3', type: 'CAP' },
@@ -1284,7 +1288,7 @@ function FormationQuickCreateForm({ projectId, onSaved, onCancel }: {
         if (!title.trim()) return
         setSubmitting(true)
         try {
-            const f = await createFormation({ title, code: '', level, degree_type: degreeType })
+            const f = await createFormation({ title, code: '', level, degree_type: degreeType, partner_id: partner?.id ?? null})
             const link = await addProjectFormation(projectId, f.id)
             onSaved(f, link)
         } finally {
@@ -1297,6 +1301,15 @@ function FormationQuickCreateForm({ projectId, onSaved, onCancel }: {
             <div className="flex gap-2">
                 <Input value={title} onChange={e => setTitle(e.target.value)}
                     placeholder="Intitulé *" className="h-8 text-xs flex-1" autoFocus />
+            </div>
+            <div className="flex gap-2">
+                <SearchInput 
+                    data={partners}
+                    onSelect={setPartner}
+                    getLabel={p => p.name}
+                    value={partner?.name}
+                    placeholder="Partenaire…"
+                />
             </div>
             <div className="flex gap-2">
                 <Select value={level} onValueChange={setLevel}>
@@ -1465,6 +1478,7 @@ function PartnerQuickCreateForm({ projectRole: _projectRole, onSaved, onCancel }
 // --- Sheet détail projet ---
 
 export type ProjectDetailSheetProps = {
+    projects: Project[]
     project: ProjectFull | null
     open: boolean
     onClose: () => void
@@ -1476,7 +1490,6 @@ export type ProjectDetailSheetProps = {
     partners: Partner[]
     cardProjectPartners: ProjectPartnerFull[]
     finances: ProjectFinancials
-    onExpanseLinked: (e: Expanse) => void
     projectCalls: ProjectCall[]
     axes: Axis[]
     statuses: Status[]
@@ -1499,6 +1512,8 @@ export type ProjectDetailSheetProps = {
     allFormations: Formation[]
     onTodosChanged?: (cardId: number, lists: (ToDoList & { items: ToDoItem[] })[]) => void
     onMemberLinkChanged?: (cardId: number, links: MemberActionCard[]) => void
+    allocations: ProjectExpanse[]
+    onAllocationChange: (expanseId: number, rows: ProjectExpanse[]) => void
 }
 
 type detailViewMode = 'overview' | 'participants' | 'partners' | 'kpis' | 'publications' | 'formations' | 'tasks' | 'conventions' | 'budget' | 'files'
@@ -1542,7 +1557,7 @@ function SortableTab({ mode, label, icon, isActive, isEmpty, onActivate, onRemov
     )
 }
 
-export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementUpdated, onAgreementDeleted, onChangeProjectPartners, partners, cardProjectPartners, finances, onExpanseLinked, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged, onActionLinkAdded, onActionLinkRemoved}: ProjectDetailSheetProps) {
+export function ProjectDetailSheet({ projects, project, open, onClose, onUpdated, onDeleted, onAgreementAdded, onAgreementUpdated, onAgreementDeleted, onChangeProjectPartners, partners, cardProjectPartners, finances, projectCalls, axes, statuses, members, toDoProgress, memberLinks, projectTimes, axis, onMemberRemove, onOpen: _onOpen, onMemberCreated, onPartnerCreated, onTimeEntryAdded, onTimeEntryUpdated, onTimeEntryDeleted, allFormations, onTodosChanged, onMemberLinkChanged, onActionLinkAdded, onActionLinkRemoved, allocations, onAllocationChange}: ProjectDetailSheetProps) {
     const [agreements,   setAgreements]   = useState<AgreementFull[]>([])
     const [kpis, setKpis] = useState<Kpi[]>([])
     const [kpiEntries, setKpiEntries] = useState<KpiEntry[]>([])
@@ -1592,7 +1607,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [newAttachLabel, setNewAttachLabel] = useState('')
     const [newAttachUrl,   setNewAttachUrl]   = useState('')
     const [showAttachForm, setShowAttachForm] = useState(false)
-    const [projectExpanses, setProjectExpanses] = useState<Expanse[]>([])
     const [allExpanses, setAllExpanses] = useState<Expanse[]>([])
     const [expanseSuppliers, setExpanseSuppliers] = useState<Supplier[]>([])
     const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([])
@@ -1601,6 +1615,8 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     const [showLinkAgreement, setShowLinkAgreement] = useState(false)
     const [allAgreementsForLink, setAllAgreementsForLink] = useState<AgreementFull[]>([])
     const [loadingLinkAgreements, setLoadingLinkAgreements] = useState(false)
+    const [allocTarget, setAllocTarget] = useState<Pick<Expanse, 'id' | 'title' | 'amount'> | null>(null)
+    const onAllocate = useCallback((e: Expanse) => setAllocTarget({ id: e.id, title: e.title, amount: e.amount }), [])
     type TabDef = { mode: detailViewMode; label: string; icon: React.ReactNode }
     const ALL_OPTIONAL_TABS: TabDef[] = [
         { mode: 'participants', label: 'Membres',  icon: <Users size={13} /> },
@@ -1711,7 +1727,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                 setAttachments(attachments as ProjectAttachment[])
                 const allExp = expanses as Expanse[]
                 setAllExpanses(allExp)
-                setProjectExpanses(allExp.filter(e => e.project_id === project.id))
                 setExpanseSuppliers(suppliers as Supplier[])
                 setBudgetCategories(cats as BudgetCategory[])
                 setBudgetDetails(details as BudgetDetail[])
@@ -1732,7 +1747,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                 if (cardProjectPartners.length > 0) autoShow.push('partners')
                 if ((kpiEntries as KpiEntry[]).length > 0) autoShow.push('kpis')
                 if ((acs as ActionCardFull[]).length > 0) autoShow.push('tasks')
-                if ((expanses as Expanse[]).filter(e => e.project_id === project.id).length > 0) autoShow.push('budget')
+                if (projectParts.length > 0) autoShow.push('budget')
                 if ((agreements as AgreementFull[]).length > 0) autoShow.push('conventions')
                 if ((pubs as Publication[]).length > 0) autoShow.push('publications')
                 if ((formations as Formation[]).length > 0) autoShow.push('formations')
@@ -1747,6 +1762,24 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
             getActionCardsFull().then(setAllActionCards)
         }
     }, [showLinkCard])
+
+    const projectParts = useMemo(
+        () => allocations.filter(a => a.project_id === project?.id),
+        [allocations, project?.id]
+    )
+
+    const linkedIds = useMemo(
+        () => new Set(projectParts.map(p => p.expanse_id)),
+        [projectParts]
+    )
+
+    const projectLines = useMemo(() => {
+        const byId = new Map(allExpanses.map(e => [e.id, e]))
+        return projectParts.flatMap(part => {
+            const expanse = byId.get(part.expanse_id)
+            return expanse ? [{ expanse, part }] : []
+        })
+    }, [projectParts, allExpanses])
 
     function copyEmails() {
         const emails = selectedMembers
@@ -1875,12 +1908,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
         setProjectMembers(prev => prev.map(pm => pm.id === pmId ? { ...pm, participation_status_id: statusId ?? undefined } : pm))
     }
 
-    async function handleUnlinkExpanse(e: Expanse) {
-        await updateExpanse(e.id, {project_id : null})
-        setProjectExpanses(prev => prev.filter(expanse => expanse.id !== e.id))
-        onExpanseLinked({ ...e, project_id: null })
-    }
-
     if (!project) return null
 
     const linkedMemberIds = projectMembers.map(pm => pm.member_id)
@@ -1904,9 +1931,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
     // le programme s'engage à couvrir sans la subventionner.
     const totalBudget = outgoingAgreements.reduce((s, a) => s + a.budget, 0)
     const notCovered  = totalBudget - totalGrant
-    const operationalExpanses  = projectExpanses.filter(e => !e.agreement_id)
-    const reversementExpanses  = projectExpanses.filter(e => !!e.agreement_id)
-    const totalExpanses = projectExpanses.reduce((s, e) => s + e.amount, 0)
+    const operationalExpanses  = projectLines.filter(line => !line.expanse.agreement_id)
+    const reversementExpanses  = projectLines.filter(line => !!line.expanse.agreement_id)
+    const totalExpanses = projectLines.reduce((s, line) => s + line.part.amount, 0)
     const pStatus = statuses.find(s => s.id === project.status_id)
 
     const HEADER_GRADIENTS = [
@@ -2018,7 +2045,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                                 (mode === 'partners'     && cardProjectPartners.length === 0) ||
                                                 (mode === 'kpis'         && kpiEntries.length === 0)      ||
                                                 (mode === 'tasks'        && actionCards.length === 0)     ||
-                                                (mode === 'budget'       && projectExpanses.length === 0) ||
+                                                (mode === 'budget'       && projectLines.length === 0) ||
                                                 (mode === 'conventions'  && agreements.length === 0)      ||
                                                 (mode === 'publications' && publications.length === 0)     ||
                                                 (mode === 'formations'   && formations.length === 0)       ||
@@ -2796,6 +2823,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                         {showCreateFormation && (
                             <FormationQuickCreateForm 
                                 projectId={project.id}
+                                partners={partners}
                                 onSaved={(f, link) => {
                                     setFormations(prev => [...prev, f])
                                     setFormationLinks(prev => [...prev, link])
@@ -3110,7 +3138,6 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                         </div>
                     )}{/* fin files */}
 
-                    {/* ── JALONS ──────────────────────────────── */}
                     {/* ── BUDGET ──────────────────────────────── */}
                     {detailViewMode === "budget" && (
                         <div className="flex flex-col gap-6">
@@ -3119,7 +3146,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                      <section className='flex flex-col gap-3 bg-white border border-border rounded-xl p-4'>
                         <div className="flex items-center justify-between">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Dépenses {projectExpanses.length > 0 && <span>({projectExpanses.length})</span>}
+                                Dépenses {projectLines.length > 0 && <span>({projectLines.length})</span>}
                             </p>
                             {!showLinkExpanse && (
                                 <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 rounded-md text-muted-foreground" onClick={() => setShowLinkExpanse(true)}>
@@ -3132,13 +3159,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
                                 <p className="text-xs font-medium">Rattacher une dépense existante</p>
                                 <SearchInput
-                                    data={allExpanses.filter(e => e.project_id !== project.id)}
-                                    onSelect={async e => {
-                                        await updateExpanse(e.id, { project_id: project.id })
-                                        const linked = { ...e, project_id: project.id }
-                                        setProjectExpanses(prev => [...prev, linked])
-                                        setAllExpanses(prev => prev.map(x => x.id === e.id ? linked : x))
-                                        onExpanseLinked(linked)
+                                    data={allExpanses.filter(e => !linkedIds.has(e.id))}
+                                    onSelect={e => {
+                                        onAllocate(e)                    // ouvre la modale, ce projet est ajouté d'office
                                         setShowLinkExpanse(false)
                                     }}
                                     getLabel={e => e.title}
@@ -3155,7 +3178,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                             <div className="flex flex-col gap-2">
                                 {[1, 2].map(i => <Skeleton key={i} className="h-8 w-full rounded-lg" />)}
                             </div>
-                        ) : projectExpanses.length === 0 ? (
+                        ) : projectLines.length === 0 ? (
                             <p className="text-xs text-muted-foreground italic">Aucune dépense rattachée à ce projet</p>
                         ) : (
                             <>
@@ -3172,9 +3195,9 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {projectExpanses.map(e => {
-                                                const supplier = e.supplier_id ? expanseSuppliers.find(s => s.id === e.supplier_id) : null
-                                                const linkedAgreement = e.agreement_id ? agreements.find(a => a.id === e.agreement_id) : null
+                                            {projectLines.map(line => {
+                                                const supplier = line.expanse.supplier_id ? expanseSuppliers.find(s => s.id === line.expanse.supplier_id) : null
+                                                const linkedAgreement = line.expanse.agreement_id ? agreements.find(a => a.id === line.expanse.agreement_id) : null
                                                 const categoryColors: Record<string, string> = {
                                                     'Fonctionnement': '#ffedd5', 'Investissement': '#fef9c3',
                                                     'Personnel': '#dbeafe', 'Autre': '#f3f4f6',
@@ -3183,40 +3206,40 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                                     'Engagé': '#dbeafe', 'Livré': '#fef9c3', 'Payé': '#dcfce7',
                                                 }
                                                                 return (
-                                                    <TableRow key={e.id} className={`text-xs hover:bg-muted/30 ${linkedAgreement ? 'bg-blue-50/40' : ''}`}>
+                                                    <TableRow key={line.expanse.id} className={`text-xs hover:bg-muted/30 ${linkedAgreement ? 'bg-blue-50/40' : ''}`}>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
                                                                 <TableCell className="font-medium truncate max-w-[180px]">
                                                                     <div className="flex flex-col gap-0.5">
-                                                                        <span className="truncate">{e.title}</span>
+                                                                        <span className="truncate">{line.expanse.title}</span>
                                                                         {linkedAgreement && (
                                                                             <span className="text-[10px] text-blue-600 font-normal">↳ {linkedAgreement.title}</span>
                                                                         )}
                                                                     </div>
                                                                 </TableCell>
                                                             </TooltipTrigger>
-                                                            <TooltipContent>{e.title}</TooltipContent>
+                                                            <TooltipContent>{line.expanse.title}</TooltipContent>
                                                         </Tooltip>
                                                         <TableCell>
                                                             <div className="flex flex-col gap-0.5">
-                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: categoryColors[e.category] ?? '#f3f4f6' }}>
-                                                                    {e.category}
+                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: categoryColors[line.expanse.category] ?? '#f3f4f6' }}>
+                                                                    {line.expanse.category}
                                                                 </span>
-                                                                {e.label && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: '#f3f4f6' }}>{e.label}</span>}
+                                                                {line.expanse.label && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: '#f3f4f6' }}>{line.expanse.label}</span>}
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell className="text-right tabular-nums font-medium">{fmt(e.amount)}</TableCell>
+                                                        <TableCell className="text-right tabular-nums font-medium">{fmt(line.part.amount)}</TableCell>
                                                         <TableCell className="text-muted-foreground truncate">{supplier?.name ?? '—'}</TableCell>
                                                         <TableCell>
-                                                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: statusColors[e.status] ?? '#f3f4f6' }}>
-                                                                {e.status}
+                                                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: statusColors[line.expanse.status] ?? '#f3f4f6' }}>
+                                                                {line.expanse.status}
                                                             </span>
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground tabular-nums">
-                                                            {e.purchase_date ? new Date(e.purchase_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
+                                                            {line.expanse.purchase_date ? new Date(line.expanse.purchase_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground tabular-nums">
-                                                            <Button onClick={() => {handleUnlinkExpanse(e)}} variant="ghost" size="icon"><X size={12} /></Button>
+                                                            <Button onClick={() => onAllocate(line.expanse)} variant="ghost" size="icon"><Pencil size={12} /></Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 )
@@ -3228,13 +3251,13 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     {reversementExpanses.length > 0 && (
                                         <div className="flex justify-between text-muted-foreground">
                                             <span>Dépenses opérationnelles</span>
-                                            <span className="font-medium text-foreground">{fmt(operationalExpanses.reduce((s, e) => s + e.amount, 0))}</span>
+                                            <span className="font-medium text-foreground">{fmt(operationalExpanses.reduce((s, e) => s + e.part.amount, 0))}</span>
                                         </div>
                                     )}
                                     {reversementExpanses.length > 0 && (
                                         <div className="flex justify-between text-muted-foreground">
                                             <span>Reversements conventions</span>
-                                            <span className="font-medium text-foreground">{fmt(reversementExpanses.reduce((s, e) => s + e.amount, 0))}</span>
+                                            <span className="font-medium text-foreground">{fmt(reversementExpanses.reduce((s, e) => s + e.part.amount, 0))}</span>
                                         </div>
                                     )}
                                     <div className="flex justify-between font-medium text-foreground">
@@ -3290,7 +3313,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                         ) : (
                             <div className="flex flex-col gap-2">
                                 {agreements.map(a => {
-                                    const { paid, remaining } = agreementAmounts(a, projectExpanses)
+                                    const { paid, remaining } = agreementAmounts(a, allExpanses)
                                     return editingAgreement?.id === a.id ? (
                                         <AgreementForm
                                             key={a.id}
@@ -3380,7 +3403,7 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
                                     {reversementExpanses.length > 0 && (
                                         <div className="flex justify-between text-muted-foreground">
                                             <span className="italic">Dont versé (comptabilisé en dépenses)</span>
-                                            <span className="italic">{fmt(reversementExpanses.reduce((s, e) => s + e.amount, 0))}</span>
+                                            <span className="italic">{fmt(reversementExpanses.reduce((s, e) => s + e.part.amount, 0))}</span>
                                         </div>
                                     )}
                                     <div className="flex justify-between text-muted-foreground">
@@ -3439,6 +3462,21 @@ export function ProjectDetailSheet({ project, open, onClose, onUpdated, onDelete
             </DialogContent>
         </Dialog>
 
+        <AllocationDialog
+            open={allocTarget !== null}
+            expanse={allocTarget}
+            projects={projects}
+            initialParts={allocTarget
+                ? allocations.filter(a => a.expanse_id === allocTarget.id).map(a => ({ project_id: a.project_id, amount: a.amount }))
+                : []}
+            initialProjectId={project.id}        
+            onSave={async parts => {
+                const id = allocTarget!.id
+                const rows = await setExpanseAllocations(id, parts)
+                onAllocationChange(id, rows)
+            }}
+            onClose={() => setAllocTarget(null)}
+        />
 
         {/* Sheet détail ActionCard */}
         {selectedActionCard && (
@@ -3947,6 +3985,7 @@ export default function Projects() {
     const [memberActionCards, setMemberActionCards] = useState<MemberActionCard[]>([])
     const [projectPartners, setProjectPartners] = useState<ProjectPartnerFull[]>([])
     const [allExpanses, setAllExpanses] = useState<Expanse[]>([])
+    const [allocations, setAllocations] = useState<ProjectExpanse[]>([])
 
 
     // Filtres
@@ -3979,7 +4018,7 @@ export default function Projects() {
 
     useEffect(() => { setViewDate(computeViewDate()) }, [ganttViewMode])
 
-    type SortKey = 'title' | 'call' | 'axis' | 'status' | 'budget' | 'start_date' | 'end_date'
+    type SortKey = 'title' | 'call' | 'axis' | 'status' | 'budget' | 'spent' | 'balance' | 'start_date' | 'end_date' | 'partner' | 'member'
     const [sortKey,  setSortKey]  = useState<SortKey>('title')
     const [sortDir,  setSortDir]  = useState<'asc' | 'desc'>('asc')
 
@@ -4012,15 +4051,15 @@ export default function Projects() {
     }
 
     useEffect(() => {
-        Promise.all([getProjectCalls(), getProjects(), getActionCardsFull(), getAllProjectActionCards(),  getAllProjectMilestones(),getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards(), getProjectPartners(), getExpanses()])
-            .then(([pcs, ps, ac, pac, ms, axs, sts, pts, agrs, m, te, pm, formations, tdl, tdi, amac, pp, exp]) => {
+        Promise.all([getProjectCalls(), getProjects(), getActionCardsFull(), getAllProjectActionCards(),  getAllProjectMilestones(),getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards(), getProjectPartners(), getExpanses(), getProjectExpanses()])
+            .then(([pcs, ps, ac, pac, ms, axs, sts, pts, agrs, m, te, pm, formations, tdl, tdi, amac, pp, exp, pe]) => {
                 const axisMap = new Map((axs as Axis[]).map(a => [a.id, a]))
 
                 const fullCalls: ProjectCallFull[] = (pcs as ProjectCall[]).map(pc => ({
                     ...pc,
                     axis: axisMap.get(pc.axis_id) ?? { id: 0, name: 'Inconnu', description: '' },
                 }))
-
+ 
                 const callMap = new Map(fullCalls.map(pc => [pc.id, pc]))
                 const fullProjects: ProjectFull[] = (ps as Project[]).map(p => ({
                     ...p,
@@ -4052,6 +4091,7 @@ export default function Projects() {
                     .map(p => ({ ...p, partner: partnerMap.get(p.partner_id) ?? FALLBACK_PARTNER }))
                 setProjectPartners(fullPartners)
                 setAllExpanses([...(exp as Expanse[])])
+                setAllocations(pe)
             })
             .finally(() => setLoading(false))
     }, [])
@@ -4068,8 +4108,8 @@ export default function Projects() {
     }
 
     const financialsByProject = useMemo(
-        () => computeFinancials(projects, projectPartners, allAgreements, allExpanses),
-        [projects, projectPartners, allAgreements, allExpanses]
+        () => computeFinancials(projects, projectPartners, allAgreements, allExpanses, allocations),
+        [projects, projectPartners, allAgreements, allExpanses, allocations]
     )
 
     const toDoProgress = useMemo(() => {
@@ -4090,9 +4130,12 @@ export default function Projects() {
             }       
         ,[toDoItems, toDoLists])
 
+    const memberMap = useMemo(()=> {
+        return new Map(members.map(m => [m.id, m]))
+    }, [members])
+
     const memberLinks = useMemo(() => { // clé : action_card_id — valeur : Member[] — je parcours : les liens
         const mlMap = new Map<number, Member[]>()
-        const memberMap = new Map(members.map(m => [m.id, m]))
         for (const link of memberActionCards) {
             const member = memberMap.get(link.member_id)
             if(!member) continue
@@ -4102,7 +4145,7 @@ export default function Projects() {
             mlMap.set(link.action_card_id, list)
         } 
         return mlMap
-    },[members, memberActionCards])
+    },[memberMap, memberActionCards])
 
     // Conventions enrichies par projet (pour les ProjectCards)
     const partnerMap = useMemo(
@@ -4122,6 +4165,26 @@ export default function Projects() {
         return acc
     }, [allAgreements, partnerMap])
 
+    const partnersByProject = useMemo(() => {
+        const acc = new Map<number, ProjectPartnerFull[]>()
+        for(const pp of projectPartners) {
+            const list = acc.get(pp.project_id) ?? []
+            list.push(pp)
+            acc.set(pp.project_id, list)
+        }
+        return acc
+    }, [projectPartners])
+
+    const membersByProject = useMemo(() => {
+        const acc = new Map<number, ProjectMember[]>()
+        for(const pm of allProjectMembers){
+            const list = acc.get(pm.project_id) ?? []
+            list.push(pm)
+            acc.set(pm.project_id, list)
+        }
+        return acc
+    }, [allProjectMembers])
+
     // Filtres
 
     const filteredCalls = useMemo(() => projectCalls.filter(pc => {
@@ -4132,27 +4195,18 @@ export default function Projects() {
 
     const filteredProjects = useMemo(() => {
         const callIds = new Set(filteredCalls.map(pc => pc.id))
-        // membres par projet, construit une seule fois et seulement si le filtre membre est actif
-        const membersByProject = new Map<number, Set<number>>()
-        if (selectedMemberIds.length > 0) {
-            for (const pm of allProjectMembers) {
-                const set = membersByProject.get(pm.project_id) ?? new Set<number>()
-                set.add(pm.member_id)
-                membersByProject.set(pm.project_id, set)
-            }
-        }
         const q = search.trim().toLowerCase()
         return projects.filter(p => {
             if (!callIds.has(p.project_call_id)) return false
             if (selectedStatuses.length > 0 && !selectedStatuses.includes(p.status_id)) return false
             if (selectedMemberIds.length > 0) {
-                const ids = membersByProject.get(p.id)
-                if (!ids || !selectedMemberIds.some(id => ids.has(id))) return false
+                const pms = membersByProject.get(p.id)
+                if (!pms || !pms.some(pm => selectedMemberIds.includes(pm.member_id))) return false
             }
             if (q && !p.title.toLowerCase().includes(q)) return false
             return true
         })
-    }, [projects, filteredCalls, selectedStatuses, selectedMemberIds, allProjectMembers, search])
+    }, [projects, filteredCalls, selectedStatuses, selectedMemberIds, membersByProject, search])
 
     // Arbre du Gantt. Les enfants ne sont construits que pour les projets dépliés :
     // la lib ignore de toute façon ceux d'un projet replié.
@@ -4367,6 +4421,10 @@ export default function Projects() {
         if (a) setSelectedActionCard(a)
     }, [actionCards])
 
+    const handleAllocationChange = useCallback((expanseId: number, rows: ProjectExpanse[]) => {
+        setAllocations(prev => [...prev.filter(a => a.expanse_id !== expanseId), ...rows])
+    }, [])
+
     // Stats globales
     const activeAxisIds = [...new Set(filteredCalls.map(pc => pc.axis_id))]
     const activeAxes    = axes.filter(a => activeAxisIds.includes(a.id))
@@ -4533,6 +4591,9 @@ export default function Projects() {
                         </DropdownMenu>
                     )
                 })()}
+
+                {/* filtre Partenaire */}
+
 
                 <div className="ml-auto flex items-center gap-2 shrink-0">
                     {viewMode === "cards" && (
@@ -4826,14 +4887,35 @@ export default function Projects() {
                     // `a.budget` rangerait les lignes dans un ordre que l'écran dément.
                     if (sortKey === 'budget')     { va = (financialsByProject.get(a.id) ?? NO_FINANCIALS).budget
                                                     vb = (financialsByProject.get(b.id) ?? NO_FINANCIALS).budget }
+                    if (sortKey === 'spent')      { va = (financialsByProject.get(a.id) ?? NO_FINANCIALS).spent
+                                                    vb = (financialsByProject.get(b.id) ?? NO_FINANCIALS).spent }
+                    if (sortKey === 'balance')    { va = (financialsByProject.get(a.id) ?? NO_FINANCIALS).balance
+                                                    vb = (financialsByProject.get(b.id) ?? NO_FINANCIALS).balance }
                     if (sortKey === 'start_date') { va = a.start_date;                     vb = b.start_date }
                     if (sortKey === 'end_date')   { va = a.end_date;                       vb = b.end_date }
-                    if (va < vb) return sortDir === 'asc' ? -1 : 1
-                    if (va > vb) return sortDir === 'asc' ? 1 : -1
-                    return 0
+                    if (sortKey === 'partner')    { va = partnersByProject.get(a.id)?.length ?? 0
+                                                    vb = partnersByProject.get(b.id)?.length ?? 0 }
+                    if (sortKey === 'member')     { va = membersByProject.get(a.id)?.length ?? 0
+                                                    vb = membersByProject.get(b.id)?.length ?? 0 }
+                    // Même comparateur que Finance : les chaînes passent par localeCompare,
+                    // sinon « Zèbre » se range avant « école » (ordre des codes de caractère).
+                    const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb), 'fr', { sensitivity: 'base' })
+                    return sortDir === 'asc' ? cmp : -cmp
                 })
 
                 const allSelected = sorted.length > 0 && sorted.every(p => selectedProjects.find(sp => sp.id === p.id))
+
+                const totals = { budget: 0, spent: 0, balance: 0 }
+                const partnerIds = new Set<number>()
+                const memberIds = new Set<number>()
+                for (const p of sorted) {
+                    const f = financialsByProject.get(p.id) ?? NO_FINANCIALS
+                    totals.budget  += f.budget
+                    totals.spent   += f.spent
+                    totals.balance += f.balance
+                    for (const pp of partnersByProject.get(p.id) ?? []) partnerIds.add(pp.partner_id)
+                    for (const pm of membersByProject.get(p.id) ?? []) memberIds.add(pm.member_id)
+                }
 
                 function SortIcon({ col }: { col: SortKey }) {
                     if (sortKey !== col) return <span className="ml-1 text-muted-foreground/40">↕</span>
@@ -4875,13 +4957,23 @@ export default function Projects() {
                                         <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort('budget')}>
                                             Recettes <SortIcon col="budget" />
                                         </TableHead>
-                                        <TableHead className="text-right">Dépenses</TableHead>
-                                        <TableHead className="text-right">Solde</TableHead>
+                                        <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort('spent')}>
+                                            Dépenses <SortIcon col="spent" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort('balance')}>
+                                            Solde <SortIcon col="balance" />
+                                        </TableHead>
                                         <TableHead className="cursor-pointer select-none" onClick={() => handleSort('start_date')}>
                                             Début <SortIcon col="start_date" />
                                         </TableHead>
                                         <TableHead className="cursor-pointer select-none" onClick={() => handleSort('end_date')}>
                                             Fin <SortIcon col="end_date" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('partner')}>
+                                            Partenaires <SortIcon col="partner" />
+                                        </TableHead>
+                                        <TableHead className="cursor-pointer select-none" onClick={() => handleSort('member')}>
+                                            Membres <SortIcon col="member" />
                                         </TableHead>
                                         <TableHead className="w-16" />
                                     </TableRow>
@@ -4889,7 +4981,7 @@ export default function Projects() {
                                 <TableBody>
                                     {sorted.length === 0 && (
                                         <TableRow>
-                                            <TableCell colSpan={11} className="text-center text-muted-foreground py-12 italic">
+                                            <TableCell colSpan={13} className="text-center text-muted-foreground py-12 italic">
                                                 Aucun projet correspondant aux filtres
                                             </TableCell>
                                         </TableRow>
@@ -4943,10 +5035,94 @@ export default function Projects() {
                                                 <TableCell className="text-muted-foreground text-xs">
                                                     {formatDate(p.end_date) ?? '—'}
                                                 </TableCell>
+                                                <TableCell className="text-center text-muted-foreground text-xs">
+                                                    {(() => {
+                                                        const pps = partnersByProject.get(p.id) ?? []
+                                                        if(pps.length === 0) return <span className="text-muted-foreground">—</span>
+                                                        return(
+                                                            <AvatarGroup>
+                                                                {pps.slice(0, 4).map(pp => {
+                                                                    const p = partnerMap.get(pp.partner_id)
+                                                                    if (!p) return null
+                                                                    return (
+                                                                        <Tooltip key={pp.id}>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Avatar className="h-6 w-6">
+                                                                                    <AvatarImage src={p.logo} alt={`${p.name}`} />
+                                                                                    <AvatarFallback className="text-[10px]">{p.name[0]}{p.name[1]}</AvatarFallback>
+                                                                                </Avatar>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>{p.name}</TooltipContent>
+                                                                        </Tooltip>
+                                                                    )
+                                                                })}
+                                                                {pps.length > 4 && (
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <AvatarGroupCount className="h-6 w-6 text-[10px] border border-border">
+                                                                                +{pps.length - 4}
+                                                                            </AvatarGroupCount>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent>
+                                                                            <div className="flex flex-col gap-0.5">
+                                                                                {pps.slice(4).map(pp => {
+                                                                                    const p = partnerMap.get(pp.partner_id)
+                                                                                    return p ? <span key={p.id}>{p.name}</span> : null
+                                                                                })}
+                                                                            </div>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                )}
+                                                            </AvatarGroup>
+                                                        )
+                                                    })()}
+                                                </TableCell>
+                                                <TableCell className="text-center text-muted-foreground text-xs">
+                                                    {(() => {
+                                                        const pms = membersByProject.get(p.id) ?? []
+                                                        if (pms.length === 0) return <span className="text-muted-foreground">—</span>
+                                                        return (
+                                                            <AvatarGroup>
+                                                                {pms.slice(0, 4).map(pm => {
+                                                                    const m = memberMap.get(pm.member_id)
+                                                                    if (!m) return null
+                                                                    return (
+                                                                        <Tooltip key={pm.id}>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Avatar className="h-6 w-6">
+                                                                                    <AvatarImage src={m.profile_image} alt={`${m.first_name} ${m.last_name}`} />
+                                                                                    <AvatarFallback className="text-[10px]">{m.first_name[0]}{m.last_name[0]}</AvatarFallback>
+                                                                                </Avatar>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>{m.first_name} {m.last_name}</TooltipContent>
+                                                                        </Tooltip>
+                                                                    )
+                                                                })}
+                                                                {pms.length > 4 && (
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <AvatarGroupCount className="h-6 w-6 text-[10px] border border-border">
+                                                                                +{pms.length - 4}
+                                                                            </AvatarGroupCount>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent>
+                                                                            <div className="flex flex-col gap-0.5">
+                                                                                {pms.slice(4).map(pm => {
+                                                                                    const m = memberMap.get(pm.member_id)
+                                                                                    return m ? <span key={pm.id}>{m.first_name} {m.last_name}</span> : null
+                                                                                })}
+                                                                            </div>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                )}
+                                                            </AvatarGroup>
+                                                        )
+                                                    })()}
+                                                </TableCell>
                                                 <TableCell onClick={e => e.stopPropagation()}>
                                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                                                         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md"
-                                                            onClick={() => { setSelectedProject(p); setProjectSheetOpen(true) }}>
+                                                            onClick={() => { setSelectedProject(p); setDetailOpen(true) }}>
                                                             <Pencil size={13} />
                                                         </Button>
                                                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive rounded-md"
@@ -4959,6 +5135,19 @@ export default function Projects() {
                                         )
                                     })}
                                 </TableBody>
+                                <TableFooter>
+                                    <TableRow className='text-muted-foreground'>
+                                        <TableCell colSpan={2}>Total ({sorted.length} projets)</TableCell>
+                                        <TableCell colSpan={3} />
+                                        <TableCell className="text-right tabular-nums py-4">{fmt(totals.budget)}</TableCell>
+                                        <TableCell className="text-right tabular-nums">{fmt(totals.spent)}</TableCell>
+                                        <TableCell className="text-right tabular-nums">{fmt(totals.balance)}</TableCell>
+                                        <TableCell colSpan={2} />
+                                        <TableCell className="text-center">{partnerIds.size}</TableCell>
+                                        <TableCell className="text-center">{memberIds.size}</TableCell>
+                                        <TableCell />
+                                    </TableRow>
+                                </TableFooter>
                             </Table>
                         )}
 
@@ -4990,10 +5179,16 @@ export default function Projects() {
                                                     // Le même calcul qu'à l'écran : l'export ne refait pas ses totaux.
                                                     const f = financialsByProject.get(p.id) ?? NO_FINANCIALS
                                                     const st = statusMap.get(p.status_id)?.label ?? ''
+                                                    const partners = (partnersByProject.get(p.id) ?? []).map(pp => pp.partner.name).join(', ')
+                                                    const pms = (membersByProject.get(p.id) ?? [])
+                                                        .map(pm => memberMap.get(pm.member_id))
+                                                        .filter((m): m is Member => !!m)
+                                                        .map(m => `${m.first_name} ${m.last_name}`)
+                                                        .join(', ')
                                                     return [p.title, p.projectCall.title, p.projectCall.axis.name, st,
                                                         String(f.budget), String(f.selfFinanced), String(f.cofinanced),
                                                         String(f.spent), String(f.granted), String(f.direct), String(f.balance),
-                                                        p.start_date, p.end_date]
+                                                        p.start_date, p.end_date, partners, pms]
                                                 })
                                             )}>
                                             <FileDown size={13} /> Exporter en CSV
@@ -5127,6 +5322,7 @@ export default function Projects() {
 
             <ProjectDetailSheet
                 open={detailOpen}
+                projects={projects}
                 project={selectedProject}
                 onClose={() => { setDetailOpen(false); setSelectedProject(null) }}
                 onUpdated={handleProjectUpdated}
@@ -5158,7 +5354,8 @@ export default function Projects() {
                 onActionLinkRemoved={linkId => setActionLinks(prev => prev.filter(l => l.id !== linkId))}
                 onMemberLinkChanged={onMemberLinkChanged}
                 finances={(selectedProject && financialsByProject.get(selectedProject.id)) ?? NO_FINANCIALS}
-                onExpanseLinked={e => setAllExpanses(prev => prev.map(x => x.id === e.id ? e : x))}
+                allocations={allocations}
+                onAllocationChange={handleAllocationChange}
             />
         </div>
     )

@@ -1,13 +1,13 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import {
     getProjectCalls, getAxes, getStatuses, getPartners,
     getMembersFull, getFormations, getTimeEntries, getProjectPartners,
-    getFinancialAgreements, getExpanses,
+    getFinancialAgreements, getExpanses, getProjectExpanses, getProjects
 } from '@/lib/api'
-import type { Project, ProjectCall, Axis, Status, Partner, Formation, TimeEntry, MemberFull, ActionCardFull, ProjectPartner, FinancialAgreement, Expanse } from '@/lib/types'
+import type { Project, ProjectCall, Axis, Status, Partner, Formation, TimeEntry, MemberFull, ActionCardFull, ProjectPartner, FinancialAgreement, Expanse, ProjectExpanse } from '@/lib/types'
 import type { ProjectFull, ProjectCallFull, ProjectPartnerFull } from '@/views/Projects'
 import { FALLBACK_PARTNER } from '@/lib/constants'
-import { computeFinancials, NO_FINANCIALS, type ProjectFinancials } from '@/lib/utils'
+import { computeFinancials, NO_FINANCIALS } from '@/lib/utils'
 import type { ActionCardData } from '@/views/actions/ActionCard'
 
 const ProjectDetailSheetLazy = lazy(() =>
@@ -29,10 +29,18 @@ type ProjectRefData = {
     members:         MemberFull[]
     formations:      Formation[]
     times:           TimeEntry[]
-    finances:        ProjectFinancials
+    projects:        Project[]
+    // Toute la répartition, pas seulement celle de ce projet : la modale doit voir les
+    // parts des autres projets, sinon elle les écraserait en enregistrant.
+    allocations:     ProjectExpanse[]
+    // Entrées du calcul des finances. Le résultat n'est plus stocké : il se recalcule
+    // quand la répartition change.
+    rawPartners:     ProjectPartner[]
+    agreements:      FinancialAgreement[]
+    expanses:        Expanse[]
 }
 
-export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { project: Project; open: boolean; onClose: () => void; onUpdated?: (p: Project) => void }) {
+export function ProjectViewerSheet({ project, open, onClose, onUpdated }: {project: Project; open: boolean; onClose: () => void; onUpdated?: (p: Project) => void }) {
     const [refData, setRefData] = useState<ProjectRefData | null>(null)
 
     useEffect(() => {
@@ -49,7 +57,9 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
             getProjectPartners(),
             getFinancialAgreements(),
             getExpanses(),
-        ]).then(([calls, axes, statuses, partners, members, formations, times, pp, agrs, exp]) => {
+            getProjectExpanses(),
+            getProjects(),
+        ]).then(([calls, axes, statuses, partners, members, formations, times, pp, agrs, exp, pe, projs]) => {
             const axisMap = new Map((axes as Axis[]).map(a => [a.id, a]))
             const fullCalls: ProjectCallFull[] = (calls as ProjectCall[]).map(c => ({
                 ...c,
@@ -69,14 +79,6 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
                 .filter(p => p.project_id === project.id)
                 .map(p => ({ ...p, partner: partnerMap.get(p.partner_id) ?? FALLBACK_PARTNER }))
 
-            // Même arithmétique que la liste des projets, sur un seul projet.
-            const finances = computeFinancials(
-                [project],
-                (pp as ProjectPartner[]).filter(p => p.project_id === project.id),
-                (agrs as FinancialAgreement[]).filter(a => a.project_id === project.id),
-                (exp as Expanse[]).filter(e => e.project_id === project.id),
-            ).get(project.id) ?? NO_FINANCIALS
-
             setRefData({
                 projectFull,
                 projectCalls: fullCalls,
@@ -87,10 +89,28 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
                 members: members as MemberFull[],
                 formations: formations as Formation[],
                 times: times as TimeEntry[],
-                finances,
+                projects: projs as Project[],
+                allocations: pe as ProjectExpanse[],
+                rawPartners: (pp as ProjectPartner[]).filter(p => p.project_id === project.id),
+                agreements: (agrs as FinancialAgreement[]).filter(a => a.project_id === project.id),
+                expanses: exp as Expanse[],
             })
         })
     }, [open, project.id])
+
+    // Même arithmétique que la liste des projets, sur un seul projet. Recalculé quand la
+    // répartition change. Toutes les dépenses sont passées : computeFinancials n'y lit que
+    // celles qu'une part référence, et une dépense répartie n'a plus forcément de project_id.
+    const finances = useMemo(() => {
+        if (!refData) return NO_FINANCIALS
+        return computeFinancials(
+            [project],
+            refData.rawPartners,
+            refData.agreements,
+            refData.expanses,
+            refData.allocations.filter(a => a.project_id === project.id),
+        ).get(project.id) ?? NO_FINANCIALS
+    }, [refData, project])
 
     if (!refData) return null
 
@@ -99,6 +119,14 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
             <ProjectDetailSheetLazy
                 open={open}
                 project={refData.projectFull}
+                projects={refData.projects}
+                allocations={refData.allocations}
+                onAllocationChange={(expanseId, rows) =>
+                    setRefData(prev => prev && ({
+                        ...prev,
+                        allocations: [...prev.allocations.filter(a => a.expanse_id !== expanseId), ...rows],
+                    }))
+                }
                 onClose={onClose}
                 onUpdated={p => {
                     setRefData(prev => prev ? { ...prev, projectFull: { ...prev.projectFull, ...p } } : null)
@@ -120,8 +148,7 @@ export function ProjectViewerSheet({ project, open, onClose, onUpdated }: { proj
                 projectTimes={refData.times.filter(t => t.project_id === project.id)}
                 axis={refData.axes}
                 allFormations={refData.formations}
-                finances={refData.finances}
-                onExpanseLinked={() => {}}
+                finances={finances}
             />
         </Suspense>
     )

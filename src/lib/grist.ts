@@ -2,7 +2,7 @@
 // Ce fichier se contente de convertir le format colonnaire Grist en tableau de lignes brutes.
 // La normalisation des types est faite dans normalize.ts.
 
-type GristColumnarData = { id: number[]; [col: string]: unknown[] }
+type GristColumnarData = { id: number[];[col: string]: unknown[] }
 
 
 type ApplyResult = { retValues: number[] }
@@ -10,9 +10,9 @@ type ApplyResult = { retValues: number[] }
 type GristAPI = {
     ready: (options?: { requiredAccess?: string }) => void
     onRecords: (callback: (records: Record<string, unknown>[]) => void) => void
-    onRecord:  (callback: (record:  Record<string, unknown>) => void) => void
+    onRecord: (callback: (record: Record<string, unknown>) => void) => void
     docApi: {
-        fetchTable:       (tableId: string) => Promise<GristColumnarData>
+        fetchTable: (tableId: string) => Promise<GristColumnarData>
         applyUserActions: (actions: unknown[][]) => Promise<ApplyResult>
     }
 }
@@ -144,4 +144,10 @@ export async function updateRecords(
 // Supprime une ligne par son id
 export async function deleteRecord(tableId: string, rowId: number): Promise<void> {
     await getGrist().docApi.applyUserActions([['RemoveRecord', tableId, rowId]])
+}
+
+// Supprime plusieurs lignes en une seule transaction
+export async function deleteRecords(tableId: string, rowIds: number[]): Promise<void> {
+    if (rowIds.length === 0) return
+    await getGrist().docApi.applyUserActions([['BulkRemoveRecord', tableId, rowIds]])
 }

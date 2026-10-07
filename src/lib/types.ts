@@ -396,7 +396,6 @@ export type Expanse = {
     label: string
     budget_detail_id: number | null
     supplier_id: number | null
-    project_id: number | null
     agreement_id: number | null
     purchase_date: string
     delivery_date: string
@@ -409,7 +408,17 @@ export type Expanse = {
     amount_invoiced: number
     amount_paid: number
     amount: number
+    otp: string | null              // null = saisie manuelle
 }
+
+export type ProjectExpanse = {
+    id: number
+    project_id: number
+    expanse_id: number
+    amount: number
+}
+
+export type Allocation = { project_id: number, amount: number }
 
 export type SifacLine = {
     id: number

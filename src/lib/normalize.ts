@@ -25,7 +25,8 @@ import type {
     Supplier,
     Publication,
     PublicationMember,
-    SifacLine
+    SifacLine,
+    ProjectExpanse
 } from '@/lib/types'
 
 // --- Helpers ---
@@ -569,7 +570,6 @@ export function normalizeExpanse(rows: Record<string, unknown>[]): Expanse[] {
         supplier_id: nullable(r.supplier_id),
         category: str(r.category),
         label: str(r.label),
-        project_id: num(r.project_id),
         agreement_id: nullable(r.agreement_id),
         payment_date: str(r.payment_date),
         purchase_date: str(r.purchase_date),
@@ -580,7 +580,17 @@ export function normalizeExpanse(rows: Record<string, unknown>[]): Expanse[] {
         amount_invoiced: num(r.amount_invoiced),
         flux_id: nullableStr(r.flux_id),
         invoice_date: str(r.invoice_date),
-        source: r.source === 'sifac' ? 'sifac' : 'manual'
+        source: r.source === 'sifac' ? 'sifac' : 'manual',
+        otp: nullableStr(r.otp)
+    }))
+}
+
+export function normalizeProjectExpanse(rows: Record<string, unknown>[]): ProjectExpanse[] {
+    return rows.map(r => ({
+        id: num(r.id),
+        project_id: num(r.project_id),
+        expanse_id: num(r.expanse_id),
+        amount: num(r.amount)
     }))
 }
 

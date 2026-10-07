@@ -8,7 +8,7 @@ type GroupMeta = {
     primaryStyle?: CSSProperties
 }
 
-type SearchInputProps<T extends { id: number }> = {
+type SearchInputProps<T extends { id: number }> = { 
     data: T[]
     onSelect: (item: T) => void
     getLabel: (item: T) => string

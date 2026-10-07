@@ -11,8 +11,8 @@ import {ActionCardViewerSheet, ProjectViewerSheet} from './components/viewers'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Menu, Download, RefreshCw, UserCircle, LogOut, Bell } from 'lucide-react'
-import { type MemberFull, type Project, type ProjectMember, type ActionCardFull, type Comment, type FinancialAgreement, type ProjectMilestone, type Expanse, type MemberActionCard } from '@/lib/types'
-import { getMembersFull, getProjects, getActionCardsFull, getAllProjectMembers, getAllMemberActionCards, getComments, getFinancialAgreements, getAllProjectMilestones, getExpanses } from '@/lib/api'
+import { type MemberFull, type Project, type ProjectMember, type ActionCardFull, type Comment, type FinancialAgreement, type ProjectMilestone, type Expanse, type MemberActionCard, type ProjectExpanse } from '@/lib/types'
+import { getMembersFull, getProjects, getActionCardsFull, getAllProjectMembers, getAllMemberActionCards, getComments, getFinancialAgreements, getAllProjectMilestones, getExpanses, getProjectExpanses } from '@/lib/api'
 import { UserContext } from '@/lib/userContext'
 import { Toaster } from 'sonner'
 import ExportModal from '@/components/ExportModal'
@@ -47,13 +47,14 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [showProfilePicker, setShowProfilePicker] = useState(false)
   const [profileSearch, setProfileSearch] = useState('')
+  const [allocations, setAllocations] = useState<ProjectExpanse[]>([])
 
   useEffect(() => {
     Promise.all([
       getMembersFull(), getProjects(), getActionCardsFull(),
       getAllProjectMembers(), getAllMemberActionCards(),
-      getComments(), getFinancialAgreements(), getAllProjectMilestones(), getExpanses(),
-    ]).then(([members, projects, actions, projectsMembers, actionMembers, comments, agreements, milestones, expanses]) => {
+      getComments(), getFinancialAgreements(), getAllProjectMilestones(), getExpanses(), getProjectExpanses()
+    ]).then(([members, projects, actions, projectsMembers, actionMembers, comments, agreements, milestones, expanses, pe]) => {
       setAllMembers(members)
       setProjects(projects)
       setProjectMembers(projectsMembers)
@@ -63,6 +64,7 @@ export default function App() {
       setAgreements(agreements)
       setMilestones(milestones)
       setExpanses(expanses)
+      setAllocations(pe)
       const savedId = localStorage.getItem(STORAGE_KEY)
       if (savedId) {
         const match = members.find(m => m.id === Number(savedId))
@@ -132,7 +134,7 @@ export default function App() {
     const budgetAlerts: AlertItem[] = projects
       .filter(p => memberProjectIds.has(p.id) && p.budget)
       .filter(p => {
-        const spent = expanses.filter(e => e.project_id === p.id).reduce((s, e) => s + e.amount, 0)
+        const spent = allocations.filter(a => a.project_id === p.id).reduce((s, a) => s + a.amount, 0)
         return spent > p.budget
       })
       .map(p => ({ id: p.id, type: 'budget', title: `Budget dépassé : ${p.title}`, daysLeft: 0, seen: seenIds.has(`budget-${p.id}`) }))
@@ -144,7 +146,7 @@ export default function App() {
     if (currentMember && actions.length > 0) {
         checkAndCreateAlerts()
     }
-  }, [currentMember, actions, comments, milestones, agreements, expanses])
+  }, [currentMember, actions, comments, milestones, agreements, expanses, allocations])
 
   function selectMember(member: MemberFull) {
     setCurrentMember(member)

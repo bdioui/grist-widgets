@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import type { ToDoItem, ToDoList, MemberActionCard, ProjectPartner, FinancialAgreement, Expanse, AgreementDirection } from './types'
+import type { ToDoItem, ToDoList, MemberActionCard, ProjectPartner, FinancialAgreement, Expanse, AgreementDirection, ProjectExpanse } from './types'
 import { WORKING_ROLES, PARTNER_ROLE_DIRECTION } from '../lib/constants'
 
 export function cn(...inputs: ClassValue[]) {
@@ -30,12 +30,12 @@ export function exportToCsv(filename: string, headers: string[], rows: (string |
 // `balance` est un vrai solde.
 export type ProjectFinancials = {
     selfFinanced: number
-    cofinanced:   number
-    budget:       number
-    granted:      number
-    direct:       number
-    spent:        number
-    balance:      number
+    cofinanced: number
+    budget: number
+    granted: number
+    direct: number
+    spent: number
+    balance: number
 }
 
 // Rendu quand un projet n'a encore aucune ligne financière.
@@ -50,10 +50,11 @@ export const NO_FINANCIALS: ProjectFinancials = {
 export function computeFinancials(
     // `budget` porte ici le financement propre, pas le total : c'est le seul
     // chiffre saisi à la main, le reste s'observe.
-    projects:        { id: number; budget: number }[],
+    projects: { id: number; budget: number }[],
     projectPartners: ProjectPartner[],
-    agreements:      FinancialAgreement[],
-    expanses:        Expanse[],
+    agreements: FinancialAgreement[],
+    expanses: Expanse[],
+    allocations: ProjectExpanse[]
 ): Map<number, ProjectFinancials> {
     const totals = new Map<number, ProjectFinancials>()
     for (const p of projects) totals.set(p.id, { ...NO_FINANCIALS, selfFinanced: p.budget })
@@ -81,7 +82,7 @@ export function computeFinancials(
         const f = totals.get(a.project_id)
         if (!f) continue
         if (a.direction === 'recette') f.cofinanced += a.grant
-        else                           f.granted    += paidByAgreement.get(a.id) ?? 0
+        else f.granted += paidByAgreement.get(a.id) ?? 0
         settled.add(`${a.project_id}:${a.partner_id}:${a.direction}`)
     }
 
@@ -94,21 +95,23 @@ export function computeFinancials(
         const f = totals.get(pp.project_id)
         if (!f) continue
         if (direction === 'recette') f.cofinanced += pp.amount ?? 0
-        else                         f.granted    += pp.amount ?? 0
+        else f.granted += pp.amount ?? 0
     }
 
-    // Une dépense rattachée à une convention n'est que le versement d'une
-    // subvention déjà comptée ; la compter deux fois gonflerait le total.
-    for (const e of expanses) {
-        if (!e.project_id) continue
-        if (e.agreement_id) continue
-        const f = totals.get(e.project_id)
-        if (f) f.direct += e.amount
+    // Une dépense répartie compte pour la part de chaque projet, pas pour son
+    // montant entier. Celle qui est rattachée à une convention n'est que le
+    // versement d'une subvention déjà comptée (granted) : on l'ignore ici.
+    const expanseById = new Map(expanses.map(e => [e.id, e]))
+    for (const part of allocations) {
+        const e = expanseById.get(part.expanse_id)
+        if (!e || e.agreement_id) continue        // part orpheline, ou reversement
+        const f = totals.get(part.project_id)
+        if (f) f.direct += part.amount
     }
 
     for (const f of totals.values()) {
-        f.budget  = f.selfFinanced + f.cofinanced
-        f.spent   = f.granted + f.direct
+        f.budget = f.selfFinanced + f.cofinanced
+        f.spent = f.granted + f.direct
         f.balance = f.budget - f.spent
     }
     return totals
@@ -150,6 +153,18 @@ export function agreementAmounts(
         .filter(e => e.agreement_id === agreement.id)
         .reduce((s, e) => s + paidAmount(e), 0)
     return { engaged: agreement.grant, paid, remaining: agreement.grant - paid }
+}
+
+// Répartit un total en `n` parts égales, en centimes entiers. Le reliquat est
+// distribué un centime à la fois aux premières parts : 100 € sur 3 donne
+// 33,34 / 33,33 / 33,33, jamais 99,99. Fonctionne aussi pour un total négatif
+// (un remboursement), où le reliquat part dans l'autre sens.
+export function splitCents(total: number, n: number): number[] {
+    if (n <= 0) return []
+    const base = Math.trunc(total / n)
+    const rest = total - base * n          // |rest| < n
+    const step = rest < 0 ? -1 : 1
+    return Array.from({ length: n }, (_, i) => base + (i < Math.abs(rest) ? step : 0))
 }
 
 export function participantsByCard(memberLinks: MemberActionCard[], lists: ToDoList[], items: ToDoItem[]): Map<number, Set<number>> {
