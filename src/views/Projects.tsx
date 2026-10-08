@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from '@dnd-kit/core'
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCenter, type DragStartEvent, type DragEndEvent } from '@dnd-kit/core'
+import DroppableColumn from './actions/DroppableColumn'
 import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -102,6 +103,7 @@ const STATUS_ORDER = ["En cours", "Suspendu", "En attente", "Terminé",]
 
 
 import { PARTNER_TYPES, WORKING_ROLES, PALETTE, FALLBACK_PARTNER, PARTNER_ROLES, PARTNER_ROLE_DIRECTION } from '@/lib/constants'
+import DraggableProject from './projects/DraggableProject'
 
 
 
@@ -162,7 +164,7 @@ function projectProgress(start_date: string, end_date: string): number | null {
 
 // --- ProjectCard ---
 
-type ProjectCardProps = {
+export type ProjectCardProps = {
     project: ProjectFull
     financialsByProject: Map<number, ProjectFinancials>
     statuses: Status[]
@@ -177,7 +179,7 @@ type ProjectCardProps = {
     onSelectAll: () => void
 }
 
-function ProjectCard({ project, financialsByProject, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple: _onSelectMultiple, onSelectAll }: ProjectCardProps) {
+export function ProjectCard({ project, financialsByProject, statuses, onClick, selectOn, selected, onToggle, onDelete, onEdit, selectedProjects, onSelectMultiple: _onSelectMultiple, onSelectAll }: ProjectCardProps) {
     const status  = statuses.find(s => s.id === project.status_id)
     const finances = financialsByProject.get(project.id) ?? NO_FINANCIALS
 
@@ -680,83 +682,99 @@ type AgreementRowProps = {
 function AgreementRow({ agreement: a, statuses, axe, paid, remaining, onEdit, onDelete }: AgreementRowProps) {
     const rate   = financingRate(a.budget, a.grant)
     const status = statuses.find(s => s.id === a.status_id)
+    const isOutgoing = a.direction === 'depense'
+    const dash = <span className="text-muted-foreground/50">—</span>
+
     return (
         // Le clic ouvre le formulaire : il n'y a pas assez de matière pour un
         // écran de lecture séparé, et le formulaire montre déjà tout.
         <div
             onClick={() => onEdit(a)}
-            className="group flex items-stretch gap-3 px-3 py-2.5 rounded-lg border border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors"
+            className="group flex flex-col gap-2 px-3 py-2.5 rounded-lg border border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors"
         >
-            {/* Avec qui d'abord : c'est le partenaire qui identifie une convention,
-                son intitulé ne vient qu'ensuite le préciser. */}
-            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                <span className="text-sm font-medium leading-snug">
-                    Convention avec {a.partner.name}
-                </span>
-                {a.description ? (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span className="text-xs text-muted-foreground leading-snug cursor-default">{a.title}</span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-xs text-xs">{a.description}</TooltipContent>
-                    </Tooltip>
-                ) : (
-                    <span className="text-xs text-muted-foreground leading-snug">{a.title}</span>
-                )}
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
-                    {status && (
-                        <span className="flex items-center gap-1">
-                            {/* Le statut garde sa couleur, mais réduite à un point :
-                                assez pour le repérer, trop peu pour concurrencer le sens. */}
-                            <span
-                                className="h-1.5 w-1.5 rounded-full shrink-0"
-                                style={{ backgroundColor: AGREEMENT_STATUS_COLORS[status.label] ?? '#d4d4d8' }}
-                            />
-                            {status.label}
-                        </span>
+            <div className="flex items-start justify-between gap-2">
+                {/* Avec qui d'abord : c'est le partenaire qui identifie une convention,
+                    son intitulé ne vient qu'ensuite le préciser. */}
+                <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-sm font-medium leading-snug">
+                        Convention avec {a.partner.name}
+                    </span>
+                    {a.description ? (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="text-xs text-muted-foreground leading-snug cursor-default">{a.title}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs text-xs">{a.description}</TooltipContent>
+                        </Tooltip>
+                    ) : (
+                        <span className="text-xs text-muted-foreground leading-snug">{a.title}</span>
                     )}
-                    {axe && <><span className="text-muted-foreground/40">·</span><span>{axe.name}</span></>}
-                    {a.signed_date && <><span className="text-muted-foreground/40">·</span><span className="tabular-nums">signée le {formatDate(a.signed_date)}</span></>}
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
+                        {status && (
+                            <span className="flex items-center gap-1">
+                                {/* Le statut garde sa couleur, mais réduite à un point :
+                                    assez pour le repérer, trop peu pour concurrencer le sens. */}
+                                <span
+                                    className="h-1.5 w-1.5 rounded-full shrink-0"
+                                    style={{ backgroundColor: AGREEMENT_STATUS_COLORS[status.label] ?? '#d4d4d8' }}
+                                />
+                                {status.label}
+                            </span>
+                        )}
+                        {axe && <><span className="text-muted-foreground/40">·</span><span>{axe.name}</span></>}
+                        {a.signed_date && <><span className="text-muted-foreground/40">·</span><span className="tabular-nums">signée le {formatDate(a.signed_date)}</span></>}
+                    </div>
+                </div>
+
+                {/* Le sens, puis les actions (transparentes tant qu'on ne survole pas : la carte ne saute pas). */}
+                <div className="flex items-center gap-1 shrink-0">
+                    <DirectionPill direction={a.direction} className="text-[10px]" />
+                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                            type="button"
+                            className="h-6 w-6 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-foreground"
+                            onClick={e => { e.stopPropagation(); onEdit(a) }}
+                        >
+                            <Pencil size={12} />
+                        </button>
+                        <button
+                            type="button"
+                            className="h-6 w-6 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-destructive"
+                            onClick={e => { e.stopPropagation(); onDelete(a.id) }}
+                        >
+                            <Trash2 size={12} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            {/* Le sens en haut, ce qu'elle pèse en bas. */}
-            <div className="flex flex-col items-end justify-between shrink-0 gap-2">
-                <DirectionPill direction={a.direction} className="text-[10px]" />
-                <div className="flex flex-col items-end leading-tight">
-                    {a.grant > 0 && <span className="text-sm font-medium tabular-nums">{fmt(a.grant)}</span>}
-                    {/* Le budget se lit dans le taux plutôt que sur sa propre ligne :
-                        « 60 % de 50 000 € » dit les deux d'un coup. */}
-                    {rate !== null
-                        ? <span className="text-[11px] text-muted-foreground">{rate} % de {fmt(a.budget)}</span>
-                        : a.budget > 0 && <span className="text-[11px] text-muted-foreground">coût {fmt(a.budget)}</span>
-                    }
-                    {/* Versé / reste : uniquement les reversements (recette = signé
-                        comptabilisé d'office, remaining vaut toujours 0). */}
-                    {a.direction === 'depense' && remaining !== 0 && (
-                        <span className="text-[11px]" style={{ color: remaining < 0 ? '#ef4444' : undefined }}>
-                            versé {fmt(paid)} · reste {fmt(remaining)}
-                        </span>
-                    )}
-                </div>
-            </div>
-
-            {/* Toujours rendues, seulement transparentes : la ligne ne saute pas au survol. */}
-            <div className="flex flex-col items-center justify-between gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button
-                    type="button"
-                    className="h-7 w-7 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-foreground"
-                    onClick={e => { e.stopPropagation(); onEdit(a) }}
-                >
-                    <Pencil size={13} />
-                </button>
-                <button
-                    type="button"
-                    className="h-7 w-7 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-destructive"
-                    onClick={e => { e.stopPropagation(); onDelete(a.id) }}
-                >
-                    <Trash2 size={13} />
-                </button>
+            {/* Les chiffres sur une seule ligne. Le versé et le reste n'existent que pour un
+                reversement : une recette est comptée dès la signature. */}
+            <div className="overflow-x-auto rounded-md bg-background/60 px-2 py-1.5">
+                <table className="text-right [&_tr]:border-b">
+                    <thead>
+                        <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            <th className="pr-2 pb-0.5 text-left font-normal">Budget</th>
+                            <th className="px-2 pb-0.5 font-normal">Montant</th>
+                            <th className="px-2 pb-0.5 font-normal" title="Dont frais de gestion">Dont frais</th>
+                            <th className="px-2 pb-0.5 font-normal">Versé</th>
+                            <th className="pl-2 pb-0.5 font-normal">Reste</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr className="whitespace-nowrap text-[11px] font-medium tabular-nums">
+                            <td className="pr-2 text-left" title={rate !== null ? `${rate} % financé` : undefined}>
+                                {a.budget > 0 ? fmt(a.budget) : dash}
+                            </td>
+                            <td className="px-2">{a.grant > 0 ? fmt(a.grant) : dash}</td>
+                            <td className="px-2 text-muted-foreground">{a.fees > 0 ? fmt(a.fees) : dash}</td>
+                            <td className="px-2">{isOutgoing ? fmt(paid) : dash}</td>
+                            <td className={`pl-2 ${remaining < 0 && isOutgoing ? 'text-red-600' : ''}`}>
+                                {isOutgoing ? fmt(remaining) : dash}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     )
@@ -787,6 +805,7 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
     const [axisId,        setAxisId]         = useState<number | null>(initial?.axis_id ?? null)
     const [budget,        setBudget]         = useState(initial?.budget ? String(initial.budget) : '')
     const [grant,         setGrant]          = useState(initial?.grant  ? String(initial.grant)  : '')
+    const [fees,          setFees]           = useState(initial?.fees ? String(initial.fees): 0)
     const [signedDate,    setSignedDate]     = useState(initial?.signed_date ?? '')
     const [direction,     setDirection]      = useState<AgreementDirection>(initial?.direction ?? 'depense')
     const [budgetDetailId, setBudgetDetailId] = useState<number | null>(initial?.budget_detail_id ?? null)
@@ -805,7 +824,7 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
                 title, description, partner_id: partnerId, project_id: projectId,
                 axis_id: axisId, status_id: statusId,
                 budget: Number(budget) || 0, grant: Number(grant) || 0, signed_date: signedDate,
-                budget_detail_id: budgetDetailId, direction,
+                budget_detail_id: budgetDetailId, direction, fees: Number(fees)
             }
             const partner = partners.find(p => p.id === partnerId)!
             if (initial) {
@@ -885,6 +904,9 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
                 <div className="flex flex-col gap-1.5 flex-1">
                     <Label className="text-xs">{direction === 'recette' ? 'Montant reçu (€)' : 'Montant versé (€)'}</Label>
                     <Input type="number" value={grant} onChange={e => setGrant(e.target.value)} placeholder="0" className="h-8 text-xs" />
+
+                    <Label className="text-xs"> Dont frais de gestion (€) </Label>
+                    <Input type="number" value={fees} onChange={e => setFees(e.target.value)} placeholder="0" className="h-8 text-xs" />
                 </div>
             </div>
             <p className="text-[10px] text-muted-foreground leading-snug -mt-1">
@@ -3987,7 +4009,10 @@ export default function Projects() {
     const [allExpanses, setAllExpanses] = useState<Expanse[]>([])
     const [allocations, setAllocations] = useState<ProjectExpanse[]>([])
 
-
+    // Draggable
+    const [activeProject, setActiveProject] = useState<ProjectFull | null>(null)
+    const [overId, setOverId]             = useState<string | null>(null)
+    
     // Filtres
     const [search,            setSearch]            = useState('')
     const [selectedAxisIds,   setSelectedAxisIds]   = useState<number[]>([])
@@ -4049,6 +4074,48 @@ export default function Projects() {
         setSearch('')
         setMultipleSelect(false)
     }
+
+    // Draggable
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    )
+
+
+        function onDragStart({ active }: DragStartEvent) {
+            setActiveProject(filteredProjects.find(p => p.id === active.id) ?? null)
+        }
+    
+        function onDragOver({ over }: { over: { id: string | number } | null }) {
+            setOverId(over ? String(over.id) : null)
+        }
+    
+        function onDragEnd({ active, over }: DragEndEvent) {
+            setActiveProject(null)
+            setOverId(null)
+    
+            if (!over) return
+    
+            // L'ID de la droppable est "col-{}"
+            const targetCallId = Number(String(over.id).replace('col-', ''))
+            const project = filteredProjects.find(c => c.id === active.id)
+            if (!project || project.project_call_id === targetCallId) return
+
+            const targetCall = projectCalls.find(pc => pc.id === targetCallId)
+            if (!targetCall) return
+    
+            setProjects(prev => prev.map(c =>
+                c.id === active.id ? { ...c, project_call_id: targetCallId, projectCall: targetCall } : c
+            ))
+
+            updateProject(Number(active.id), { project_call_id: targetCallId })
+                .catch(() => {
+                    setProjects(prev => prev.map(c =>
+                        c.id === active.id ? { ...c, project_call_id: project.project_call_id, projectCall: project.projectCall } : c
+                    ))
+                })
+        }
+
+        // End draggable
 
     useEffect(() => {
         Promise.all([getProjectCalls(), getProjects(), getActionCardsFull(), getAllProjectActionCards(),  getAllProjectMilestones(),getAxes(), getStatuses(), getPartners(), getFinancialAgreements(), getMembers(), getTimeEntries(), getAllProjectMembers(), getFormations(), getToDoLists(), getToDoItems(), getAllMemberActionCards(), getProjectPartners(), getExpanses(), getProjectExpanses()])
@@ -4633,6 +4700,12 @@ export default function Projects() {
                             ))}
                         </div>
                     ) : (
+                        <DndContext
+                                    sensors={sensors}
+                                    onDragStart={onDragStart}
+                                    onDragOver={onDragOver}
+                                    onDragEnd={onDragEnd}
+                        >
                         <div className="flex-1 overflow-x-auto overflow-y-hidden">
                             <div className="flex gap-0 h-full min-w-max">
                                 {activeAxes.map((axis, axisIdx) => {
@@ -4676,144 +4749,148 @@ export default function Projects() {
                                                     const pcBudgetOpen = openCallBudgets.has(pc.id)
 
                                                     return (
-                                                        <div key={pc.id} className="w-72 shrink-0 flex flex-col h-full border-r last:border-r-0">
-                                                            {/* Header AAP */}
-                                                            <div className="px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
-                                                                    <div className="flex flex-col w-full">
+                                                        
+                                                        <DroppableColumn key={pc.id} id={`col-${pc.id}`} isOver={overId === `col-${pc.id}`} className={'h-full w-72 shrink-0 border-r'}>
+                                                            
+                                                            <div key={pc.id} className="flex flex-col h-full last:border-r-0">
+                                                                {/* Header AAP */}
+                                                                <div className="px-4 py-3 border-b flex items-center justify-between gap-2 bg-background">
+                                                                        <div className="flex flex-col w-full">
+                                                                            
+                                                                            <div className="flex flex-col min-w-0">
+                                                                                <span className="text-sm font-medium truncate">{pc.title}</span>
+                                                                                {(pc.start_date || pc.end_date) && (
+                                                                                    <span className="text-xs text-muted-foreground">
+                                                                                        {formatDate(pc.start_date)}{pc.end_date ? ` → ${formatDate(pc.end_date)}` : ''}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
                                                                         
-                                                                        <div className="flex flex-col min-w-0">
-                                                                            <span className="text-sm font-medium truncate">{pc.title}</span>
-                                                                            {(pc.start_date || pc.end_date) && (
-                                                                                <span className="text-xs text-muted-foreground">
-                                                                                    {formatDate(pc.start_date)}{pc.end_date ? ` → ${formatDate(pc.end_date)}` : ''}
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                     
+                                                                        
                                                                     
-                                                                   
-                                                                    {pc.budget > 0 && (
-                                                                        <>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => toggleCallBudget(pc.id)}
-                                                                            aria-expanded={pcBudgetOpen}
-                                                                            className="mt-4 flex w-full items-center justify-between text-xs"
-                                                                        >
-                                                                            <span className="flex items-center gap-1 text-muted-foreground">
-                                                                                {pcBudgetOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-                                                                                Reste{pcSpentPct !== null ? ` (${pcSpentPct} % engagé)` : ''}
-                                                                            </span>
-                                                                            <span className={`font-medium ${balanceColor(pcFinances)}`}>
-                                                                                {fmt(pcFinances.balance)}
-                                                                            </span>
-                                                                        </button>
-
-                                                                        {pcBudgetOpen && (
+                                                                        {pc.budget > 0 && (
                                                                             <>
-                                                                            <div className="mt-2 flex flex-col gap-0.5">
-                                                                                <div className="flex items-center justify-between text-xs">
-                                                                                    <span className="text-muted-foreground">Budget alloué</span>
-                                                                                    <span className="font-medium">{fmt(pcFinances.budget)}</span>
-                                                                                </div>
-                                                                            </div>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => toggleCallBudget(pc.id)}
+                                                                                aria-expanded={pcBudgetOpen}
+                                                                                className="mt-4 flex w-full items-center justify-between text-xs"
+                                                                            >
+                                                                                <span className="flex items-center gap-1 text-muted-foreground">
+                                                                                    {pcBudgetOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                                                                                    Reste{pcSpentPct !== null ? ` (${pcSpentPct} % engagé)` : ''}
+                                                                                </span>
+                                                                                <span className={`font-medium ${balanceColor(pcFinances)}`}>
+                                                                                    {fmt(pcFinances.balance)}
+                                                                                </span>
+                                                                            </button>
 
-                                                                            <div className="mt-3 flex flex-col gap-0.5">
-                                                                                <div className="flex items-center justify-between text-xs">
-                                                                                    <span className="text-muted-foreground">Recettes des projets</span>
-                                                                                    <span className="font-medium">{fmt(pcRevenue)}</span>
+                                                                            {pcBudgetOpen && (
+                                                                                <>
+                                                                                <div className="mt-2 flex flex-col gap-0.5">
+                                                                                    <div className="flex items-center justify-between text-xs">
+                                                                                        <span className="text-muted-foreground">Budget alloué</span>
+                                                                                        <span className="font-medium">{fmt(pcFinances.budget)}</span>
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div className="flex items-center justify-between text-[10px]">
-                                                                                    <span className="text-muted-foreground">Financement propre</span>
-                                                                                    <span>{fmt(pcFinances.selfFinanced)}</span>
-                                                                                </div>
-                                                                                <div className="flex items-center justify-between text-[10px]">
-                                                                                    <span className="text-muted-foreground">Cofinancement</span>
-                                                                                    <span>{fmt(pcFinances.cofinanced)}</span>
-                                                                                </div>
-                                                                            </div>
 
-                                                                            <div className="mt-3 flex flex-col gap-0.5">
-                                                                                <div className="flex items-center justify-between text-xs">
-                                                                                    <span className="text-muted-foreground">Dépenses</span>
-                                                                                    <span className="font-medium">{fmt(pcFinances.spent)}</span>
+                                                                                <div className="mt-3 flex flex-col gap-0.5">
+                                                                                    <div className="flex items-center justify-between text-xs">
+                                                                                        <span className="text-muted-foreground">Recettes des projets</span>
+                                                                                        <span className="font-medium">{fmt(pcRevenue)}</span>
+                                                                                    </div>
+                                                                                    <div className="flex items-center justify-between text-[10px]">
+                                                                                        <span className="text-muted-foreground">Financement propre</span>
+                                                                                        <span>{fmt(pcFinances.selfFinanced)}</span>
+                                                                                    </div>
+                                                                                    <div className="flex items-center justify-between text-[10px]">
+                                                                                        <span className="text-muted-foreground">Cofinancement</span>
+                                                                                        <span>{fmt(pcFinances.cofinanced)}</span>
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div className="flex items-center justify-between text-[10px]">
-                                                                                    <span className="text-muted-foreground">Subventions accordées{pcGrantLength > 0 ? ` (${pcGrantLength})` : ''}</span>
-                                                                                    <span>{fmt(pcFinances.granted)}</span>
+
+                                                                                <div className="mt-3 flex flex-col gap-0.5">
+                                                                                    <div className="flex items-center justify-between text-xs">
+                                                                                        <span className="text-muted-foreground">Dépenses</span>
+                                                                                        <span className="font-medium">{fmt(pcFinances.spent)}</span>
+                                                                                    </div>
+                                                                                    <div className="flex items-center justify-between text-[10px]">
+                                                                                        <span className="text-muted-foreground">Subventions accordées{pcGrantLength > 0 ? ` (${pcGrantLength})` : ''}</span>
+                                                                                        <span>{fmt(pcFinances.granted)}</span>
+                                                                                    </div>
+                                                                                    <div className="flex items-center justify-between text-[10px]">
+                                                                                        <span className="text-muted-foreground">Dépenses directes</span>
+                                                                                        <span>{fmt(pcFinances.direct)}</span>
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div className="flex items-center justify-between text-[10px]">
-                                                                                    <span className="text-muted-foreground">Dépenses directes</span>
-                                                                                    <span>{fmt(pcFinances.direct)}</span>
-                                                                                </div>
-                                                                            </div>
+                                                                                </>
+                                                                            )}
                                                                             </>
                                                                         )}
-                                                                        </>
-                                                                    )}
 
-                                                                    <div className="flex justify-between items-center gap-2 mt-4">
-                                                                        {pcStatus && (
-                                                                        <Badge className="rounded-full text-xs text-black shrink-0 mt-0.5" style={{backgroundColor:pcColor}}>
-                                                                            {pcStatus.label}
-                                                                        </Badge>
-                                                                        )}
+                                                                        <div className="flex justify-between items-center gap-2 mt-4">
+                                                                            {pcStatus && (
+                                                                            <Badge className="rounded-full text-xs text-black shrink-0 mt-0.5" style={{backgroundColor:pcColor}}>
+                                                                                {pcStatus.label}
+                                                                            </Badge>
+                                                                            )}
 
-                                                                        <div className="flex items-center gap-1 shrink-0">
-                                                                            <span className="text-xs text-muted-foreground">{pcProjects.length} projet{pcProjects.length > 1 ? 's' : ''}</span>
-                                                                            <Button
-                                                                                variant="ghost" size="icon" className="h-6 w-6 rounded-md"
-                                                                                onClick={() => { setEditingCall(pc); setCallSheetOpen(true) }}
-                                                                            >
-                                                                                <Pencil size={11} />
-                                                                            </Button>
-                                                                            <Button
-                                                                                variant="ghost" size="icon" className="h-6 w-6 rounded-md"
-                                                                                onClick={() => { setDefaultCallId(pc.id); setProjectSheetOpen(true) }}
-                                                                            >
-                                                                                <Plus size={11} />
-                                                                            </Button>
+                                                                            <div className="flex items-center gap-1 shrink-0">
+                                                                                <span className="text-xs text-muted-foreground">{pcProjects.length} projet{pcProjects.length > 1 ? 's' : ''}</span>
+                                                                                <Button
+                                                                                    variant="ghost" size="icon" className="h-6 w-6 rounded-md"
+                                                                                    onClick={() => { setEditingCall(pc); setCallSheetOpen(true) }}
+                                                                                >
+                                                                                    <Pencil size={11} />
+                                                                                </Button>
+                                                                                <Button
+                                                                                    variant="ghost" size="icon" className="h-6 w-6 rounded-md"
+                                                                                    onClick={() => { setDefaultCallId(pc.id); setProjectSheetOpen(true) }}
+                                                                                >
+                                                                                    <Plus size={11} />
+                                                                                </Button>
+                                                                            </div>
+
                                                                         </div>
-
                                                                     </div>
                                                                 </div>
+
+                                                                {/* Cartes projets */}
+                                                                <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+                                                                    {pcProjects.slice().sort((a, b) => {
+                                                                                const byStatus = STATUS_ORDER.indexOf(statuses.find(s => s.id === a.status_id)?.label ?? '') - STATUS_ORDER.indexOf(statuses.find(s => s.id === b.status_id)?.label ?? '')
+                                                                                if (byStatus !== 0) return byStatus
+
+                                                                                const byDate = (b.start_date ?? '').localeCompare(a.start_date ?? '')
+                                                                                if (byDate !== 0) return byDate
+
+                                                                                return (a.title ?? '').localeCompare(b.title ?? '', 'fr')
+                                                                            }).map(p => (
+                                                                        <DraggableProject
+                                                                            key={p.id}
+                                                                            project={p}
+                                                                            financialsByProject={financialsByProject}
+                                                                            statuses={statuses}
+                                                                            onClick={() => { setSelectedProject(p); setDetailOpen(true) }}
+                                                                            selectOn={multipleSelect}
+                                                                            selected={!!selectedProjects.find(sp => sp.id === p.id)}
+                                                                            onToggle={() => toggleProject(p)}
+                                                                            onDelete={id => {
+                                                                                setProjects(prev => prev.filter(x => x.id !== id))
+                                                                                setSelectedProjects(prev => prev.filter(x => x.id !== id))
+                                                                            }}
+                                                                            onEdit={() => { setSelectedProject(p); setProjectSheetOpen(true) }}
+                                                                            selectedProjects={selectedProjects}
+                                                                            onSelectMultiple={() => { setMultipleSelect(true); toggleProject(p) }}
+                                                                            onSelectAll={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}
+                                                                        />
+                                                                    ))}
+                                                                    {pcProjects.length === 0 && (
+                                                                        <p className="text-xs text-muted-foreground italic px-1">Aucun projet</p>
+                                                                    )}
+                                                                </div>
                                                             </div>
-
-                                                            {/* Cartes projets */}
-                                                            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-                                                                {pcProjects.slice().sort((a, b) => {
-                                                                            const byStatus = STATUS_ORDER.indexOf(statuses.find(s => s.id === a.status_id)?.label ?? '') - STATUS_ORDER.indexOf(statuses.find(s => s.id === b.status_id)?.label ?? '')
-                                                                            if (byStatus !== 0) return byStatus
-
-                                                                            const byDate = (b.start_date ?? '').localeCompare(a.start_date ?? '')
-                                                                            if (byDate !== 0) return byDate
-
-                                                                            return (a.title ?? '').localeCompare(b.title ?? '', 'fr')
-                                                                        }).map(p => (
-                                                                    <ProjectCard
-                                                                        key={p.id}
-                                                                        project={p}
-                                                                        financialsByProject={financialsByProject}
-                                                                        statuses={statuses}
-                                                                        onClick={() => { setSelectedProject(p); setDetailOpen(true) }}
-                                                                        selectOn={multipleSelect}
-                                                                        selected={!!selectedProjects.find(sp => sp.id === p.id)}
-                                                                        onToggle={() => toggleProject(p)}
-                                                                        onDelete={id => {
-                                                                            setProjects(prev => prev.filter(x => x.id !== id))
-                                                                            setSelectedProjects(prev => prev.filter(x => x.id !== id))
-                                                                        }}
-                                                                        onEdit={() => { setSelectedProject(p); setProjectSheetOpen(true) }}
-                                                                        selectedProjects={selectedProjects}
-                                                                        onSelectMultiple={() => { setMultipleSelect(true); toggleProject(p) }}
-                                                                        onSelectAll={() => { setMultipleSelect(true); setSelectedProjects(filteredProjects) }}
-                                                                    />
-                                                                ))}
-                                                                {pcProjects.length === 0 && (
-                                                                    <p className="text-xs text-muted-foreground italic px-1">Aucun projet</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                                                        </DroppableColumn>
                                                     )
                                                 })}
                                             </div>
@@ -4828,6 +4905,29 @@ export default function Projects() {
                                 )}
                             </div>
                         </div>
+                         {/* Carte fantôme affichée sous le curseur pendant le drag */}
+                        <DragOverlay dropAnimation={null}>
+                            {activeProject && (
+                                <div className="rotate-1 scale-105 shadow-xl opacity-95 w-[260px]">
+                                    <ProjectCard
+                                        project={activeProject}
+                                        financialsByProject={financialsByProject}
+                                        statuses={statuses}
+                                        onClick={() => {}}
+                                        selectOn={false}
+                                        selected={false}
+                                        onToggle={() => {}}
+                                        onDelete={() => {}}
+                                        onEdit={() => {}}
+                                        selectedProjects={[]}
+                                        onSelectMultiple={() => {}}
+                                        onSelectAll={() => {}}
+                                    />
+                                </div>
+                            )}
+                        </DragOverlay>
+
+                        </DndContext>
                     )}
 
                     {/* Floating selection bar */}

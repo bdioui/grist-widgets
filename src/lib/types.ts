@@ -182,6 +182,7 @@ export type FinancialAgreement = {
     description: string
     budget: number
     grant: number
+    fees: number
     signed_date: string
     budget_detail_id: number | null
 }

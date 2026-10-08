@@ -285,6 +285,7 @@ export function normalizeFinancialAgreements(rows: Record<string, unknown>[]): F
         // les conventions avant l'ajout de la colonne : l'existant garde ses
         // chiffres tant qu'il n'a pas été trié à la main.
         direction: r.direction === 'recette' ? 'recette' : 'depense',
+        fees: num(r.fees)
     }))
 }
 
