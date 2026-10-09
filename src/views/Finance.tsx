@@ -1605,10 +1605,12 @@ interface ConventionsTabProps {
 type ConventionEditCtx = {
     partners: Partner[]
     projects: Project[]
-    leafBudgetDetails: BudgetDetail[]
-    budgetDetailMap: Map<number, BudgetDetail>
     statusOptions: { value: string; label: string }[]
 }
+
+// Ligne budgétaire d'une convention : jamais saisie, elle se lit sur les
+// dépenses qui lui sont rattachées.
+type AgreementLine = { id: number; title: string; category: string | null }
 
 type ConventionRowProps = {
     agreement: FinancialAgreement
@@ -1616,8 +1618,7 @@ type ConventionRowProps = {
     partner: Partner | undefined
     projectTitle: string | null
     statusLabel: string | undefined
-    detailTitle: string | null
-    detailCategoryTitle: string | null
+    lines: AgreementLine[]
     paid: number
     remaining: number
     onToggleRow: (id: number) => void
@@ -1625,6 +1626,8 @@ type ConventionRowProps = {
     onDelete: (id: number) => void
     edit: ConventionEditCtx
 }
+
+const NO_LINES: AgreementLine[] = []
 
 const DIRECTION_OPTIONS = [
     { value: 'depense', label: 'Dépense' },
@@ -1636,7 +1639,7 @@ const DIRECTION_OPTIONS = [
 // reçus soient stables (useCallback).
 const ConventionRow = React.memo(function ConventionRow({
     agreement: a, isSelected, partner, projectTitle, statusLabel,
-    detailTitle, detailCategoryTitle, paid, remaining, onToggleRow, onPatch, onDelete, edit,
+    lines, paid, remaining, onToggleRow, onPatch, onDelete, edit,
 }: ConventionRowProps) {
     return (
         <TableRow className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
@@ -1690,24 +1693,27 @@ const ConventionRow = React.memo(function ConventionRow({
                     display={<span className="block truncate text-muted-foreground">{projectTitle ?? '—'}</span>}
                 />
             </TableCell>
+            {/* Lecture seule : déduite des dépenses rattachées à la convention */}
             <TableCell className="max-w-40">
-                <EditableSearch
-                    data={edit.leafBudgetDetails}
-                    getLabel={d => d.title}
-                    groupBy={d => ({ primary: edit.budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
-                    placeholder="Ligne budgétaire…"
-                    dropdownClassName="min-w-[260px]"
-                    onSelect={d => onPatch(a.id, { budget_detail_id: d.id })}
-                    onClear={a.budget_detail_id != null ? () => onPatch(a.id, { budget_detail_id: null }) : undefined}
-                    display={detailTitle ? (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="truncate block text-muted-foreground">{detailTitle}</span>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">{detailCategoryTitle} › {detailTitle}</TooltipContent>
-                        </Tooltip>
-                    ) : <span className="text-muted-foreground/50">—</span>}
-                />
+                {lines.length === 0 ? (
+                    <span className="text-muted-foreground/50">—</span>
+                ) : (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1 text-muted-foreground">
+                                <span className="truncate">{lines[0].title}</span>
+                                {lines.length > 1 && (
+                                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">+{lines.length - 1}</span>
+                                )}
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">
+                            <div className="flex flex-col gap-0.5">
+                                {lines.map(l => <span key={l.id}>{l.category ? `${l.category} › ` : ''}{l.title}</span>)}
+                            </div>
+                        </TooltipContent>
+                    </Tooltip>
+                )}
             </TableCell>
             <TableCell className="text-right font-medium tabular-nums">
                 <EditableInput
@@ -1768,7 +1774,6 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
     const [selected, setSelected] = useState<Set<number>>(new Set())
     const budgetDetailMap   = useMemo(() => new Map(budgetDetails.map(d => [d.id, d])), [budgetDetails])
-    const leafBudgetDetails = useMemo(() => budgetDetails.filter(d => d.parent_id !== null), [budgetDetails])
     const budgetCategoryMap = useMemo(() => new Map(budgetCategories.map(c => [c.id, c])), [budgetCategories])
     const [isAdding, setIsAdding] = useState(false)
     const [newDraft, setNewDraft] = useState<Partial<FinancialAgreement>>({})
@@ -1790,6 +1795,27 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
         }
         return map
     }, [expanses])
+
+    // Lignes budgétaires d'une convention : celles de ses dépenses rattachées,
+    // sans doublon. Une convention peut en couvrir plusieurs.
+    const linesByAgreement = useMemo(() => {
+        const ids = new Map<number, Set<number>>()
+        for (const e of expanses) {
+            if (!e.agreement_id || !e.budget_detail_id) continue
+            const set = ids.get(e.agreement_id) ?? new Set<number>()
+            set.add(e.budget_detail_id)
+            ids.set(e.agreement_id, set)
+        }
+        const map = new Map<number, AgreementLine[]>()
+        for (const [agreementId, set] of ids) {
+            const lines = [...set].flatMap(id => {
+                const d = budgetDetailMap.get(id)
+                return d ? [{ id, title: d.title, category: budgetCategoryMap.get(d.budget_category_id)?.title ?? null }] : []
+            }).sort((x, y) => x.title.localeCompare(y.title, 'fr'))
+            if (lines.length > 0) map.set(agreementId, lines)
+        }
+        return map
+    }, [expanses, budgetDetailMap, budgetCategoryMap])
 
     const filtered = useMemo(() => agreements.filter(a => {
         if (search) {
@@ -1876,9 +1902,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
     }, [])
 
     const editCtx = useMemo<ConventionEditCtx>(() => ({
-        partners, projects, leafBudgetDetails, budgetDetailMap,
+        partners, projects,
         statusOptions: agreementStatuses.map(s => ({ value: String(s.id), label: s.label })),
-    }), [partners, projects, leafBudgetDetails, budgetDetailMap, agreementStatuses])
+    }), [partners, projects, agreementStatuses])
 
     async function doDelete() {
         await Promise.all([...selected].map(id => deleteAgreement(id)))
@@ -1917,8 +1943,8 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                 vb = b.direction === 'recette' ? b.grant : (paidByAgreement.get(b.id) ?? 0)
             }
             else if (sortKey === 'detail')  {
-                va = a.budget_detail_id ? (budgetDetailMap.get(a.budget_detail_id)?.title ?? '') : ''
-                vb = b.budget_detail_id ? (budgetDetailMap.get(b.budget_detail_id)?.title ?? '') : ''
+                va = linesByAgreement.get(a.id)?.[0]?.title ?? ''
+                vb = linesByAgreement.get(b.id)?.[0]?.title ?? ''
             }
             else if (sortKey === 'direction') { va = a.direction; vb = b.direction }
             else if (sortKey === 'status')  { va = statusMap.get(a.status_id)?.label ?? ''; vb = statusMap.get(b.status_id)?.label ?? '' }
@@ -1926,7 +1952,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
             const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb), 'fr', { sensitivity: 'base' })
             return sortDir === 'asc' ? cmp : -cmp
         })
-    }, [filtered, sortKey, sortDir, partnerMap, projectMap, statusMap, paidByAgreement, budgetDetailMap])
+    }, [filtered, sortKey, sortDir, partnerMap, projectMap, statusMap, paidByAgreement, linesByAgreement])
 
     function toggleSort(key: string) {
         if (sortKey === key) {
@@ -2100,15 +2126,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <SearchInput
-                                        data={leafBudgetDetails}
-                                        onSelect={d => setNewDraft(dr => ({ ...dr, budget_detail_id: d.id }))}
-                                        getLabel={d => d.title}
-                                        groupBy={d => ({ primary: budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
-                                        value={newDraft.budget_detail_id ? (budgetDetailMap.get(newDraft.budget_detail_id)?.title ?? '') : ''}
-                                        placeholder="Ligne budgétaire…"
-                                        dropdownClassName="min-w-[260px]"
-                                    />
+                                    <span className="text-[10px] italic text-muted-foreground">Déduite des dépenses</span>
                                 </TableCell>
                                 <TableCell>
                                     <Input type="number" step="0.01" value={newDraft.grant ?? ''} onChange={ev => setNewDraft(d => ({ ...d, grant: parseAmount(ev.target.value) }))} placeholder="0" className="h-7 text-xs text-right" />
@@ -2155,8 +2173,6 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                             const project = a.project_id != null ? projectMap.get(a.project_id) : undefined
                             const status = statusMap.get(a.status_id)
 
-                            const detail   = a.budget_detail_id ? budgetDetailMap.get(a.budget_detail_id) : null
-                            const detailCat = detail ? budgetCategoryMap.get(detail.budget_category_id) : null
                             // Recette : signé = comptabilisé (rien ne trace un encaissement réel).
                             // Dépense : versé = somme des dépenses de reversement rattachées.
                             const paid = a.direction === 'recette' ? a.grant : (paidByAgreement.get(a.id) ?? 0)
@@ -2168,8 +2184,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     partner={partner}
                                     projectTitle={project?.title ?? null}
                                     statusLabel={status?.label}
-                                    detailTitle={detail?.title ?? null}
-                                    detailCategoryTitle={detailCat?.title ?? null}
+                                    lines={linesByAgreement.get(a.id) ?? NO_LINES}
                                     paid={paid}
                                     remaining={a.grant - paid}
                                     onToggleRow={toggleRow}
@@ -2490,6 +2505,13 @@ function BudgetTab({
     const totalReversements = visibleExpanses.filter(e => e.agreement_id != null).reduce((s, e) => s + e.amount, 0)
     const totalReste        = totalBudgetLines - totalSpent
 
+    // Le budget du programme est une enveloppe globale ; les lignes en reçoivent
+    // chacune une part. On compare toujours à toutes les lignes, sans le filtre
+    // d'année : l'année ne découpe que l'affichage, pas l'enveloppe.
+    const programBudget   = program?.budget ?? 0
+    const allocatedBudget = leafDetails.reduce((s, d) => s + d.budget, 0)
+    const unallocated     = programBudget - allocatedBudget
+
     return (
         <div className="flex flex-col gap-4">
             {/* ── Toolbar ── */}
@@ -2512,6 +2534,34 @@ function BudgetTab({
                     <Plus size={14} /> Nouvelle catégorie
                 </button>
             </div>
+
+            {/* ── Enveloppe du programme ── */}
+            {programBudget > 0 && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border bg-card p-4">
+                        <p className="text-xs text-muted-foreground">Budget du programme</p>
+                        <p className="mt-1 text-xl font-semibold tabular-nums">{formatAmount(programBudget)}</p>
+                    </div>
+                    <div className="rounded-xl border bg-card p-4">
+                        <p className="text-xs text-muted-foreground">Alloué aux lignes</p>
+                        <p className="mt-1 text-xl font-semibold tabular-nums">{formatAmount(allocatedBudget)}</p>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div
+                                className={`h-full rounded-full ${unallocated < 0 ? 'bg-red-500' : 'bg-foreground/60'}`}
+                                style={{ width: `${Math.min(100, Math.round(allocatedBudget / programBudget * 100))}%` }}
+                            />
+                        </div>
+                        <p className="mt-1 text-[10px] text-muted-foreground">{Math.round(allocatedBudget / programBudget * 100)} % du programme</p>
+                    </div>
+                    <div className="rounded-xl border bg-card p-4">
+                        <p className="text-xs text-muted-foreground">{unallocated < 0 ? 'Dépassement de l\'enveloppe' : 'Reste à allouer'}</p>
+                        <p className="mt-1 text-xl font-semibold tabular-nums" style={{ color: unallocated < 0 ? '#ef4444' : undefined }}>
+                            {formatAmount(Math.abs(unallocated))}
+                        </p>
+                        {unallocated === 0 && <p className="mt-1 text-[10px] text-green-600">Tout est alloué</p>}
+                    </div>
+                </div>
+            )}
 
             {/* ── Table 3 niveaux ── */}
             {budgetCategories.length === 0

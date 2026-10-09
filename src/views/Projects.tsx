@@ -49,7 +49,7 @@ import {
     getFormations, getFormationsByProject, getProjectFormationLinks, addProjectFormation, removeProjectFormation,
     getProjectAttachments, addProjectAttachment, deleteProjectAttachment,
     getExpanses, getSupliers,
-    getBudgetCategories, getBudgetDetails,
+    getBudgetCategories,
     getPublicationsByProject, addPublication, updatePublication, deletePublication,
     getPublicationMembersByProject, addPublicationMember, deletePublicationMember,
     getLabs,
@@ -62,7 +62,7 @@ import {
     createFormation,
     getProjectExpanses, setExpanseAllocations
 } from '@/lib/api'
-import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type BudgetDetail, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard, type AgreementDirection, type ProjectActionCard, type ProjectExpanse } from '@/lib/types'
+import { type ProjectCall, type Project, type FinancialAgreement, type Axis, type Status, type Partner, type Member, type ProjectMember, type Kpi, type KpiEntry, type ProjectPartner, type ProjectMilestone, type ActionCardFull, type Category, type TimeEntry, type Formation, type ProjectFormation, type ProjectAttachment, type Expanse, type Supplier, type BudgetCategory, type Publication, type PublicationMember, type Lab, type ToDoList, type ToDoItem, type MemberActionCard, type AgreementDirection, type ProjectActionCard, type ProjectExpanse } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import SearchInput from '@/components/SearchInput'
@@ -789,12 +789,11 @@ type AgreementFormProps = {
     projectId: number
     initial?: AgreementFull
     budgetCategories?: BudgetCategory[]
-    budgetDetails?: BudgetDetail[]
     onSaved: (a: AgreementFull) => void
     onCancel: () => void
 }
 
-function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCategories: _budgetCategories, budgetDetails, onSaved, onCancel }: AgreementFormProps) {
+function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCategories: _budgetCategories, onSaved, onCancel }: AgreementFormProps) {
     const agreementStatuses = statuses.filter(s => s.context === 'financial_agreement')
     const defaultStatusId   = agreementStatuses[0]?.id ?? 14
 
@@ -808,13 +807,8 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
     const [fees,          setFees]           = useState(initial?.fees ? String(initial.fees): 0)
     const [signedDate,    setSignedDate]     = useState(initial?.signed_date ?? '')
     const [direction,     setDirection]      = useState<AgreementDirection>(initial?.direction ?? 'depense')
-    const [budgetDetailId, setBudgetDetailId] = useState<number | null>(initial?.budget_detail_id ?? null)
     const [submitting,    setSubmitting]     = useState(false)
     const [error,         setError]          = useState<string | null>(null)
-
-    const budgetDetailMap   = new Map((budgetDetails ?? []).map(d => [d.id, d]))
-    const leafBudgetDetails = (budgetDetails ?? []).filter(d => d.parent_id !== null)
-    const selectedDetail    = leafBudgetDetails.find(d => d.id === budgetDetailId) ?? null
 
     async function handleSubmit() {
         if (!title.trim() || !partnerId) { setError('Titre et partenaire sont obligatoires.'); return }
@@ -824,7 +818,8 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
                 title, description, partner_id: partnerId, project_id: projectId,
                 axis_id: axisId, status_id: statusId,
                 budget: Number(budget) || 0, grant: Number(grant) || 0, signed_date: signedDate,
-                budget_detail_id: budgetDetailId, direction, fees: Number(fees)
+                // Plus saisie ici : la ligne se lit sur les dépenses rattachées.
+                budget_detail_id: initial?.budget_detail_id ?? null, direction, fees: Number(fees)
             }
             const partner = partners.find(p => p.id === partnerId)!
             if (initial) {
@@ -917,24 +912,6 @@ function AgreementForm({ partners, statuses, axes, projectId, initial, budgetCat
                 <Label className="text-xs">Date de signature</Label>
                 <Input type="date" value={signedDate} onChange={e => setSignedDate(e.target.value)} className="h-8 text-xs" />
             </div>
-            {leafBudgetDetails.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs">Ligne budgétaire</Label>
-                    <SearchInput
-                        data={leafBudgetDetails}
-                        onSelect={d => setBudgetDetailId(d.id)}
-                        getLabel={d => d.title}
-                        placeholder="Rechercher une ligne budgétaire..."
-                        value={selectedDetail ? `${budgetDetailMap.get(selectedDetail.parent_id!)?.title ?? ''} › ${selectedDetail.title}` : undefined}
-                        groupBy={d => ({ primary: budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
-                    />
-                    {budgetDetailId && (
-                        <button onClick={() => setBudgetDetailId(null)} className="self-start text-[10px] text-muted-foreground hover:text-foreground underline">
-                            Retirer la ligne budgétaire
-                        </button>
-                    )}
-                </div>
-            )}
             {error && <p className="text-xs text-destructive">{error}</p>}
             <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={onCancel} disabled={submitting} className="rounded-md">Annuler</Button>
@@ -1632,7 +1609,6 @@ export function ProjectDetailSheet({ projects, project, open, onClose, onUpdated
     const [allExpanses, setAllExpanses] = useState<Expanse[]>([])
     const [expanseSuppliers, setExpanseSuppliers] = useState<Supplier[]>([])
     const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([])
-    const [budgetDetails, setBudgetDetails] = useState<BudgetDetail[]>([])
     const [showLinkExpanse, setShowLinkExpanse]   = useState(false)
     const [showLinkAgreement, setShowLinkAgreement] = useState(false)
     const [allAgreementsForLink, setAllAgreementsForLink] = useState<AgreementFull[]>([])
@@ -1732,12 +1708,11 @@ export function ProjectDetailSheet({ projects, project, open, onClose, onUpdated
             getExpanses(),
             getSupliers(),
             getBudgetCategories(),
-            getBudgetDetails(),
             getPublicationsByProject(project.id),
             getPublicationMembersByProject(project.id),
             getLabs(),
         ])
-            .then(([agreements, members, kpis, kpiEntries,ms, acs, formations, formationLinks, attachments, expanses, suppliers, cats, details, pubs, pubMembers, labs]) => {
+            .then(([agreements, members, kpis, kpiEntries,ms, acs, formations, formationLinks, attachments, expanses, suppliers, cats, pubs, pubMembers, labs]) => {
                 setAgreements(agreements as AgreementFull[])
                 setProjectMembers(members)
                 setKpis(kpis)
@@ -1751,7 +1726,6 @@ export function ProjectDetailSheet({ projects, project, open, onClose, onUpdated
                 setAllExpanses(allExp)
                 setExpanseSuppliers(suppliers as Supplier[])
                 setBudgetCategories(cats as BudgetCategory[])
-                setBudgetDetails(details as BudgetDetail[])
                 setPublications(pubs as Publication[])
                 setPublicationMembers(pubMembers as PublicationMember[])
                 setAllLabs(labs as Lab[])
@@ -3345,7 +3319,6 @@ export function ProjectDetailSheet({ projects, project, open, onClose, onUpdated
                                             projectId={project.id}
                                             initial={a}
                                             budgetCategories={budgetCategories}
-                                            budgetDetails={budgetDetails}
                                             onSaved={handleAgreementSaved}
                                             onCancel={() => setEditingAgreement(null)}
                                         />
@@ -3370,7 +3343,6 @@ export function ProjectDetailSheet({ projects, project, open, onClose, onUpdated
                                         axes={axes}
                                         projectId={project.id}
                                         budgetCategories={budgetCategories}
-                                        budgetDetails={budgetDetails}
                                         onSaved={a => { handleAgreementSaved(a); setShowAddForm(false) }}
                                         onCancel={() => setShowAddForm(false)}
                                     />
