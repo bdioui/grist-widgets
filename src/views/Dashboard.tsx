@@ -292,7 +292,8 @@ export default function Dashboard() {
     // Les seules conventions sortantes : un cofinanceur et un bénéficiaire
     // n'ont rien à faire dans le même classement, l'un apporte, l'autre reçoit.
     const grantByPartner = new Map<number, number>()
-    agreements.filter(a => a.direction === 'depense').forEach(a => {
+    agreements.forEach(a => {
+        if (a.direction !== 'depense' || a.partner_id == null) return
         grantByPartner.set(a.partner_id, (grantByPartner.get(a.partner_id) ?? 0) + a.grant)
     })
     const topPartners = [...grantByPartner.entries()]

@@ -1,5 +1,6 @@
 import { fetchTable, updateRecord, updateRecords, addRecord, addRecords, deleteRecord, replaceRecords, deleteRecords } from '@/lib/grist'
 import { SIFAC_OWNED_COLUMNS } from '@/lib/sifac/reconcile'
+import { FALLBACK_PARTNER } from '@/lib/constants'
 import type { Reconciliation } from '@/lib/sifac/reconcile'
 import {
     mockStatuses, mockCategories, mockMembers, mockPartners, mockLabs, mockPartnerLabs,
@@ -1224,7 +1225,7 @@ export async function getAgreementsByProject(projectId: number): Promise<(Financ
     const partnerMap = new Map((partners as Partner[]).map(p => [p.id, p]))
     return (agreements as FinancialAgreement[])
         .filter(a => a.project_id === projectId)
-        .map(a => ({ ...a, partner: partnerMap.get(a.partner_id)! }))
+        .map(a => ({ ...a, partner: a.partner_id == null ? FALLBACK_PARTNER : partnerMap.get(a.partner_id)! }))
         .filter(a => a.partner)
 }
 
@@ -1244,8 +1245,8 @@ export async function getAgreementsByProjectCall(projectCallId: number): Promise
     )
     const partnerMap = new Map((partners as Partner[]).map(p => [p.id, p]))
     return (agreements as FinancialAgreement[])
-        .filter(a => callProjectIds.has(a.project_id))
-        .map(a => ({ ...a, partner: partnerMap.get(a.partner_id)! }))
+        .filter(a => a.project_id != null && callProjectIds.has(a.project_id))
+        .map(a => ({ ...a, partner: a.partner_id == null ? FALLBACK_PARTNER : partnerMap.get(a.partner_id)! }))
         .filter(a => a.partner)
 }
 
@@ -1277,6 +1278,16 @@ export async function removeAgreementMember(id: number): Promise<void> {
     await deleteRecord(T.agreement_member, id)
 }
 
+// Une référence vide vaut 0 côté Grist : un null envoyé tel quel n'efface pas
+// la valeur. Projet et partenaire sont facultatifs, il faut donc les convertir.
+function agreementToGrist<T extends Partial<FinancialAgreement>>(fields: T): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...fields }
+    for (const k of ['project_id', 'partner_id'] as const) {
+        if (k in fields) out[k] = fields[k] ?? 0
+    }
+    return out
+}
+
 export async function addAgreement(fields: Omit<FinancialAgreement, 'id'>): Promise<FinancialAgreement> {
     if (USE_MOCK) {
         const newId = Math.max(0, ...mockFinancialAgreements.map(a => a.id)) + 1
@@ -1284,7 +1295,7 @@ export async function addAgreement(fields: Omit<FinancialAgreement, 'id'>): Prom
         mockFinancialAgreements.push(agreement)
         return agreement
     }
-    const id = await addRecord(T.financial_agreement, fields)
+    const id = await addRecord(T.financial_agreement, agreementToGrist(fields))
     return { id, ...fields }
 }
 
@@ -1294,7 +1305,7 @@ export async function updateAgreement(id: number, patch: Partial<Omit<FinancialA
         if (a) Object.assign(a, patch)
         return
     }
-    await updateRecord(T.financial_agreement, id, patch)
+    await updateRecord(T.financial_agreement, id, agreementToGrist(patch))
 }
 
 export async function deleteAgreement(id: number): Promise<void> {
@@ -1544,6 +1555,7 @@ export async function getPartnerCardsFull(): Promise<PartnerCardFull[]> {
         // Agreements — boucle sur mockFinancialAgreements
         const agreementsByPartner = new Map<number, FinancialAgreement[]>()
         for (const a of mockFinancialAgreements) {
+            if (a.partner_id == null) continue
             const existing = agreementsByPartner.get(a.partner_id) ?? []
             agreementsByPartner.set(a.partner_id, [...existing, a])
         }
@@ -1551,6 +1563,7 @@ export async function getPartnerCardsFull(): Promise<PartnerCardFull[]> {
         // Projects — déduits depuis les conventions (pas de partner_id direct)
         const projectsByPartner = new Map<number, Project[]>()
         for (const a of mockFinancialAgreements) {
+            if (a.partner_id == null) continue
             const project = mockProjects.find(p => p.id === a.project_id)
             if (!project) continue
             const existing = projectsByPartner.get(a.partner_id) ?? []

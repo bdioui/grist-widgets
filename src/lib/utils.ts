@@ -79,7 +79,7 @@ export function computeFinancials(
     // par une autre.
     const settled = new Set<string>()
     for (const a of agreements) {
-        const f = totals.get(a.project_id)
+        const f = a.project_id != null ? totals.get(a.project_id) : undefined
         if (!f) continue
         if (a.direction === 'recette') f.cofinanced += a.grant
         else f.granted += paidByAgreement.get(a.id) ?? 0

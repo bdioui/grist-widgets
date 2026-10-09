@@ -124,7 +124,7 @@ export default function App() {
 
     // 5. Conventions non signées sur mes projets
     const conventionAlerts: AlertItem[] = agreements
-      .filter(a => memberProjectIds.has(a.project_id) && !a.signed_date)
+      .filter(a => a.project_id != null && memberProjectIds.has(a.project_id) && !a.signed_date)
       .map(a => {
         const proj = projects.find(p => p.id === a.project_id)
         return { id: a.id, type: 'convention', title: proj ? `${proj.title} – ${a.title}` : a.title, daysLeft: 0, seen: seenIds.has(`convention-${a.id}`) }

@@ -22,6 +22,7 @@ type SearchInputProps<T extends { id: number }> = {
     selectedIds?: number[]
     inline?: boolean
     dropdownUp?: boolean
+    autoFocus?: boolean
 }
 
 export default function SearchInput<T extends { id: number }>({
@@ -38,6 +39,7 @@ export default function SearchInput<T extends { id: number }>({
     selectedIds,
     inline = false,
     dropdownUp = false,
+    autoFocus = false,
 }: SearchInputProps<T>) {
     const [query,   setQuery]   = useState('')
     const [open,    setOpen]    = useState(false)
@@ -82,6 +84,7 @@ export default function SearchInput<T extends { id: number }>({
     return (
         <div className="relative flex-1">
             <Input
+                autoFocus={autoFocus}
                 value={displayValue}
                 onChange={e => { setQuery(e.target.value); setOpen(true) }}
                 onFocus={() => { setFocused(true); setQuery(''); setOpen(true) }}

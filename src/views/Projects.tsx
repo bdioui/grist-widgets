@@ -3317,7 +3317,7 @@ export function ProjectDetailSheet({ projects, project, open, onClose, onUpdated
                                             const partnerMap = new Map(partners.map(p => [p.id, p]))
                                             setAllAgreementsForLink((all as FinancialAgreement[])
                                                 .filter(a => a.project_id !== project.id)
-                                                .map(a => ({ ...a, partner: partnerMap.get(a.partner_id) ?? FALLBACK_PARTNER }))
+                                                .map(a => ({ ...a, partner: (a.partner_id != null ? partnerMap.get(a.partner_id) : undefined) ?? FALLBACK_PARTNER }))
                                             )
                                             setLoadingLinkAgreements(false)
                                         }
@@ -4223,7 +4223,8 @@ export default function Projects() {
     const agreementsByProject = useMemo(() => {
         const acc = new Map<number, AgreementFull[]>()
         for (const a of allAgreements) {
-            const partner = partnerMap.get(a.partner_id)
+            if (a.project_id == null) continue
+            const partner = a.partner_id == null ? FALLBACK_PARTNER : partnerMap.get(a.partner_id)
             if (!partner) continue
             const list = acc.get(a.project_id) ?? []
             list.push({ ...a, partner })

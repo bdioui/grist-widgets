@@ -175,8 +175,8 @@ export type AgreementDirection = 'recette' | 'depense'
 export type FinancialAgreement = {
     id: number
     direction: AgreementDirection
-    project_id: number
-    partner_id: number
+    project_id: number | null
+    partner_id: number | null
     axis_id: number | null
     status_id: number
     title: string

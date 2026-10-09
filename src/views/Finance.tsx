@@ -28,6 +28,7 @@ import { sifacCategory } from '@/lib/sifac/aggregate'
 import { type Program, type Expanse, type BudgetCategory, type BudgetDetail, type Supplier, type Project, type FinancialAgreement, type Partner, type Status, type SifacLine, type AgreementDirection, type ProjectExpanse, type Allocation } from '@/lib/types'
 import { DirectionPill } from '@/components/DirectionPill'
 import AllocationDialog from '../components/AllocationDialog'
+import { EditableInput, EditableSelect, EditableSearch } from '@/components/InlineEdit'
 
 const EXPANSE_CATEGORIES = ['Fonctionnement', 'Investissement', 'Personnel', 'Autre'] as const
 
@@ -632,6 +633,17 @@ function ProjectCell({ data, amount, onClick }: { data: ProjectCellData; amount:
     )
 }
 
+// Ce dont les cellules modifiables ont besoin. Un seul objet mémoïsé par le
+// parent : passé en props séparées, chaque liste ferait re-rendre toutes les lignes.
+type ExpanseEditCtx = {
+    leafBudgetDetails: BudgetDetail[]
+    budgetDetailMap: Map<number, BudgetDetail>
+    suppliers: Supplier[]
+    agreements: FinancialAgreement[]
+    labels: string[]
+    labelsByCategory: Record<string, string[]>
+}
+
 type ExpanseRowProps = {
     expanse: Expanse
     isSelected: boolean
@@ -647,16 +659,29 @@ type ExpanseRowProps = {
     sifacLines?: SifacLine[] | null
     onToggleRow: (id: number) => void
     onToggleDetail: (id: number) => void
-    onStartEdit: (e: Expanse) => void
+    onPatch: (id: number, patch: Partial<Expanse>) => Promise<void>
+    onDelete: (id: number) => void
+    edit: ExpanseEditCtx
 }
 
-// Ligne en lecture seule. En memo : cocher une case ne re-rend que sa propre
-// ligne, à condition que les callbacks reçus soient stables (useCallback).
+const EXPANSE_CATEGORY_OPTIONS = EXPANSE_CATEGORIES.map(c => ({ value: c, label: c }))
+const EXPANSE_STATUS_OPTIONS = Object.keys(EXPANSE_STATUS_COLORS).map(s => ({ value: s, label: s }))
+const NO_AGREEMENT = '__none__'
+
+// Chaque cellule s'édite en place et enregistre d'elle-même (onPatch). En memo :
+// cocher une case ne re-rend que sa propre ligne, à condition que les callbacks
+// reçus soient stables (useCallback).
 const ExpanseRow = React.memo(function ExpanseRow({
     expanse: e, isSelected, isExpanded, detailTitle, detailCategoryTitle,
     supplierName, agreementTitle, sifacLines,
-    onToggleRow, onToggleDetail, onStartEdit, onAllocate, projectCell
+    onToggleRow, onToggleDetail, onPatch, onDelete, onAllocate, projectCell, edit
 }: ExpanseRowProps) {
+    const labelOptions = (edit.labelsByCategory[e.category] ?? edit.labels).map(l => ({ value: l, label: l }))
+    const agreementOptions = [
+        { value: NO_AGREEMENT, label: '— Aucune —' },
+        ...edit.agreements.map(a => ({ value: String(a.id), label: a.title })),
+    ]
+
     return (
         <React.Fragment>
             <TableRow className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
@@ -674,54 +699,126 @@ const ExpanseRow = React.memo(function ExpanseRow({
                                 {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                             </button>
                         ) : <span className="shrink-0 w-[18px]" />}
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="truncate block max-w-xs cursor-default">{e.title}</span>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="max-w-xs text-xs">{e.description}</TooltipContent>
-                        </Tooltip>
+                        <EditableInput
+                            value={e.title}
+                            className="flex-1 w-auto min-w-0"
+                            onCommit={v => v.trim() ? onPatch(e.id, { title: v.trim() }) : undefined}
+                            display={
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="truncate block max-w-xs">{e.title}</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom" className="max-w-xs text-xs">{e.description}</TooltipContent>
+                                </Tooltip>
+                            }
+                        />
                     </div>
                 </TableCell>
                 <TableCell>
-                    {e.otp ? (<span className="px-1.5 py-0.5 rounded text-[10px] font-medium">{e.otp} </span>) : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium"> - </span>}
+                    {/* L'OTP d'un flux SIFAC est réécrit à chaque import : inutile de le laisser éditable */}
+                    <EditableInput
+                        value={e.otp ?? ''}
+                        disabled={e.source === 'sifac'}
+                        onCommit={v => onPatch(e.id, { otp: v.trim() === '' ? null : v.trim() })}
+                        display={<span className="px-1.5 py-0.5 rounded text-[10px] font-medium">{e.otp ?? ' - '}</span>}
+                    />
                 </TableCell>
                 <TableCell className="font-mono text-[10px] text-muted-foreground">{e.flux_id ?? '—'}</TableCell>
                 <TableCell>
-                    {e.category && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
-                        {e.category}
-                    </span>}
+                    <EditableSelect
+                        value={e.category}
+                        options={EXPANSE_CATEGORY_OPTIONS}
+                        onCommit={v => onPatch(e.id, { category: v })}
+                        display={e.category ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
+                                {e.category}
+                            </span>
+                        ) : undefined}
+                    />
                 </TableCell>
                 <TableCell>
-                    {e.label && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
-                        {e.label}
-                    </span>}
+                    <EditableSelect
+                        value={e.label}
+                        options={labelOptions}
+                        onCommit={v => onPatch(e.id, { label: v })}
+                        display={e.label ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: CATEGORY_COLORS[e.category] ?? '#f3f4f6' }}>
+                                {e.label}
+                            </span>
+                        ) : undefined}
+                    />
                 </TableCell>
-                <TableCell className="truncate max-w-44">
-                    <span className="text-foreground">{detailTitle ?? '—'}</span>
-                    {detailCategoryTitle && <p className="text-[10px] text-muted-foreground leading-tight">{detailCategoryTitle}</p>}
+                <TableCell className="max-w-44">
+                    <EditableSearch
+                        data={edit.leafBudgetDetails}
+                        getLabel={d => d.title}
+                        groupBy={d => ({ primary: edit.budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
+                        placeholder="Ligne budgétaire…"
+                        dropdownClassName="min-w-[260px]"
+                        onSelect={d => onPatch(e.id, { budget_detail_id: d.id })}
+                        onClear={e.budget_detail_id != null ? () => onPatch(e.id, { budget_detail_id: null }) : undefined}
+                        display={
+                            <>
+                                <span className="block truncate text-foreground">{detailTitle ?? '—'}</span>
+                                {detailCategoryTitle && <span className="block truncate text-[10px] text-muted-foreground leading-tight">{detailCategoryTitle}</span>}
+                            </>
+                        }
+                    />
                 </TableCell>
-                <TableCell className="text-right font-medium tabular-nums">{formatAmount(e.amount)}</TableCell>
-                <TableCell className="text-muted-foreground truncate">{supplierName ?? '—'}</TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                    <EditableInput
+                        kind="number"
+                        value={String(e.amount)}
+                        className="text-right"
+                        onCommit={v => onPatch(e.id, { amount: parseAmount(v) })}
+                        display={formatAmount(e.amount)}
+                    />
+                </TableCell>
+                <TableCell className="max-w-40">
+                    <EditableSearch
+                        data={edit.suppliers}
+                        getLabel={s => s.name}
+                        placeholder="Fournisseur…"
+                        dropdownClassName="min-w-[220px]"
+                        onSelect={s => onPatch(e.id, { supplier_id: s.id })}
+                        onClear={e.supplier_id != null ? () => onPatch(e.id, { supplier_id: null }) : undefined}
+                        display={<span className="block truncate text-muted-foreground">{supplierName ?? '—'}</span>}
+                    />
+                </TableCell>
                 <TableCell className="max-w-56">
                     <ProjectCell data={projectCell} amount={e.amount} onClick={() => onAllocate(e)} />
                 </TableCell>
-                <TableCell className="text-muted-foreground truncate">
-                    {e.agreement_id ? (
-                        <span className="text-[10px] text-blue-600 font-medium">
-                            ↳ {agreementTitle ?? '—'}
-                        </span>
-                    ) : '—'}
+                <TableCell className="max-w-40">
+                    <EditableSelect
+                        value={e.agreement_id != null ? String(e.agreement_id) : NO_AGREEMENT}
+                        options={agreementOptions}
+                        onCommit={v => onPatch(e.id, { agreement_id: v === NO_AGREEMENT ? null : Number(v) })}
+                        display={e.agreement_id ? (
+                            <span className="block truncate text-[10px] text-blue-600 font-medium">↳ {agreementTitle ?? '—'}</span>
+                        ) : <span className="text-muted-foreground">—</span>}
+                    />
                 </TableCell>
                 <TableCell>
-                    <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: EXPANSE_STATUS_COLORS[e.status] ?? '#f3f4f6' }}>
-                        {e.status}
-                    </span>
+                    <EditableSelect
+                        value={e.status}
+                        options={EXPANSE_STATUS_OPTIONS}
+                        onCommit={v => onPatch(e.id, { status: v })}
+                        display={
+                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: EXPANSE_STATUS_COLORS[e.status] ?? '#f3f4f6' }}>
+                                {e.status}
+                            </span>
+                        }
+                    />
                 </TableCell>
-                <TableCell className="text-muted-foreground tabular-nums">{formatDate(e.purchase_date)}</TableCell>
-                <TableCell className="text-muted-foreground tabular-nums">{formatDate(e.payment_date)}</TableCell>
+                <TableCell className="text-muted-foreground tabular-nums">
+                    <EditableInput kind="date" value={e.purchase_date ?? ''} display={formatDate(e.purchase_date)} onCommit={v => onPatch(e.id, { purchase_date: v })} />
+                </TableCell>
+                <TableCell className="text-muted-foreground tabular-nums">
+                    <EditableInput kind="date" value={e.payment_date ?? ''} display={formatDate(e.payment_date)} onCommit={v => onPatch(e.id, { payment_date: v })} />
+                </TableCell>
                 <TableCell>
-                    <button onClick={() => onStartEdit(e)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-opacity">
-                        <Pencil size={12} className="text-muted-foreground" />
+                    <button onClick={() => onDelete(e.id)} title="Supprimer" className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 text-red-500 transition-opacity">
+                        <Trash2 size={12} />
                     </button>
                 </TableCell>
             </TableRow>
@@ -754,8 +851,6 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     const [sortKey, setSortKey] = useState<string | null>(null)
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
     const [selected, setSelected] = useState<Set<number>>(new Set())
-    const [editingId, setEditingId] = useState<number | null>(null)
-    const [draft, setDraft] = useState<Partial<Expanse>>({})
     const [isAdding, setIsAdding] = useState(false)
     const [newDraft, setNewDraft] = useState<Partial<Expanse>>({})
     const [saving, setSaving] = useState(false)
@@ -948,7 +1043,6 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
     function startAdd() {
         setIsAdding(true)
         setNewDraft({ title: '', category: 'Fonctionnement', label: '', status: 'Engagé', amount: 0, purchase_date: '', payment_date: '', delivery_date: '', description: '', budget_detail_id: leafBudgetDetails[0]?.id ?? null, supplier_id: null, agreement_id: null })
-        setEditingId(null)
     }
 
     async function saveNew() {
@@ -966,21 +1060,34 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
 
     function cancelAdd() { setIsAdding(false); setNewDraft({}) }
 
-    const startEdit = useCallback((e: Expanse) => {
-        setEditingId(e.id)
-        setDraft({ ...e })
+    // Chaque cellule enregistre d'elle-même. On met l'écran à jour d'abord, puis
+    // la base ; si l'écriture échoue, les champs touchés reprennent leur valeur
+    // et l'erreur remonte à la cellule.
+    const expansesRef = useRef(expanses)
+    useEffect(() => { expansesRef.current = expanses })
+
+    const patchExpanse = useCallback(async (id: number, patch: Partial<Expanse>) => {
+        const current = expansesRef.current.find(e => e.id === id)
+        if (!current) return
+        const before = Object.fromEntries(Object.keys(patch).map(k => [k, current[k as keyof Expanse]])) as Partial<Expanse>
+        setExpanses(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e))
+        try {
+            await updateExpanse(id, patch)
+        } catch (err) {
+            setExpanses(prev => prev.map(e => e.id === id ? { ...e, ...before } : e))
+            throw err
+        }
+    }, [setExpanses])
+
+    const requestDelete = useCallback((id: number) => {
+        setSelected(new Set([id]))
+        setConfirmDelete(true)
     }, [])
 
-    async function saveEdit() {
-        if (editingId == null) return
-        const { id: _id, ...patch } = draft as Expanse
-        await updateExpanse(editingId, patch)
-        setExpanses(prev => prev.map(e => e.id === editingId ? { ...e, ...patch } : e))
-        setEditingId(null)
-        setDraft({})
-    }
-
-    function cancelEdit() { setEditingId(null); setDraft({}) }
+    const editCtx = useMemo<ExpanseEditCtx>(
+        () => ({ leafBudgetDetails, budgetDetailMap, suppliers, agreements, labels, labelsByCategory }),
+        [leafBudgetDetails, budgetDetailMap, suppliers, agreements, labels, labelsByCategory]
+    )
 
     async function doDelete() {
         const ids = [...selected]
@@ -1347,110 +1454,12 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                 </TableCell>
                             </TableRow>
                         ) : sorted.map(e => {
-                            const isEditing = editingId === e.id
                             const isSelected = selected.has(e.id)
                             const detail = e.budget_detail_id ? budgetDetailMap.get(e.budget_detail_id) : null
                             const detailCategory = detail ? budgetCategoryMap.get(detail.budget_category_id) : null
                             const supplier = e.supplier_id ? supplierMap.get(e.supplier_id) : null
                             const projectCell = projectCellByExpanse.get(e.id) ?? NO_PROJECT_CELL
                             
-
-                            if (isEditing) return (
-                                <TableRow key={e.id} className="text-xs bg-blue-50/60">
-                                    <TableCell className="px-3">
-                                        <Checkbox checked={isSelected} onCheckedChange={() => toggleRow(e.id)} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input value={draft.title ?? ''} onChange={ev => setDraft(d => ({ ...d, title: ev.target.value }))} className="h-7 text-xs" />
-                                    </TableCell>
-                                    <TableCell>
-                                        {/* L'OTP d'un flux SIFAC est réécrit à chaque import : inutile de le laisser éditable */}
-                                        <Input value={draft.otp ?? ''} disabled={draft.source === 'sifac'} onChange={ev => setDraft(d => ({ ...d, otp: ev.target.value }))} className="h-7 text-xs" />
-                                    </TableCell>
-                                    <TableCell className="font-mono text-[10px] text-muted-foreground">{draft.flux_id ?? '—'}</TableCell>
-                                    <TableCell>
-                                        <Select value={draft.category ?? ''} onValueChange={v => setDraft(d => ({ ...d, category: v }))}>
-                                            <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                {EXPANSE_CATEGORIES.map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Select value={draft.label ?? ''} onValueChange={v => setDraft(d => ({ ...d, label: v }))}>
-                                            <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                {(labelsByCategory[draft.category ?? ''] ?? labels).map(l => <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                         <div className="flex items-center gap-1">
-                                            <SearchInput
-                                                data={leafBudgetDetails}
-                                                onSelect={d => setDraft(prev => ({ ...prev, budget_detail_id: d.id }))}
-                                                getLabel={d => d.title}
-                                                value={draft.budget_detail_id ? (budgetDetailMap.get(draft.budget_detail_id)?.title ?? '') : ''}
-                                                placeholder="Ligne budgétaire…"
-                                                dropdownClassName="min-w-[260px]"
-                                                groupBy={d => ({ primary: budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
-                                            />          
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input type="number" step="0.01" value={draft.amount ?? ''} onChange={ev => setDraft(d => ({ ...d, amount: parseAmount(ev.target.value) }))} className="h-7 text-xs text-right" />
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-1">
-                                            <SearchInput
-                                                data={suppliers}
-                                                onSelect={s => setDraft(d => ({ ...d, supplier_id: s.id }))}
-                                                getLabel={s => s.name}
-                                                value={draft.supplier_id ? (supplierMap.get(draft.supplier_id)?.name ?? '') : ''}
-                                                placeholder="Fournisseur…"
-                                                dropdownClassName="min-w-[220px]"
-                                            />
-                                            <NewSupplierPopover
-                                                suppliers={suppliers}
-                                                onCreated={s => { setSuppliers(prev => [...prev, s]); setDraft(d => ({ ...d, supplier_id: s.id })) }}
-                                            />
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="max-w-56">
-                                        <ProjectCell data={projectCell} amount={e.amount} onClick={() => onAllocate(e)} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Select value={draft.agreement_id != null ? String(draft.agreement_id) : '__none__'} onValueChange={v => setDraft(d => ({ ...d, agreement_id: v === '__none__' ? null : Number(v) }))}>
-                                            <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="— Aucune —" /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="__none__" className="text-xs text-muted-foreground">— Aucune —</SelectItem>
-                                                {agreements.map(a => <SelectItem key={a.id} value={String(a.id)} className="text-xs">{a.title}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Select value={draft.status ?? ''} onValueChange={v => setDraft(d => ({ ...d, status: v }))}>
-                                            <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                {Object.keys(EXPANSE_STATUS_COLORS).map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input type="date" value={draft.purchase_date ?? ''} onChange={ev => setDraft(d => ({ ...d, purchase_date: ev.target.value }))} className="h-7 text-xs" />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input type="date" value={draft.payment_date ?? ''} onChange={ev => setDraft(d => ({ ...d, payment_date: ev.target.value }))} className="h-7 text-xs" />
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex gap-1">
-                                            <button onClick={saveEdit} className="p-1 rounded hover:bg-green-100 text-green-700"><Check size={13} /></button>
-                                            <button onClick={cancelEdit} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={13} /></button>
-                                            <button onClick={() => { setSelected(new Set([e.id])); setConfirmDelete(true) }} className="p-1 rounded hover:bg-red-100 text-red-500"><Trash2 size={13} /></button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            )
 
                             return (
                                 <ExpanseRow
@@ -1465,7 +1474,9 @@ function DepensesTab({ expanses, setExpanses, budgetCategories, budgetDetails, s
                                     sifacLines={expandedId === e.id ? sifacLines : undefined}
                                     onToggleRow={toggleRow}
                                     onToggleDetail={toggleDetail}
-                                    onStartEdit={startEdit}
+                                    onPatch={patchExpanse}
+                                    onDelete={requestDelete}
+                                    edit={editCtx}
                                     projectCell={projectCell}
                                     onAllocate={onAllocate}
                                 />
@@ -1591,6 +1602,14 @@ interface ConventionsTabProps {
     expanses: Expanse[]
 }
 
+type ConventionEditCtx = {
+    partners: Partner[]
+    projects: Project[]
+    leafBudgetDetails: BudgetDetail[]
+    budgetDetailMap: Map<number, BudgetDetail>
+    statusOptions: { value: string; label: string }[]
+}
+
 type ConventionRowProps = {
     agreement: FinancialAgreement
     isSelected: boolean
@@ -1602,14 +1621,22 @@ type ConventionRowProps = {
     paid: number
     remaining: number
     onToggleRow: (id: number) => void
-    onStartEdit: (a: FinancialAgreement) => void
+    onPatch: (id: number, patch: Partial<FinancialAgreement>) => Promise<void>
+    onDelete: (id: number) => void
+    edit: ConventionEditCtx
 }
 
-// Ligne en lecture seule. En memo : cocher une case ne re-rend que sa propre
-// ligne, à condition que les callbacks reçus soient stables (useCallback).
+const DIRECTION_OPTIONS = [
+    { value: 'depense', label: 'Dépense' },
+    { value: 'recette', label: 'Recette' },
+]
+
+// Chaque cellule s'édite en place et enregistre d'elle-même (onPatch). En memo :
+// cocher une case ne re-rend que sa propre ligne, à condition que les callbacks
+// reçus soient stables (useCallback).
 const ConventionRow = React.memo(function ConventionRow({
     agreement: a, isSelected, partner, projectTitle, statusLabel,
-    detailTitle, detailCategoryTitle, paid, remaining, onToggleRow, onStartEdit,
+    detailTitle, detailCategoryTitle, paid, remaining, onToggleRow, onPatch, onDelete, edit,
 }: ConventionRowProps) {
     return (
         <TableRow className={`text-xs group ${isSelected ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
@@ -1617,40 +1644,81 @@ const ConventionRow = React.memo(function ConventionRow({
                 <Checkbox checked={isSelected} onCheckedChange={() => onToggleRow(a.id)} />
             </TableCell>
             <TableCell className="font-medium max-w-xs">
-                     <span className="truncate block max-w-xs cursor-default">{a.title}</span>
+                <EditableInput
+                    value={a.title}
+                    onCommit={v => v.trim() ? onPatch(a.id, { title: v.trim() }) : undefined}
+                    display={<span className="truncate block max-w-xs">{a.title}</span>}
+                />
             </TableCell>
             <TableCell className="font-medium max-w-xs">
-                {a.description ? (
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <span className="truncate block max-w-xs cursor-default">{a.description ?? '-'}</span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs text-xs">{a.description ?? '-'}</TooltipContent>
-                </Tooltip>
-                ) : (
-                   <span className="truncate block max-w-xs cursor-default">-</span>  
-                )}
-                
+                <EditableInput
+                    value={a.description ?? ''}
+                    onCommit={v => onPatch(a.id, { description: v })}
+                    display={a.description ? (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="truncate block max-w-xs">{a.description}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs text-xs">{a.description}</TooltipContent>
+                        </Tooltip>
+                    ) : undefined}
+                />
             </TableCell>
             <TableCell>
-                {partner ? (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium truncate block max-w-32" style={{ backgroundColor: partner.color + 50, color: 'black'}}>
-                        {partner.name}
-                    </span>
-                ) : '—'}
+                <EditableSearch
+                    data={edit.partners}
+                    getLabel={p => p.name}
+                    placeholder="Partenaire…"
+                    dropdownClassName="min-w-[220px]"
+                    onSelect={p => onPatch(a.id, { partner_id: p.id })}
+                    onClear={a.partner_id != null ? () => onPatch(a.id, { partner_id: null }) : undefined}
+                    display={partner ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium truncate block max-w-32" style={{ backgroundColor: partner.color + 50, color: 'black' }}>
+                            {partner.name}
+                        </span>
+                    ) : <span className="text-muted-foreground/50">—</span>}
+                />
             </TableCell>
-            <TableCell className="text-muted-foreground truncate max-w-36">{projectTitle ?? '—'}</TableCell>
-            <TableCell>
-                {detailTitle ? (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span className="truncate block max-w-36 cursor-default text-muted-foreground">{detailTitle}</span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">{detailCategoryTitle} › {detailTitle}</TooltipContent>
-                    </Tooltip>
-                ) : <span className="text-muted-foreground/50">—</span>}
+            <TableCell className="max-w-36">
+                <EditableSearch
+                    data={edit.projects}
+                    getLabel={p => p.title}
+                    placeholder="Projet…"
+                    dropdownClassName="min-w-[260px]"
+                    onSelect={p => onPatch(a.id, { project_id: p.id })}
+                    onClear={a.project_id != null ? () => onPatch(a.id, { project_id: null }) : undefined}
+                    display={<span className="block truncate text-muted-foreground">{projectTitle ?? '—'}</span>}
+                />
             </TableCell>
-            <TableCell className="text-right font-medium tabular-nums">{formatAmount(a.grant)}</TableCell>
+            <TableCell className="max-w-40">
+                <EditableSearch
+                    data={edit.leafBudgetDetails}
+                    getLabel={d => d.title}
+                    groupBy={d => ({ primary: edit.budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
+                    placeholder="Ligne budgétaire…"
+                    dropdownClassName="min-w-[260px]"
+                    onSelect={d => onPatch(a.id, { budget_detail_id: d.id })}
+                    onClear={a.budget_detail_id != null ? () => onPatch(a.id, { budget_detail_id: null }) : undefined}
+                    display={detailTitle ? (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="truncate block text-muted-foreground">{detailTitle}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">{detailCategoryTitle} › {detailTitle}</TooltipContent>
+                        </Tooltip>
+                    ) : <span className="text-muted-foreground/50">—</span>}
+                />
+            </TableCell>
+            <TableCell className="text-right font-medium tabular-nums">
+                <EditableInput
+                    kind="number"
+                    value={String(a.grant)}
+                    className="text-right"
+                    onCommit={v => onPatch(a.id, { grant: parseAmount(v) })}
+                    display={formatAmount(a.grant)}
+                />
+            </TableCell>
+            {/* Versé : calculé à partir des dépenses rattachées, rien à saisir */}
             <TableCell className="text-right tabular-nums">
                 {formatAmount(paid)}
                 {a.direction === 'depense' && remaining !== 0 && (
@@ -1660,17 +1728,31 @@ const ConventionRow = React.memo(function ConventionRow({
                 )}
             </TableCell>
             <TableCell>
-                <DirectionPill direction={a.direction} className="text-[10px] rounded" />
+                <EditableSelect
+                    value={a.direction}
+                    options={DIRECTION_OPTIONS}
+                    onCommit={v => onPatch(a.id, { direction: v as AgreementDirection })}
+                    display={<DirectionPill direction={a.direction} className="text-[10px] rounded" />}
+                />
             </TableCell>
             <TableCell>
-                <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: AGREEMENT_STATUS_COLORS[statusLabel ?? ''] ?? '#f3f4f6' }}>
-                    {statusLabel ?? '—'}
-                </span>
+                <EditableSelect
+                    value={String(a.status_id)}
+                    options={edit.statusOptions}
+                    onCommit={v => onPatch(a.id, { status_id: Number(v) })}
+                    display={
+                        <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: AGREEMENT_STATUS_COLORS[statusLabel ?? ''] ?? '#f3f4f6' }}>
+                            {statusLabel ?? '—'}
+                        </span>
+                    }
+                />
             </TableCell>
-            <TableCell className="text-muted-foreground tabular-nums">{formatDate(a.signed_date)}</TableCell>
+            <TableCell className="text-muted-foreground tabular-nums">
+                <EditableInput kind="date" value={a.signed_date ?? ''} display={formatDate(a.signed_date)} onCommit={v => onPatch(a.id, { signed_date: v })} />
+            </TableCell>
             <TableCell>
-                <button onClick={() => onStartEdit(a)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-opacity">
-                    <Pencil size={12} className="text-muted-foreground" />
+                <button onClick={() => onDelete(a.id)} title="Supprimer" className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 text-red-500 transition-opacity">
+                    <Trash2 size={12} />
                 </button>
             </TableCell>
         </TableRow>
@@ -1688,8 +1770,6 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
     const budgetDetailMap   = useMemo(() => new Map(budgetDetails.map(d => [d.id, d])), [budgetDetails])
     const leafBudgetDetails = useMemo(() => budgetDetails.filter(d => d.parent_id !== null), [budgetDetails])
     const budgetCategoryMap = useMemo(() => new Map(budgetCategories.map(c => [c.id, c])), [budgetCategories])
-    const [editingId, setEditingId] = useState<number | null>(null)
-    const [draft, setDraft] = useState<Partial<FinancialAgreement>>({})
     const [isAdding, setIsAdding] = useState(false)
     const [newDraft, setNewDraft] = useState<Partial<FinancialAgreement>>({})
     const [saving, setSaving] = useState(false)
@@ -1714,7 +1794,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
     const filtered = useMemo(() => agreements.filter(a => {
         if (search) {
             const q = search.toLowerCase()
-            const partner = partnerMap.get(a.partner_id)
+            const partner = a.partner_id != null ? partnerMap.get(a.partner_id) : undefined
             if (!a.title.toLowerCase().includes(q) && !(partner?.name.toLowerCase().includes(q))) return false
         }
         if (statusFilter !== 'all') {
@@ -1753,8 +1833,7 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
         setIsAdding(true)
         // Sans ce défaut la colonne partirait vide côté Grist : le cast de
         // saveNew laisse passer un champ manquant sans que le compilateur bronche.
-        setNewDraft({ title: '', description: '', direction: 'depense', budget: 0, grant: 0, signed_date: '', project_id: projects[0]?.id ?? 1, partner_id: partners[0]?.id ?? 1, axis_id: null, status_id: agreementStatuses[0]?.id ?? 1, budget_detail_id: null })
-        setEditingId(null)
+        setNewDraft({ title: '', description: '', direction: 'depense', budget: 0, grant: 0, signed_date: '', project_id: null, partner_id: null, axis_id: null, status_id: agreementStatuses[0]?.id ?? 1, budget_detail_id: null })
     }
 
     async function saveNew() {
@@ -1772,17 +1851,34 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
 
     function cancelAdd() { setIsAdding(false); setNewDraft({}) }
 
-    const startEdit = useCallback((a: FinancialAgreement) => { setEditingId(a.id); setDraft({ ...a }) }, [])
+    // Chaque cellule enregistre d'elle-même. On met l'écran à jour d'abord, puis
+    // la base ; si l'écriture échoue, les champs touchés reprennent leur valeur
+    // et l'erreur remonte à la cellule.
+    const agreementsRef = useRef(agreements)
+    useEffect(() => { agreementsRef.current = agreements })
 
-    async function saveEdit() {
-        if (editingId == null) return
-        const { id: _id, ...patch } = draft as FinancialAgreement
-        await updateAgreement(editingId, patch)
-        setAgreements(prev => prev.map(a => a.id === editingId ? { ...a, ...patch } : a))
-        setEditingId(null); setDraft({})
-    }
+    const patchAgreement = useCallback(async (id: number, patch: Partial<FinancialAgreement>) => {
+        const current = agreementsRef.current.find(a => a.id === id)
+        if (!current) return
+        const before = Object.fromEntries(Object.keys(patch).map(k => [k, current[k as keyof FinancialAgreement]])) as Partial<FinancialAgreement>
+        setAgreements(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a))
+        try {
+            await updateAgreement(id, patch)
+        } catch (err) {
+            setAgreements(prev => prev.map(a => a.id === id ? { ...a, ...before } : a))
+            throw err
+        }
+    }, [setAgreements])
 
-    function cancelEdit() { setEditingId(null); setDraft({}) }
+    const requestDelete = useCallback((id: number) => {
+        setSelected(new Set([id]))
+        setConfirmDelete(true)
+    }, [])
+
+    const editCtx = useMemo<ConventionEditCtx>(() => ({
+        partners, projects, leafBudgetDetails, budgetDetailMap,
+        statusOptions: agreementStatuses.map(s => ({ value: String(s.id), label: s.label })),
+    }), [partners, projects, leafBudgetDetails, budgetDetailMap, agreementStatuses])
 
     async function doDelete() {
         await Promise.all([...selected].map(id => deleteAgreement(id)))
@@ -1797,8 +1893,8 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
         const rows = filtered.filter(a => selected.has(a.id))
         exportToCsv('conventions.csv', ['Intitulé', 'Partenaire', 'Projet', 'Budget', 'Subvention', 'Statut', 'Date signature'], rows.map(a => [
             a.title,
-            partnerMap.get(a.partner_id)?.name ?? '',
-            projectMap.get(a.project_id)?.title ?? '',
+            a.partner_id != null ? (partnerMap.get(a.partner_id)?.name ?? '') : '',
+            a.project_id != null ? (projectMap.get(a.project_id)?.title ?? '') : '',
             String(a.budget),
             String(a.grant),
             statusMap.get(a.status_id)?.label ?? '',
@@ -1812,8 +1908,8 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
             let va: string | number = '', vb: string | number = ''
             if (sortKey === 'title')    { va = a.title; vb = b.title }
             else if (sortKey === 'description') { va = a.description ?? ''; vb = b.description ?? '' }
-            else if (sortKey === 'partner') { va = partnerMap.get(a.partner_id)?.name ?? ''; vb = partnerMap.get(b.partner_id)?.name ?? '' }
-            else if (sortKey === 'project') { va = projectMap.get(a.project_id)?.title ?? ''; vb = projectMap.get(b.project_id)?.title ?? '' }
+            else if (sortKey === 'partner') { va = (a.partner_id != null ? partnerMap.get(a.partner_id)?.name : '') ?? ''; vb = (b.partner_id != null ? partnerMap.get(b.partner_id)?.name : '') ?? '' }
+            else if (sortKey === 'project') { va = (a.project_id != null ? projectMap.get(a.project_id)?.title : '') ?? ''; vb = (b.project_id != null ? projectMap.get(b.project_id)?.title : '') ?? '' }
             else if (sortKey === 'budget')  { va = a.budget; vb = b.budget }
             else if (sortKey === 'grant')   { va = a.grant; vb = b.grant }
             else if (sortKey === 'paid')    {
@@ -1970,24 +2066,38 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     <Input value={newDraft.description ?? ''} onChange={ev => setNewDraft(d => ({ ...d, description: ev.target.value }))} placeholder="Déscription" className="h-7 text-xs" />
                                 </TableCell>
                                 <TableCell>
-                                    <SearchInput
-                                        data={partners}
-                                        onSelect={p => setNewDraft(d => ({ ...d, partner_id: p.id }))}
-                                        getLabel={p => p.name}
-                                        value={newDraft.partner_id ? (partnerMap.get(newDraft.partner_id)?.name ?? '') : ''}
-                                        placeholder="Partenaire…"
-                                        dropdownClassName="min-w-[220px]"
-                                    />
+                                    <div className="flex items-center gap-1">
+                                        <SearchInput
+                                            data={partners}
+                                            onSelect={p => setNewDraft(d => ({ ...d, partner_id: p.id }))}
+                                            getLabel={p => p.name}
+                                            value={newDraft.partner_id ? (partnerMap.get(newDraft.partner_id)?.name ?? '') : ''}
+                                            placeholder="Partenaire…"
+                                            dropdownClassName="min-w-[220px]"
+                                        />
+                                        {newDraft.partner_id != null && (
+                                            <button type="button" onClick={() => setNewDraft(d => ({ ...d, partner_id: null }))} className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground">
+                                                <X size={11} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </TableCell>
                                 <TableCell>
-                                    <SearchInput
-                                        data={projects}
-                                        onSelect={p => setNewDraft(d => ({ ...d, project_id: p.id }))}
-                                        getLabel={p => p.title}
-                                        value={newDraft.project_id ? (projectMap.get(newDraft.project_id)?.title ?? '') : ''}
-                                        placeholder="Projet…"
-                                        dropdownClassName="min-w-[260px]"
-                                    />
+                                    <div className="flex items-center gap-1">
+                                        <SearchInput
+                                            data={projects}
+                                            onSelect={p => setNewDraft(d => ({ ...d, project_id: p.id }))}
+                                            getLabel={p => p.title}
+                                            value={newDraft.project_id ? (projectMap.get(newDraft.project_id)?.title ?? '') : ''}
+                                            placeholder="Projet…"
+                                            dropdownClassName="min-w-[260px]"
+                                        />
+                                        {newDraft.project_id != null && (
+                                            <button type="button" onClick={() => setNewDraft(d => ({ ...d, project_id: null }))} className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground">
+                                                <X size={11} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </TableCell>
                                 <TableCell>
                                     <SearchInput
@@ -2041,86 +2151,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                             </TableRow>
                         ) : sorted.map(a => {
                             const isSelected = selected.has(a.id)
-                            const partner = partnerMap.get(a.partner_id)
-                            const project = projectMap.get(a.project_id)
+                            const partner = a.partner_id != null ? partnerMap.get(a.partner_id) : undefined
+                            const project = a.project_id != null ? projectMap.get(a.project_id) : undefined
                             const status = statusMap.get(a.status_id)
-
-                            if (editingId === a.id) return (
-                                <TableRow key={a.id} className="text-xs bg-blue-50/60">
-                                    <TableCell className="px-3">
-                                        <Checkbox checked={isSelected} onCheckedChange={() => toggleRow(a.id)} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input value={draft.title ?? ''} onChange={ev => setDraft(d => ({ ...d, title: ev.target.value }))} className="h-7 text-xs" />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input value={draft.description ?? ''} onChange={ev => setDraft(d => ({ ...d, description: ev.target.value }))} className="h-7 text-xs" />
-                                    </TableCell>
-                                    <TableCell>
-                                        <SearchInput
-                                            data={partners}
-                                            onSelect={p => setDraft(d => ({ ...d, partner_id: p.id }))}
-                                            getLabel={p => p.name}
-                                            value={draft.partner_id ? (partnerMap.get(draft.partner_id)?.name ?? '') : ''}
-                                            placeholder="Partenaire…"
-                                            dropdownClassName="min-w-[220px]"
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <SearchInput
-                                            data={projects}
-                                            onSelect={p => setDraft(d => ({ ...d, project_id: p.id }))}
-                                            getLabel={p => p.title}
-                                            value={draft.project_id ? (projectMap.get(draft.project_id)?.title ?? '') : ''}
-                                            placeholder="Projet…"
-                                            dropdownClassName="min-w-[260px]"
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <SearchInput
-                                            data={leafBudgetDetails}
-                                            onSelect={d => setDraft(dr => ({ ...dr, budget_detail_id: d.id }))}
-                                            getLabel={d => d.title}
-                                            groupBy={d => ({ primary: budgetDetailMap.get(d.parent_id!)?.title ?? '' })}
-                                            value={draft.budget_detail_id ? (budgetDetailMap.get(draft.budget_detail_id)?.title ?? '') : ''}
-                                            placeholder="Ligne budgétaire…"
-                                            dropdownClassName="min-w-[260px]"
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input type="number" step="0.01" value={draft.grant ?? ''} onChange={ev => setDraft(d => ({ ...d, grant: parseAmount(ev.target.value) }))} className="h-7 text-xs text-right" />
-                                    </TableCell>
-                                    {/* Versé : lecture seule, pas de saisie ici — reste visible dans la ligne normale */}
-                                    <TableCell className="text-right tabular-nums text-muted-foreground">{formatAmount(paidByAgreement.get(a.id) ?? 0)}</TableCell>
-                                    <TableCell>
-                                        <Select value={draft.direction ?? 'depense'} onValueChange={v => setDraft(d => ({ ...d, direction: v as AgreementDirection }))}>
-                                            <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="depense" className="text-xs">Dépense</SelectItem>
-                                                <SelectItem value="recette" className="text-xs">Recette</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Select value={String(draft.status_id ?? '')} onValueChange={v => setDraft(d => ({ ...d, status_id: Number(v) }))}>
-                                            <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                {agreementStatuses.map(s => <SelectItem key={s.id} value={String(s.id)} className="text-xs">{s.label}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input type="date" value={draft.signed_date ?? ''} onChange={ev => setDraft(d => ({ ...d, signed_date: ev.target.value }))} className="h-7 text-xs" />
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex gap-1">
-                                            <button onClick={saveEdit} className="p-1 rounded hover:bg-green-100 text-green-700"><Check size={13} /></button>
-                                            <button onClick={cancelEdit} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={13} /></button>
-                                            <button onClick={() => { setSelected(new Set([a.id])); setConfirmDelete(true) }} className="p-1 rounded hover:bg-red-100 text-red-500"><Trash2 size={13} /></button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            )
 
                             const detail   = a.budget_detail_id ? budgetDetailMap.get(a.budget_detail_id) : null
                             const detailCat = detail ? budgetCategoryMap.get(detail.budget_category_id) : null
@@ -2140,7 +2173,9 @@ function ConventionsTab({ agreements, setAgreements, partners, projects, statuse
                                     paid={paid}
                                     remaining={a.grant - paid}
                                     onToggleRow={toggleRow}
-                                    onStartEdit={startEdit}
+                                    onPatch={patchAgreement}
+                                    onDelete={requestDelete}
+                                    edit={editCtx}
                                 />
                             )
                         })}
