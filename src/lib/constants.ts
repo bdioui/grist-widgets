@@ -1,4 +1,5 @@
 import type { Partner } from './types'
+import { LayoutDashboard, Gauge, Wallet, PieChart, CalendarDays, Handshake, Network, Users, Bell } from 'lucide-react'
 
 export const PARTNER_TYPES = [
     'Université et grandes écoles', 'Entreprise privée', 'Association',
@@ -14,7 +15,7 @@ export const PARTNER_ROLES = ['Associé', 'Bénéficiaire', 'Cofinanceur', 'Sous
 // sous-traitant est payé sur facture, donc compté en dépense directe. Un
 // montant saisi sur un autre rôle n'entrerait dans aucun total.
 export const PARTNER_ROLE_DIRECTION: Record<string, 'recette' | 'depense'> = {
-    'Cofinanceur':  'recette',
+    'Cofinanceur': 'recette',
     'Bénéficiaire': 'depense',
 }
 
@@ -43,3 +44,19 @@ export const PALETTE = [
     { label: 'Sable', hexa: '#E8DFC0' },
     { label: 'Terracotta', hexa: '#E8C4A8' },
 ]
+
+export const WIDGETS = {
+    header: { label: 'En-tête', icon: LayoutDashboard },
+    kpis: { label: 'Indicateurs', icon: Gauge },
+    expanses: { label: 'Dépenses', icon: Wallet },
+    budget: { label: 'Budget', icon: PieChart },
+    heat_map: { label: 'Calendrier', icon: CalendarDays },
+    top_partners: { label: 'Top partenaires', icon: Handshake },
+    partner_graph: { label: 'Réseau partenaires', icon: Network },
+    member_graph: { label: 'Réseau membres', icon: Network },
+    team: { label: 'Équipe', icon: Users },
+    alerts: { label: 'Alertes', icon: Bell },
+} as const
+
+export type WidgetId = keyof typeof WIDGETS
+export const WIDGET_IDS = Object.keys(WIDGETS) as WidgetId[]

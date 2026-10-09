@@ -740,7 +740,7 @@ export const mockProjectAttachments: ProjectAttachment[] = [
 ]
 
 export const mockProgram: Program[] = [
-    { id: 1, name: "Iris-E", budget: 20000000, start_date: "2023-01-01", end_date: "2032-12-31", description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut varius diam quis commodo euismod. Nulla facilisi. Nulla facilisi. Vestibulum nibh turpis, viverra eget sapien sit amet, euismod venenatis neque. Nunc dictum dolor id augue varius accumsan. Integer vestibulum a urna sit amet aliquam.", logo: "", management_fee_rate: 8 }
+    { id: 1, name: "Iris-E", budget: 20000000, start_date: "2023-01-01", end_date: "2032-12-31", description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut varius diam quis commodo euismod. Nulla facilisi. Nulla facilisi. Vestibulum nibh turpis, viverra eget sapien sit amet, euismod venenatis neque. Nunc dictum dolor id augue varius accumsan. Integer vestibulum a urna sit amet aliquam.", logo: "", management_fee_rate: 8, widgets_preference: ['header'] }
 ]
 
 // `sifac_code` volontairement vide sur une partie des fiches : ce sont les

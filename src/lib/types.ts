@@ -1,3 +1,4 @@
+import { type WidgetId } from "./constants"
 // --- Tables de référence ---
 
 
@@ -360,6 +361,7 @@ export type Program = {
     end_date: string
     logo: string
     management_fee_rate: number | null
+    widgets_preference: WidgetId[]
 }
 
 // Budget & expanses

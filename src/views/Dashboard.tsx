@@ -6,7 +6,7 @@ import {
 } from '@/lib/api'
 import { type Program, type Project, type Status, type Partner, type Member, type FinancialAgreement, type ProjectMember, type ActionCardFull, type Expanse, type BudgetCategory, type BudgetDetail } from '@/lib/types'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, Users, Briefcase, Building2, TrendingUp, Clock, Receipt, Pencil, Check, X, NetworkIcon, InfoIcon } from 'lucide-react'
+import { AlertTriangle, Briefcase, Building2, TrendingUp, Clock, Receipt, Pencil, Check, X, NetworkIcon, InfoIcon, LayoutPanelLeft, Users } from 'lucide-react'
 import {ProjectViewerSheet, ActionCardViewerSheet} from '../components/viewers'
 import PartnerGraph from '../components/partnerGraphView'
 import MemberGraph from '../components/memberGraphView'
@@ -16,6 +16,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { sumGrant } from '@/lib/utils'
 import CalendarHeatmap, { type ReactCalendarHeatmapValue } from 'react-calendar-heatmap'
 import 'react-calendar-heatmap/dist/styles.css'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu"
+import { Button } from "../components/ui/button"
+import {WIDGETS, WIDGET_IDS, type WidgetId} from '../lib/constants'
 
 // --- Helpers ---
 
@@ -135,6 +143,7 @@ function ActionAlert({ card, daysLeft, onOpen }: {
 // --- Vue principale ---
 
 export default function Dashboard() {
+    const [widgets, setWidgets] = useState<WidgetId[]>(WIDGET_IDS)
 
     const currentYear = new Date().getFullYear()
     const [loading, setLoading] = useState(true)
@@ -143,7 +152,7 @@ export default function Dashboard() {
     const [projects,       setProjects]       = useState<Project[]>([])
     const [actionCards,    setActionCards]    = useState<ActionCardFull[]>([])
     const [openProject, setOpenProject]       = useState<Project | null>(null)
-    const [openCard, setOpenCard]         = useState<ActionCardFull | null>(null)
+    const [openCard, setOpenCard]         = useState<ActionCardFull | null>(null)
     const [staffModal, setStaffModal]         = useState<{ member: import('@/lib/types').Member; assignments: { project: import('@/lib/types').Project; role: string }[] } | null>(null)
     const [statuses,       setStatuses]       = useState<Status[]>([])
     const [partners,       setPartners]       = useState<Partner[]>([])
@@ -179,7 +188,9 @@ export default function Dashboard() {
             getBudgetCategories(),
             getBudgetDetails(),
         ]).then(([prog, proj, stat, part, memb, agr, pm, ac, exp, cats, details]) => {
-            setProgram((prog as Program[])[0] ?? null)
+            const program = (prog as Program[])[0] ?? null
+            setProgram(program)
+            setWidgets(program?.widgets_preference ?? WIDGET_IDS)
             setProjects(proj as Project[])
             setStatuses(stat as Status[])
             setPartners(part as Partner[])
@@ -362,12 +373,51 @@ export default function Dashboard() {
         'Planifié':   '#fef9c3',
     }
 
+    async function saveWidgets(next: WidgetId[]) {
+        if (!program) return
+        try {
+            await updateProgram(program.id, { widgets_preference: next })
+        } catch (error) {
+            console.error(error)
+        }
+    }
+
     return (
         <>
-        <div className="m-5 flex flex-col gap-6 pb-10">
 
+        {/* Widget Selection */}
+        <div className='ml-3'>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant='outline'> <LayoutPanelLeft /> Widgets</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                    {WIDGET_IDS.map(w => {
+                        const { label, icon: Icon } = WIDGETS[w]
+                        return (
+                            <DropdownMenuCheckboxItem
+                                key={w}
+                                checked={widgets.includes(w)}
+                                onCheckedChange={checked => {
+                                        const next = checked ? [...widgets, w] : widgets.filter(x => x !== w)
+                                        setWidgets(next)
+                                        saveWidgets(next)
+                                    }}
+                                
+                            >
+                                <Icon size={14} className="mr-2" />
+                                {label}
+                            </DropdownMenuCheckboxItem>
+                        )
+                    })}
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+            
+        <div className="m-5 flex flex-col gap-6 pb-10">
             {/* ── En-tête Programme ── */}
-            {program && (
+            {widgets.includes('header') && program && (
+               
                 <div className="rounded-xl overflow-hidden" style={{ position: 'relative', background: '#f0f2ff' }}>
                     <style>{`
                         @keyframes _blob1 {
@@ -463,319 +513,323 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
+              
             )}
 
             {/* ── KPIs ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                <KpiCard
-                    icon={<Briefcase size={16} />}
-                    label="Projets actifs"
-                    value={activeProjects.length}
-                    sub={`${projects.length} au total`}
-                />
-                <KpiCard
-                    icon={<Building2 size={16} />}
-                    label="Partenaires"
-                    value={partners.length}
-                    sub={`dont ${partners.filter(p => p.consortium).length} faisant partie du consortium`}
-                />
-                <KpiCard
-                    icon={<TrendingUp size={16} />}
-                    label="Budget engagé"
-                    value={fmt(totalExpanses)}
-                    sub={program?.budget
-                        ? `${Math.round((totalExpanses / program.budget) * 100)} % du budget programme`
-                        : totalCofinanced > 0
-                            ? `sur ${fmt(totalRevenue)} de recettes, dont ${fmt(totalCofinanced)} cofinancés`
-                            : `sur ${fmt(totalRevenue)} de recettes`
-                    }
-                />
-                <KpiCard
-                    icon={<Receipt size={16} />}
-                    label="Dépenses réalisées"
-                    value={fmt(totalExpanses)}
-                    sub={totalReversements > 0 ? `dont ${fmt(totalReversements)} reversés aux partenaires` : totalGranted > 0 ? `${fmt(totalGranted)} de subventions accordées` : undefined}
-                />
-                <KpiCard
-                    icon={<Users size={16} />}
-                    label="Contacts"
-                    value={members.length}
-                    sub={`${members.filter(m => m.is_staff).length} dans l'équipe`}
-                />
-            </div>
+
+            {widgets.includes('kpis') && (
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                    <KpiCard
+                        icon={<Briefcase size={16} />}
+                        label="Projets actifs"
+                        value={activeProjects.length}
+                        sub={`${projects.length} au total`}
+                    />
+                    <KpiCard
+                        icon={<Building2 size={16} />}
+                        label="Partenaires"
+                        value={partners.length}
+                        sub={`dont ${partners.filter(p => p.consortium).length} faisant partie du consortium`}
+                    />
+                    <KpiCard
+                        icon={<TrendingUp size={16} />}
+                        label="Budget engagé"
+                        value={fmt(totalExpanses)}
+                        sub={program?.budget
+                            ? `${Math.round((totalExpanses / program.budget) * 100)} % du budget programme`
+                            : totalCofinanced > 0
+                                ? `sur ${fmt(totalRevenue)} de recettes, dont ${fmt(totalCofinanced)} cofinancés`
+                                : `sur ${fmt(totalRevenue)} de recettes`
+                        }
+                    />
+                    <KpiCard
+                        icon={<Receipt size={16} />}
+                        label="Dépenses réalisées"
+                        value={fmt(totalExpanses)}
+                        sub={totalReversements > 0 ? `dont ${fmt(totalReversements)} reversés aux partenaires` : totalGranted > 0 ? `${fmt(totalGranted)} de subventions accordées` : undefined}
+                    />
+                    <KpiCard
+                        icon={<Users size={16} />}
+                        label="Contacts"
+                        value={members.length}
+                        sub={`${members.filter(m => m.is_staff).length} dans l'équipe`}
+                    />
+                </div>
+            )}
 
             {/* ── Graphiques ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-
                 {/* ── Courbe cumulative des dépenses ── */}
-                {expanses.length > 0 && (() => {
-                    // Grouper par année
-                    const byYear = new Map<string, number>()
-                    expanses.forEach(e => {
-                        const year = e.purchase_date?.slice(0, 4)
-                        if (!year || year < '2000') return
-                        byYear.set(year, (byYear.get(year) ?? 0) + e.amount)
-                    })
-                    const sortedYears = [...byYear.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-                    if (sortedYears.length === 0) return null
-
-                    // Points cumulatifs — un par année, plus un point à 0 en début
-                    let cum = 0
-                    const points = [
-                        { year: '', cum: 0, amount: 0 },
-                        ...sortedYears.map(([year, amount]) => {
-                            cum += amount
-                            return { year, amount, cum }
+                 {widgets.includes('expanses') && expanses.length > 0 && (() => {
+                        // Grouper par année
+                        const byYear = new Map<string, number>()
+                        expanses.forEach(e => {
+                            const year = e.purchase_date?.slice(0, 4)
+                            if (!year || year < '2000') return
+                            byYear.set(year, (byYear.get(year) ?? 0) + e.amount)
                         })
-                    ]
-                    const maxCum = points[points.length - 1].cum
+                        const sortedYears = [...byYear.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+                        if (sortedYears.length === 0) return null
 
-                    // Paramètres SVG
-                    const W = 560, H = 120, ML = 48, MB = 22, MT = 8, MR = 12
-                    const iW = W - ML - MR, iH = H - MT - MB
-                    const xOf = (i: number) => ML + (i / Math.max(points.length - 1, 1)) * iW
-                    const yOf = (v: number) => MT + iH - (v / maxCum) * iH
+                        // Points cumulatifs — un par année, plus un point à 0 en début
+                        let cum = 0
+                        const points = [
+                            { year: '', cum: 0, amount: 0 },
+                            ...sortedYears.map(([year, amount]) => {
+                                cum += amount
+                                return { year, amount, cum }
+                            })
+                        ]
+                        const maxCum = points[points.length - 1].cum
 
-                    const linePts = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(p.cum).toFixed(1)}`).join(' ')
-                    const areaPath = `${linePts} L${xOf(points.length - 1).toFixed(1)},${(MT + iH).toFixed(1)} L${xOf(0).toFixed(1)},${(MT + iH).toFixed(1)} Z`
-                    const yTicks = [0, 0.5, 1].map(f => ({ value: maxCum * f, y: yOf(maxCum * f) }))
+                        // Paramètres SVG
+                        const W = 560, H = 120, ML = 48, MB = 22, MT = 8, MR = 12
+                        const iW = W - ML - MR, iH = H - MT - MB
+                        const xOf = (i: number) => ML + (i / Math.max(points.length - 1, 1)) * iW
+                        const yOf = (v: number) => MT + iH - (v / maxCum) * iH
 
-                    return (
-                        <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium">Progression cumulée des dépenses</p>
-                                <span className="text-xs text-muted-foreground tabular-nums">Total : {fmt(maxCum)}</span>
+                        const linePts = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(p.cum).toFixed(1)}`).join(' ')
+                        const areaPath = `${linePts} L${xOf(points.length - 1).toFixed(1)},${(MT + iH).toFixed(1)} L${xOf(0).toFixed(1)},${(MT + iH).toFixed(1)} Z`
+                        const yTicks = [0, 0.5, 1].map(f => ({ value: maxCum * f, y: yOf(maxCum * f) }))
+
+                        return (
+                            <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-medium">Progression cumulée des dépenses</p>
+                                    <span className="text-xs text-muted-foreground tabular-nums">Total : {fmt(maxCum)}</span>
+                                </div>
+                                <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 140 }}>
+                                    {yTicks.map(({ value, y }) => (
+                                        <g key={value}>
+                                            <line x1={ML} y1={y} x2={W - MR} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+                                            <text x={ML - 4} y={y + 3.5} textAnchor="end" fontSize="9" fill="#9ca3af">{fmt(value)}</text>
+                                        </g>
+                                    ))}
+                                    <path d={areaPath} fill="#3b82f6" fillOpacity="0.1" />
+                                    <path d={linePts} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                                    {points.map((p, i) => p.year && (
+                                        <g key={p.year}>
+                                            <circle cx={xOf(i)} cy={yOf(p.cum)} r="4" fill="white" stroke="#3b82f6" strokeWidth="2" />
+                                            <text x={xOf(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{p.year}</text>
+                                            <text x={xOf(i)} y={yOf(p.cum) - 8} textAnchor="middle" fontSize="9" fill="#3b82f6" fontWeight="600">{fmt(p.cum)}</text>
+                                        </g>
+                                    ))}
+                                    <line x1={ML} y1={MT + iH} x2={W - MR} y2={MT + iH} stroke="#e5e7eb" strokeWidth="1" />
+                                </svg>
                             </div>
-                            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 140 }}>
-                                {yTicks.map(({ value, y }) => (
-                                    <g key={value}>
-                                        <line x1={ML} y1={y} x2={W - MR} y2={y} stroke="#e5e7eb" strokeWidth="1" />
-                                        <text x={ML - 4} y={y + 3.5} textAnchor="end" fontSize="9" fill="#9ca3af">{fmt(value)}</text>
-                                    </g>
-                                ))}
-                                <path d={areaPath} fill="#3b82f6" fillOpacity="0.1" />
-                                <path d={linePts} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-                                {points.map((p, i) => p.year && (
-                                    <g key={p.year}>
-                                        <circle cx={xOf(i)} cy={yOf(p.cum)} r="4" fill="white" stroke="#3b82f6" strokeWidth="2" />
-                                        <text x={xOf(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{p.year}</text>
-                                        <text x={xOf(i)} y={yOf(p.cum) - 8} textAnchor="middle" fontSize="9" fill="#3b82f6" fontWeight="600">{fmt(p.cum)}</text>
-                                    </g>
-                                ))}
-                                <line x1={ML} y1={MT + iH} x2={W - MR} y2={MT + iH} stroke="#e5e7eb" strokeWidth="1" />
-                            </svg>
-                        </div>
-                    )
-                })()}
+                        )
+                    })()}
 
 
                 {/* Consommation budgétaire par catégorie */}
-                <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">Consommation budgétaire</p>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            {editingFeeRate ? (
-                                <>
-                                    <span>Frais de gestion</span>
-                                    <input
-                                        type="number" min={0} max={100} step={0.1}
-                                        value={feeRateDraft}
-                                        onChange={e => setFeeRateDraft(e.target.value)}
-                                        className="w-16 h-6 border rounded px-1.5 text-xs text-foreground"
-                                        placeholder="0"
-                                        autoFocus
-                                        onKeyDown={e => { if (e.key === 'Enter') saveFeeRate(); if (e.key === 'Escape') setEditingFeeRate(false) }}
-                                    />
-                                    <span>%</span>
-                                    <button onClick={saveFeeRate} className="text-green-600 hover:text-green-700"><Check size={12} /></button>
-                                    <button onClick={() => setEditingFeeRate(false)} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
-                                </>
-                            ) : (
-                                <button
-                                    onClick={() => { setFeeRateDraft(program?.management_fee_rate != null ? String(program.management_fee_rate) : ''); setEditingFeeRate(true) }}
-                                    className="flex items-center gap-1 hover:text-foreground transition-colors"
-                                    title="Définir les frais de gestion"
-                                >
-                                    {program?.management_fee_rate != null
-                                        ? `Frais gestion : ${program.management_fee_rate} %`
-                                        : 'Frais de gestion'
-                                    }
-                                    <Pencil size={10} />
-                                </button>
-                            )}
+                {widgets.includes('budget') && (
+                    <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">Consommation budgétaire</p>
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                {editingFeeRate ? (
+                                    <>
+                                        <span>Frais de gestion</span>
+                                        <input
+                                            type="number" min={0} max={100} step={0.1}
+                                            value={feeRateDraft}
+                                            onChange={e => setFeeRateDraft(e.target.value)}
+                                            className="w-16 h-6 border rounded px-1.5 text-xs text-foreground"
+                                            placeholder="0"
+                                            autoFocus
+                                            onKeyDown={e => { if (e.key === 'Enter') saveFeeRate(); if (e.key === 'Escape') setEditingFeeRate(false) }}
+                                        />
+                                        <span>%</span>
+                                        <button onClick={saveFeeRate} className="text-green-600 hover:text-green-700"><Check size={12} /></button>
+                                        <button onClick={() => setEditingFeeRate(false)} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
+                                    </>
+                                ) : (
+                                    <button
+                                        onClick={() => { setFeeRateDraft(program?.management_fee_rate != null ? String(program.management_fee_rate) : ''); setEditingFeeRate(true) }}
+                                        className="flex items-center gap-1 hover:text-foreground transition-colors"
+                                        title="Définir les frais de gestion"
+                                    >
+                                        {program?.management_fee_rate != null
+                                            ? `Frais gestion : ${program.management_fee_rate} %`
+                                            : 'Frais de gestion'
+                                        }
+                                        <Pencil size={10} />
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                    {budgetCategories.length === 0
-                        ? <p className="text-xs text-muted-foreground italic">Aucune catégorie budgétaire</p>
-                        : (() => {
-                            const totalBudget = budgetDetails.reduce((s, d) => s + d.budget, 0)
-                            const totalSpent  = expanses.reduce((s, e) => s + e.amount, 0)
-                            const totalReste  = totalBudget - totalSpent
-                            return (
-                                <table className="w-full text-xs border-collapse">
-                                    <thead>
-                                        <tr className="border-b text-muted-foreground">
-                                            <th className="text-left font-normal pb-1.5">Catégorie</th>
-                                            <th className="text-right font-normal pb-1.5 pl-3">Budget</th>
-                                            <th className="text-right font-normal pb-1.5 pl-3">Engagé</th>
-                                            <th className="text-right font-normal pb-1.5 pl-3">Reste</th>
-                                            <th className="text-right font-normal pb-1.5 pl-3">%</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {budgetCategories.map(cat => {
-                                            const details   = budgetDetails.filter(d => d.budget_category_id === cat.id)
-                                            const catBudget = details.reduce((s, d) => s + d.budget, 0)
-                                            const catSpent  = expanses.filter(e => details.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
-                                            const catReste  = catBudget - catSpent
-                                            const catPct    = catBudget > 0 ? Math.round(catSpent / catBudget * 100) : 0
-                                            const catOver   = catReste < 0
-                                            return (
-                                                <React.Fragment key={cat.id}>
-                                                    <tr className="border-b border-muted/60">
-                                                        <td className="py-1.5 font-medium">{cat.title}</td>
-                                                        <td className="py-1.5 pl-3 text-right tabular-nums">{fmt(catBudget)}</td>
-                                                        <td className="py-1.5 pl-3 text-right tabular-nums">{fmt(catSpent)}</td>
-                                                        <td className="py-1.5 pl-3 text-right tabular-nums" style={{ color: catOver ? '#ef4444' : undefined }}>{fmt(catReste)}</td>
-                                                        <td className="py-1.5 pl-3 text-right tabular-nums" style={{ color: catOver ? '#ef4444' : catPct > 80 ? '#f59e0b' : '#22c55e' }}>{catPct} %</td>
-                                                    </tr>
-                                                </React.Fragment>
-                                            )
-                                        })}
-                                        {totalBudget > 0 && (
-                                            <tr className="border-t-2 font-medium">
-                                                <td className="pt-2">Total</td>
-                                                <td className="pt-2 pl-3 text-right tabular-nums">{fmt(totalBudget)}</td>
-                                                <td className="pt-2 pl-3 text-right tabular-nums">{fmt(totalSpent)}</td>
-                                                <td className="pt-2 pl-3 text-right tabular-nums" style={{ color: totalReste < 0 ? '#ef4444' : undefined }}>{fmt(totalReste)}</td>
-                                                <td className="pt-2 pl-3 text-right tabular-nums text-muted-foreground">{Math.round(totalSpent / totalBudget * 100)} %</td>
+                        {budgetCategories.length === 0
+                            ? <p className="text-xs text-muted-foreground italic">Aucune catégorie budgétaire</p>
+                            : (() => {
+                                const totalBudget = budgetDetails.reduce((s, d) => s + d.budget, 0)
+                                const totalSpent  = expanses.reduce((s, e) => s + e.amount, 0)
+                                const totalReste  = totalBudget - totalSpent
+                                return (
+                                    <table className="w-full text-xs border-collapse">
+                                        <thead>
+                                            <tr className="border-b text-muted-foreground">
+                                                <th className="text-left font-normal pb-1.5">Catégorie</th>
+                                                <th className="text-right font-normal pb-1.5 pl-3">Budget</th>
+                                                <th className="text-right font-normal pb-1.5 pl-3">Engagé</th>
+                                                <th className="text-right font-normal pb-1.5 pl-3">Reste</th>
+                                                <th className="text-right font-normal pb-1.5 pl-3">%</th>
                                             </tr>
-                                        )}
-                                        {program?.management_fee_rate != null && totalSpent > 0 && (() => {
-                                            const feeAmt = Math.round(totalSpent * program.management_fee_rate / 100)
-                                            return (
-                                                <tr className="border-t text-muted-foreground">
-                                                    <td className="pt-1.5 text-xs italic">Frais de gestion ({program.management_fee_rate} %)</td>
-                                                    <td className="pt-1.5 pl-3 text-right tabular-nums text-xs">—</td>
-                                                    <td className="pt-1.5 pl-3 text-right tabular-nums text-xs">{fmt(feeAmt)}</td>
-                                                    <td className="pt-1.5 pl-3 text-right tabular-nums text-xs">—</td>
-                                                    <td />
+                                        </thead>
+                                        <tbody>
+                                            {budgetCategories.map(cat => {
+                                                const details   = budgetDetails.filter(d => d.budget_category_id === cat.id)
+                                                const catBudget = details.reduce((s, d) => s + d.budget, 0)
+                                                const catSpent  = expanses.filter(e => details.some(d => d.id === e.budget_detail_id)).reduce((s, e) => s + e.amount, 0)
+                                                const catReste  = catBudget - catSpent
+                                                const catPct    = catBudget > 0 ? Math.round(catSpent / catBudget * 100) : 0
+                                                const catOver   = catReste < 0
+                                                return (
+                                                    <React.Fragment key={cat.id}>
+                                                        <tr className="border-b border-muted/60">
+                                                            <td className="py-1.5 font-medium">{cat.title}</td>
+                                                            <td className="py-1.5 pl-3 text-right tabular-nums">{fmt(catBudget)}</td>
+                                                            <td className="py-1.5 pl-3 text-right tabular-nums">{fmt(catSpent)}</td>
+                                                            <td className="py-1.5 pl-3 text-right tabular-nums" style={{ color: catOver ? '#ef4444' : undefined }}>{fmt(catReste)}</td>
+                                                            <td className="py-1.5 pl-3 text-right tabular-nums" style={{ color: catOver ? '#ef4444' : catPct > 80 ? '#f59e0b' : '#22c55e' }}>{catPct} %</td>
+                                                        </tr>
+                                                    </React.Fragment>
+                                                )
+                                            })}
+                                            {totalBudget > 0 && (
+                                                <tr className="border-t-2 font-medium">
+                                                    <td className="pt-2">Total</td>
+                                                    <td className="pt-2 pl-3 text-right tabular-nums">{fmt(totalBudget)}</td>
+                                                    <td className="pt-2 pl-3 text-right tabular-nums">{fmt(totalSpent)}</td>
+                                                    <td className="pt-2 pl-3 text-right tabular-nums" style={{ color: totalReste < 0 ? '#ef4444' : undefined }}>{fmt(totalReste)}</td>
+                                                    <td className="pt-2 pl-3 text-right tabular-nums text-muted-foreground">{Math.round(totalSpent / totalBudget * 100)} %</td>
                                                 </tr>
-                                            )
-                                        })()}
-                                    </tbody>
-                                </table>
-                            )
-                        })()
-                    }
-                </div>
-
-                <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
-                    <style>{`
-                        .react-calendar-heatmap .color-empty    { fill: #f5f3ff; }
-                        .react-calendar-heatmap .color-scale-1  { fill: #ede9fe; }
-                        .react-calendar-heatmap .color-scale-2  { fill: #ddd6fe; }
-                        .react-calendar-heatmap .color-scale-3  { fill: #c4b5fd; }
-                        .react-calendar-heatmap .color-scale-4  { fill: #a78bfa; }
-                        .react-calendar-heatmap .color-scale-5  { fill: #8b5cf6; }
-                        .react-calendar-heatmap .color-scale-6  { fill: #7c3aed; }
-                        .react-calendar-heatmap .color-scale-7  { fill: #6d28d9; }
-                        .react-calendar-heatmap .color-scale-8  { fill: #5b21b6; }
-                        .react-calendar-heatmap .color-scale-9  { fill: #4c1d95; }
-                        .react-calendar-heatmap .color-scale-10 { fill: #2e1065; }
-                    `}</style>
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">Heat Map projet</p>
-                        <div className="flex items-center gap-1">
-                            <button onClick={() => setHeatYear(y => y - 1)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">‹</button>
-                            <span className="text-xs font-medium tabular-nums w-10 text-center">{heatYear}</span>
-                            <button onClick={() => setHeatYear(y => y + 1)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">›</button>
-                        </div>
+                                            )}
+                                            {program?.management_fee_rate != null && totalSpent > 0 && (() => {
+                                                const feeAmt = Math.round(totalSpent * program.management_fee_rate / 100)
+                                                return (
+                                                    <tr className="border-t text-muted-foreground">
+                                                        <td className="pt-1.5 text-xs italic">Frais de gestion ({program.management_fee_rate} %)</td>
+                                                        <td className="pt-1.5 pl-3 text-right tabular-nums text-xs">—</td>
+                                                        <td className="pt-1.5 pl-3 text-right tabular-nums text-xs">{fmt(feeAmt)}</td>
+                                                        <td className="pt-1.5 pl-3 text-right tabular-nums text-xs">—</td>
+                                                        <td />
+                                                    </tr>
+                                                )
+                                            })()}
+                                        </tbody>
+                                    </table>
+                                )
+                            })()
+                        }
                     </div>
-                    <CalendarHeatmap
-                        startDate={new Date(`${heatYear}-01-01`)}
-                        endDate={new Date(`${heatYear}-12-31`)}
-                        values={heatmapValues}
-                        classForValue={(() => {
-                            const max = Math.max(1, ...heatmapValues.map(v => v.count))
-                            return (value: ReactCalendarHeatmapValue<string> | undefined) => {
-                                const count = (value as any)?.count as number | undefined
-                                if (!count) return 'color-empty'
-                                const ratio = count / max
-                                if (ratio < 0.10) return 'color-scale-1'
-                                if (ratio < 0.20) return 'color-scale-2'
-                                if (ratio < 0.30) return 'color-scale-3'
-                                if (ratio < 0.40) return 'color-scale-4'
-                                if (ratio < 0.50) return 'color-scale-5'
-                                if (ratio < 0.60) return 'color-scale-6'
-                                if (ratio < 0.70) return 'color-scale-7'
-                                if (ratio < 0.80) return 'color-scale-8'
-                                if (ratio < 0.90) return 'color-scale-9'
-                                return 'color-scale-10'
-                            }
-                        })()}
-                    />
-                </div>
+                )}
 
+                {widgets.includes('heat_map') && (
+                    <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
+                        <style>{`
+                            .react-calendar-heatmap .color-empty    { fill: #f5f3ff; }
+                            .react-calendar-heatmap .color-scale-1  { fill: #ede9fe; }
+                            .react-calendar-heatmap .color-scale-2  { fill: #ddd6fe; }
+                            .react-calendar-heatmap .color-scale-3  { fill: #c4b5fd; }
+                            .react-calendar-heatmap .color-scale-4  { fill: #a78bfa; }
+                            .react-calendar-heatmap .color-scale-5  { fill: #8b5cf6; }
+                            .react-calendar-heatmap .color-scale-6  { fill: #7c3aed; }
+                            .react-calendar-heatmap .color-scale-7  { fill: #6d28d9; }
+                            .react-calendar-heatmap .color-scale-8  { fill: #5b21b6; }
+                            .react-calendar-heatmap .color-scale-9  { fill: #4c1d95; }
+                            .react-calendar-heatmap .color-scale-10 { fill: #2e1065; }
+                        `}</style>
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">Heat Map projet</p>
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => setHeatYear(y => y - 1)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">‹</button>
+                                <span className="text-xs font-medium tabular-nums w-10 text-center">{heatYear}</span>
+                                <button onClick={() => setHeatYear(y => y + 1)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">›</button>
+                            </div>
+                        </div>
+                        <CalendarHeatmap
+                            startDate={new Date(`${heatYear}-01-01`)}
+                            endDate={new Date(`${heatYear}-12-31`)}
+                            values={heatmapValues}
+                            classForValue={(() => {
+                                const max = Math.max(1, ...heatmapValues.map(v => v.count))
+                                return (value: ReactCalendarHeatmapValue<string> | undefined) => {
+                                    const count = (value as any)?.count as number | undefined
+                                    if (!count) return 'color-empty'
+                                    const ratio = count / max
+                                    if (ratio < 0.10) return 'color-scale-1'
+                                    if (ratio < 0.20) return 'color-scale-2'
+                                    if (ratio < 0.30) return 'color-scale-3'
+                                    if (ratio < 0.40) return 'color-scale-4'
+                                    if (ratio < 0.50) return 'color-scale-5'
+                                    if (ratio < 0.60) return 'color-scale-6'
+                                    if (ratio < 0.70) return 'color-scale-7'
+                                    if (ratio < 0.80) return 'color-scale-8'
+                                    if (ratio < 0.90) return 'color-scale-9'
+                                    return 'color-scale-10'
+                                }
+                            })()}
+                        />
+                    </div>
+                )}
+                
                 {/* Top partenaires — camembert */}
-                <div className="flex flex-col gap-4 p-5 rounded-xl border bg-card">
-                    <p className="text-sm font-medium">Top partenaires par subvention</p>
-                    {topPartners.length === 0
-                        ? <p className="text-xs text-muted-foreground italic">Aucune convention enregistrée</p>
-                        : (() => {
+                {widgets.includes('top_partners') && topPartners.length > 0 && (() => {
                             const total = topPartners.reduce((s, r) => s + r.grant, 0)
                             const R = 54, C = 2 * Math.PI * R
                             let offset = 0
                             return (
-                                <div className="flex items-center gap-6">
-                                    <svg width="140" height="140" viewBox="0 0 140 140" className="shrink-0 -rotate-90">
-                                        {topPartners.map(({ partner, grant }) => {
-                                            const pct   = grant / total
-                                            const dash  = pct * C
-                                            const gap   = C - dash
-                                            const seg   = offset
-                                            offset += dash
-                                            return (
-                                                <circle
-                                                    key={partner!.id}
-                                                    cx="70" cy="70" r={R}
-                                                    fill="none"
-                                                    stroke={partner!.color || '#e5e7eb'}
-                                                    strokeWidth="22"
-                                                    strokeDasharray={`${dash} ${gap}`}
-                                                    strokeDashoffset={-seg}
-                                                />
-                                            )
-                                        })}
-                                    </svg>
-                                    <div className="flex flex-col gap-2 min-w-0">
-                                        {topPartners.map(({ partner, grant }) => (
-                                            <div key={partner!.id} className="flex items-center gap-2 min-w-0">
-                                                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: partner!.color || '#e5e7eb' }} />
-                                                <span className="text-xs text-muted-foreground truncate">{partner!.name}</span>
-                                                <span className="text-xs font-medium tabular-nums ml-auto pl-2 text-green-700 shrink-0">{fmt(grant)}</span>
+                                <div className="flex flex-col gap-4 p-5 rounded-xl border bg-card">
+                                <p className="text-sm font-medium">Top partenaires par subvention</p>
+                                    <div className="flex items-center gap-6">
+                                        <svg width="140" height="140" viewBox="0 0 140 140" className="shrink-0 -rotate-90">
+                                            {topPartners.map(({ partner, grant }) => {
+                                                const pct   = grant / total
+                                                const dash  = pct * C
+                                                const gap   = C - dash
+                                                const seg   = offset
+                                                offset += dash
+                                                return (
+                                                    <circle
+                                                        key={partner!.id}
+                                                        cx="70" cy="70" r={R}
+                                                        fill="none"
+                                                        stroke={partner!.color || '#e5e7eb'}
+                                                        strokeWidth="22"
+                                                        strokeDasharray={`${dash} ${gap}`}
+                                                        strokeDashoffset={-seg}
+                                                    />
+                                                )
+                                            })}
+                                        </svg>
+                                        <div className="flex flex-col gap-2 min-w-0">
+                                            {topPartners.map(({ partner, grant }) => (
+                                                <div key={partner!.id} className="flex items-center gap-2 min-w-0">
+                                                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: partner!.color || '#e5e7eb' }} />
+                                                    <span className="text-xs text-muted-foreground truncate">{partner!.name}</span>
+                                                    <span className="text-xs font-medium tabular-nums ml-auto pl-2 text-green-700 shrink-0">{fmt(grant)}</span>
+                                                </div>
+                                            ))}
+                                            <div className="pt-1 border-t mt-1 text-xs text-muted-foreground">
+                                                Total : <span className="font-semibold text-foreground">{fmt(total)}</span>
                                             </div>
-                                        ))}
-                                        <div className="pt-1 border-t mt-1 text-xs text-muted-foreground">
-                                            Total : <span className="font-semibold text-foreground">{fmt(total)}</span>
                                         </div>
                                     </div>
                                 </div>
-                            )
-                        })()
+                                )
+                            })()
                     }
-                </div>
-            </div>
+                    </div>
 
             {/* ── Graphes de relations ── */}
+            {widgets.includes('partner_graph') && (
             <div className="flex flex-col gap-4">
                 
                 <p className="text-sm font-medium flex items-center gap-2">
                     <NetworkIcon size={15} />
                     Graph
                 </p>
-                
-                
                 <div className="flex flex-row gap-4">
                     <div className="rounded-xl border bg-card p-5 flex-1 min-w-0">
                         <div className='flex justify-between items-center mb-3'>
@@ -796,7 +850,17 @@ export default function Dashboard() {
                         </div>
                         <PartnerGraph />
                     </div>
-                    <div className="rounded-xl border bg-card p-5 flex-1 min-w-0">
+                </div>
+            </div>  
+            )}
+            {widgets.includes('member_graph') && (
+            <div className="flex flex-col gap-4">
+                
+                <p className="text-sm font-medium flex items-center gap-2">
+                    <NetworkIcon size={15} />
+                    Graph
+                </p>
+                 <div className="rounded-xl border bg-card p-5 flex-1 min-w-0">
                         <div className='flex justify-between items-center mb-3'>
                              <p className="text-sm font-medium">Réseau membres - {members.length}</p>
                              <Tooltip>
@@ -810,10 +874,10 @@ export default function Dashboard() {
                         </div>
                         <MemberGraph />
                     </div>
-                </div>
-            </div>
-
-            {staffWithProjects.length > 0 && (
+            </div>  
+            )}
+                
+            {widgets.includes('team') && staffWithProjects.length > 0 && (
                 <div className="flex flex-col gap-3">
                     <p className="text-sm font-medium flex items-center gap-2">
                         <Users size={15} />
@@ -872,7 +936,7 @@ export default function Dashboard() {
             )}
 
             {/* ── Alertes ── */}
-            {hasAlerts && (
+            {widgets.includes("alerts") && hasAlerts && (
                 <div className="flex flex-col gap-3">
                     <p className="text-sm font-medium flex items-center gap-2">
                         <AlertTriangle size={15} className="text-amber-500" />

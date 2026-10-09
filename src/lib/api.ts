@@ -107,7 +107,10 @@ export async function updateProgram(id: number, patch: Partial<Omit<Program, 'id
         if (p) Object.assign(p, patch)
         return
     }
-    await updateRecord(T.program, id, patch)
+    await updateRecord(T.program, id, {
+        ...patch,
+        ...(patch.widgets_preference && { widgets_preference: JSON.stringify(patch.widgets_preference) }),
+    })
 }
 export async function getStatuses(): Promise<Status[]> { return USE_MOCK ? mockStatuses : normalizeStatuses(await fetchTable(T.status)) }
 export async function getCategories(): Promise<Category[]> { return USE_MOCK ? mockCategories : normalizeCategories(await fetchTable(T.category)) }

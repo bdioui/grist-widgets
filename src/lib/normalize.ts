@@ -29,6 +29,8 @@ import type {
     ProjectExpanse
 } from '@/lib/types'
 
+import { type WidgetId, WIDGET_IDS } from './constants'
+
 // --- Helpers ---
 
 function str(v: unknown): string { return typeof v === 'string' ? v : '' }
@@ -544,7 +546,15 @@ export function normalizeProgram(rows: Record<string, unknown>[]): Program[] {
         end_date: str(r.end_date),
         logo: str(r.logo),
         management_fee_rate: nullable(r.management_fee_rate),
+        widgets_preference: parseWidgets(r.widgets_preference)
     }))
+}
+
+function parseWidgets(raw: unknown): WidgetId[] {
+    try {
+        const parsed = JSON.parse(str(raw))
+        return Array.isArray(parsed) ? parsed.filter((w): w is WidgetId => WIDGET_IDS.includes(w)) : WIDGET_IDS
+    } catch { return WIDGET_IDS }
 }
 
 // Budget & expanses
