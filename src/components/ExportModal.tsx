@@ -140,15 +140,51 @@ function applyFilters(
     return results
 }
 
+// ── Colonnes ───────────────────────────────────────────────────────────────
+
+// Une colonne lit un champ de la table racine ou d'une table jointe.
+// Pour une table jointe, plusieurs enregistrements peuvent être atteints :
+// leurs valeurs sont dédoublonnées puis concaténées dans une seule cellule.
+type Column = {
+    key:   string
+    label: string
+    table: QueryableTableKey
+    field: string
+}
+
+// Colonne croisée ajoutée par l'utilisateur ; `id` sert de clé React.
+type ExtraColumn = {
+    id:    string
+    table: QueryableTableKey
+    field: string
+}
+
+function cellValue(
+    db: DB,
+    rootTable: QueryableTableKey,
+    root: Record<string, unknown>,
+    col: Column,
+): string {
+    if (col.table === rootTable) return toCell(root[col.field])
+
+    const path = SCHEMA[rootTable]?.[col.table]
+    if (!path) return ''
+    const values = traverse([root], path, db)
+        .map(r => toCell(r[col.field]))
+        .filter(v => v !== '')
+    return [...new Set(values)].join(' ; ')
+}
+
 // ── Export CSV ─────────────────────────────────────────────────────────────
 
 function downloadCSV(
-    results: Record<string, unknown>[],
-    fields:  { key: string; label: string }[],
-    tableName: string,
+    db:        DB,
+    results:   Record<string, unknown>[],
+    columns:   Column[],
+    tableName: QueryableTableKey,
 ) {
-    const header = fields.map(f => f.label)
-    const rows   = results.map(r => fields.map(f => String(r[f.key] ?? '')))
+    const header = columns.map(c => c.label)
+    const rows   = results.map(r => columns.map(c => cellValue(db, tableName, r, c)))
     const csv    = [header, ...rows]
         .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
         .join('\n')
@@ -168,6 +204,7 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
     const [rootTable, setRootTable]     = useState<QueryableTableKey>('members')
     const [filters, setFilters]         = useState<Filter[]>([])
     const [selectedFields, setSelected] = useState<string[]>([])
+    const [extraColumns, setExtra]      = useState<ExtraColumn[]>([])
 
     // Chargement unique de toutes les tables
     useEffect(() => {
@@ -185,6 +222,7 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
     // Reset filtres et colonnes quand on change de table racine
     useEffect(() => {
         setFilters([])
+        setExtra([])
         setSelected((TABLE_FIELDS[rootTable] ?? []).map(f => f.key))
     }, [rootTable])
 
@@ -195,6 +233,18 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
         QUERYABLE_TABLES.find(t => t.key === rootTable)!,
         ...QUERYABLE_TABLES.filter(t => t.key !== rootTable && SCHEMA[rootTable]?.[t.key]),
     ], [rootTable])
+
+    // Colonnes dans l'ordre d'export : champs racine cochés, puis colonnes croisées
+    const columns = useMemo<Column[]>(() => [
+        ...rootFields
+            .filter(f => selectedFields.includes(f.key))
+            .map(f => ({ key: f.key, label: f.label, table: rootTable, field: f.key })),
+        ...extraColumns.map(c => {
+            const tableLabel = QUERYABLE_TABLES.find(t => t.key === c.table)?.label ?? c.table
+            const fieldLabel = TABLE_FIELDS[c.table]?.find(f => f.key === c.field)?.label ?? c.field
+            return { key: c.id, label: `${tableLabel} · ${fieldLabel}`, table: c.table, field: c.field }
+        }),
+    ], [rootFields, rootTable, selectedFields, extraColumns])
 
     // Résultats calculés à chaque changement de filtre
     const results = useMemo(() =>
@@ -221,6 +271,25 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
 
     function removeFilter(id: string) {
         setFilters(prev => prev.filter(f => f.id !== id))
+    }
+
+    // ── Handlers colonnes croisées ────────────────────────────────────────
+
+    const crossTables = joinableTables.filter(t => t.key !== rootTable)
+
+    function addExtraColumn() {
+        const table = crossTables[0]?.key
+        const field = table && TABLE_FIELDS[table]?.[0]?.key
+        if (!table || !field) return
+        setExtra(prev => [...prev, { id: crypto.randomUUID(), table, field }])
+    }
+
+    function updateExtraColumn(id: string, patch: Partial<ExtraColumn>) {
+        setExtra(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c))
+    }
+
+    function removeExtraColumn(id: string) {
+        setExtra(prev => prev.filter(c => c.id !== id))
     }
 
     if (!open) return null
@@ -400,6 +469,52 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
                                 </label>
                             ))}
                         </div>
+
+                        {extraColumns.map(col => (
+                            <div key={col.id} className="flex items-center gap-2 flex-wrap">
+                                <select
+                                    value={col.table}
+                                    onChange={e => {
+                                        const table = e.target.value as QueryableTableKey
+                                        updateExtraColumn(col.id, {
+                                            table,
+                                            field: TABLE_FIELDS[table]?.[0]?.key ?? '',
+                                        })
+                                    }}
+                                    className="text-xs border border-gray-200 rounded px-2 py-1.5 text-gray-700 bg-white"
+                                >
+                                    {crossTables.map(t => (
+                                        <option key={t.key} value={t.key}>{t.label}</option>
+                                    ))}
+                                </select>
+
+                                <select
+                                    value={col.field}
+                                    onChange={e => updateExtraColumn(col.id, { field: e.target.value })}
+                                    className="text-xs border border-gray-200 rounded px-2 py-1.5 text-gray-700 bg-white"
+                                >
+                                    {(TABLE_FIELDS[col.table] ?? []).map(f => (
+                                        <option key={f.key} value={f.key}>{f.label}</option>
+                                    ))}
+                                </select>
+
+                                <button
+                                    onClick={() => removeExtraColumn(col.id)}
+                                    className="text-gray-300 hover:text-red-400 text-sm leading-none shrink-0"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        ))}
+
+                        {crossTables.length > 0 && (
+                            <button
+                                onClick={addExtraColumn}
+                                className="self-start text-xs text-indigo-500 hover:text-gray-600"
+                            >
+                                + Ajouter une colonne d'une autre table
+                            </button>
+                        )}
                     </div>
 
                     {/* Aperçu des résultats */}
@@ -417,27 +532,21 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
                                 <table className="text-xs w-full">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            {rootFields
-                                                .filter(f => selectedFields.includes(f.key))
-                                                .map(f => (
-                                                    <th key={f.key} className="text-left px-3 py-2 text-gray-400 font-medium whitespace-nowrap">
-                                                        {f.label}
-                                                    </th>
-                                                ))
-                                            }
+                                            {columns.map(c => (
+                                                <th key={c.key} className="text-left px-3 py-2 text-gray-400 font-medium whitespace-nowrap">
+                                                    {c.label}
+                                                </th>
+                                            ))}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {results.slice(0, 50).map((row, i) => (
                                             <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
-                                                {rootFields
-                                                    .filter(f => selectedFields.includes(f.key))
-                                                    .map(f => (
-                                                        <td key={f.key} className="px-3 py-1.5 text-gray-600 whitespace-nowrap">
-                                                            {String(row[f.key] ?? '—')}
-                                                        </td>
-                                                    ))
-                                                }
+                                                {columns.map(c => (
+                                                    <td key={c.key} className="px-3 py-1.5 text-gray-600 whitespace-nowrap">
+                                                        {cellValue(db, rootTable, row, c) || '—'}
+                                                    </td>
+                                                ))}
                                             </tr>
                                         ))}
                                     </tbody>
@@ -461,11 +570,8 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
                         Annuler
                     </button>
                     <button
-                        onClick={() => {
-                            const fields = rootFields.filter(f => selectedFields.includes(f.key))
-                            downloadCSV(results, fields, rootTable)
-                        }}
-                        disabled={results.length === 0 || selectedFields.length === 0}
+                        onClick={() => db && downloadCSV(db, results, columns, rootTable)}
+                        disabled={results.length === 0 || columns.length === 0}
                         className="text-xs px-1.5 py-1.5 bg-black text-white rounded-md hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                         Exporter CSV · {results.length}
