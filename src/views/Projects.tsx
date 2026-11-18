@@ -3846,6 +3846,7 @@ function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: Mem
                     <Input
                         value={query}
                         onChange={e => setQuery(e.target.value)}
+                        onKeyDown={e => e.stopPropagation()}
                         placeholder="Rechercher un membre..."
                         className="h-7 text-xs"
                     />
@@ -4142,7 +4143,7 @@ export default function Projects() {
         const oldListIds = new Set(toDoLists.filter(l => l.action_card_id === cardId).map(l => l.id))
 
         setToDoLists(prev => [...prev.filter(l => l.action_card_id !== cardId), ...lists])
-        setToDoItems(prev => [...prev.filter(i => !oldListIds.has(i.list_id)), ...lists.flatMap(l => l.items)])
+        setToDoItems(prev => [...prev.filter(i => i.list_id == null || !oldListIds.has(i.list_id)), ...lists.flatMap(l => l.items)])
     }
 
     function onMemberLinkChanged(cardId: number, links: MemberActionCard[]) {
@@ -4160,7 +4161,7 @@ export default function Projects() {
 
         const progress = new Map<number, {done : number, total : number, items : ToDoItem[]}>()
         for(const item of toDoItems){
-            const cardId = listToCard.get(item.list_id)
+            const cardId = item.list_id != null ? listToCard.get(item.list_id) : undefined
             if(!cardId) continue
             const p = progress.get(cardId) ?? {done : 0, total: 0, items: []}
             p.total++

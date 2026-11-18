@@ -119,6 +119,7 @@ function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: Mem
                     <Input
                         value={query}
                         onChange={e => setQuery(e.target.value)}
+                        onKeyDown={e => e.stopPropagation()}
                         placeholder="Rechercher un membre..."
                         className="h-7 text-xs"
                     />

@@ -126,7 +126,7 @@ function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds }: Mem
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-60">
                 <div className="px-2 py-1.5">
-                    <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Rechercher un membre..." className="h-7 text-xs" />
+                    <Input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.stopPropagation()} placeholder="Rechercher un membre..." className="h-7 text-xs" />
                 </div>
                 <DropdownMenuSeparator />
                 <div className="max-h-72 overflow-y-auto">

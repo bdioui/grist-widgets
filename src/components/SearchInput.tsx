@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
 import type { ReactNode, CSSProperties } from "react"
 import { Input } from "@/components/ui/input"
 
@@ -8,7 +9,7 @@ type GroupMeta = {
     primaryStyle?: CSSProperties
 }
 
-type SearchInputProps<T extends { id: number }> = { 
+type SearchInputProps<T extends { id: number }> = {
     data: T[]
     onSelect: (item: T) => void
     getLabel: (item: T) => string
@@ -23,6 +24,8 @@ type SearchInputProps<T extends { id: number }> = {
     inline?: boolean
     dropdownUp?: boolean
     autoFocus?: boolean
+    onClose?: () => void
+    portal?: boolean
 }
 
 export default function SearchInput<T extends { id: number }>({
@@ -40,10 +43,14 @@ export default function SearchInput<T extends { id: number }>({
     inline = false,
     dropdownUp = false,
     autoFocus = false,
+    onClose,
+    portal = false,
 }: SearchInputProps<T>) {
     const [query,   setQuery]   = useState('')
     const [open,    setOpen]    = useState(false)
     const [focused, setFocused] = useState(false)
+    const inputRef = useRef<HTMLInputElement>(null)
+    const [portalStyle, setPortalStyle] = useState<CSSProperties>({})
 
     const displayValue = focused ? query : (value ?? query)
 
@@ -70,6 +77,23 @@ export default function SearchInput<T extends { id: number }>({
 
     const isMulti = selectedIds !== undefined
 
+    useEffect(() => {
+        if (!portal || !open || !inputRef.current) return
+        const rect = inputRef.current.getBoundingClientRect()
+        const spaceBelow = window.innerHeight - rect.bottom
+        const spaceAbove = rect.top
+        const goUp = dropdownUp || spaceBelow < 200 && spaceAbove > spaceBelow
+        setPortalStyle({
+            position: 'fixed',
+            left: rect.left,
+            width: rect.width,
+            zIndex: 9999,
+            ...(goUp
+                ? { bottom: window.innerHeight - rect.top + 2 }
+                : { top: rect.bottom + 2 }),
+        })
+    }, [open, portal, dropdownUp])
+
     function select(item: T) {
         onSelect(item)
         if (!isMulti) {
@@ -81,19 +105,70 @@ export default function SearchInput<T extends { id: number }>({
 
     const showResults = inline ? sorted.length > 0 : (open && sorted.length > 0)
 
+    const dropdownContent = (
+        <ul className="max-h-60 overflow-y-auto py-1">
+            {sorted.map((item, i) => {
+                const meta = groupBy ? groupBy(item) : null
+                const prev = groupBy && i > 0 ? groupBy(sorted[i - 1]) : null
+                const showPrimary = meta && meta.primary !== prev?.primary
+                const showSecondary = meta?.secondary && (showPrimary || meta.secondary !== prev?.secondary)
+                return (
+                    <li key={item.id} className="contents">
+                        {showPrimary && (
+                            <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 select-none">
+                                {meta.primaryStyle && (
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={meta.primaryStyle} />
+                                )}
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {meta.primary}
+                                </span>
+                            </div>
+                        )}
+                        {showSecondary && (
+                            <div className="px-5 pb-0.5 text-[10px] text-muted-foreground/70 italic select-none">
+                                {meta!.secondary}
+                            </div>
+                        )}
+                        <div
+                            onMouseDown={() => select(item)}
+                            className={`flex items-center justify-between gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted ${isMulti && selectedIds.includes(item.id) ? 'bg-indigo-50' : ''}`}
+                        >
+                            {renderItem ? renderItem(item) : <span>{getLabel(item)}</span>}
+                            {isMulti && selectedIds.includes(item.id) && (
+                                <span className="shrink-0 text-indigo-500 font-bold text-sm leading-none">✓</span>
+                            )}
+                        </div>
+                    </li>
+                )
+            })}
+        </ul>
+    )
+
     return (
         <div className="relative flex-1">
             <Input
+                ref={inputRef}
                 autoFocus={autoFocus}
                 value={displayValue}
                 onChange={e => { setQuery(e.target.value); setOpen(true) }}
                 onFocus={() => { setFocused(true); setQuery(''); setOpen(true) }}
-                onBlur={inline ? undefined : () => setTimeout(() => { setOpen(false); setFocused(false); setQuery('') }, 150)}
+                onBlur={inline ? undefined : () => setTimeout(() => { setOpen(false); setFocused(false); setQuery(''); onClose?.() }, 150)}
                 onKeyDown={e => e.stopPropagation()}
                 placeholder={placeholder}
                 className="h-8 text-xs"
             />
-            {showResults && (
+            {showResults && !inline && portal && createPortal(
+                <div
+                    style={portalStyle}
+                    className={`rounded-md border border-border bg-popover shadow-md overflow-hidden${dropdownClassName ? ` ${dropdownClassName}` : ''}`}
+                    onPointerMove={e => e.stopPropagation()}
+                    onPointerLeave={e => e.stopPropagation()}
+                >
+                    {dropdownContent}
+                </div>,
+                document.body
+            )}
+            {showResults && (inline || !portal) && (
                 <div
                     className={inline
                         ? `w-full${dropdownClassName ? ` ${dropdownClassName}` : ''}`
@@ -102,42 +177,7 @@ export default function SearchInput<T extends { id: number }>({
                     onPointerMove={e => e.stopPropagation()}
                     onPointerLeave={e => e.stopPropagation()}
                 >
-                    <ul className="max-h-60 overflow-y-auto py-1">
-                        {sorted.map((item, i) => {
-                            const meta = groupBy ? groupBy(item) : null
-                            const prev = groupBy && i > 0 ? groupBy(sorted[i - 1]) : null
-                            const showPrimary = meta && meta.primary !== prev?.primary
-                            const showSecondary = meta?.secondary && (showPrimary || meta.secondary !== prev?.secondary)
-                            return (
-                                <li key={item.id} className="contents">
-                                    {showPrimary && (
-                                        <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 select-none">
-                                            {meta.primaryStyle && (
-                                                <span className="w-2 h-2 rounded-full shrink-0" style={meta.primaryStyle} />
-                                            )}
-                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                {meta.primary}
-                                            </span>
-                                        </div>
-                                    )}
-                                    {showSecondary && (
-                                        <div className="px-5 pb-0.5 text-[10px] text-muted-foreground/70 italic select-none">
-                                            {meta!.secondary}
-                                        </div>
-                                    )}
-                                    <div
-                                        onMouseDown={() => select(item)}
-                                        className={`flex items-center justify-between gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted ${isMulti && selectedIds.includes(item.id) ? 'bg-indigo-50' : ''}`}
-                                    >
-                                        {renderItem ? renderItem(item) : <span>{getLabel(item)}</span>}
-                                        {isMulti && selectedIds.includes(item.id) && (
-                                            <span className="shrink-0 text-indigo-500 font-bold text-sm leading-none">✓</span>
-                                        )}
-                                    </div>
-                                </li>
-                            )
-                        })}
-                    </ul>
+                    {dropdownContent}
                 </div>
             )}
         </div>

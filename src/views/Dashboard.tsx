@@ -1,13 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
     getProgram, getProjects, getStatuses, getPartners, getMembers,
     getFinancialAgreements, getAllProjectMembers, getActionCardsFull, getExpanses,
     getBudgetCategories, getBudgetDetails, updateProgram,
+    getToDoItems, updateToDoItem, deleteToDoItem, createToDoItem,
+    getToDoLists, getAllProjectActionCards
 } from '@/lib/api'
-import { type Program, type Project, type Status, type Partner, type Member, type FinancialAgreement, type ProjectMember, type ActionCardFull, type Expanse, type BudgetCategory, type BudgetDetail } from '@/lib/types'
+import { type Program, type Project, type Status, type Partner, type Member, type FinancialAgreement, type ProjectMember, type ActionCardFull, type Expanse, type BudgetCategory, type BudgetDetail, type ToDoItem, type ToDoList, type ProjectActionCard } from '@/lib/types'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, Briefcase, Building2, TrendingUp, Clock, Receipt, Pencil, Check, X, NetworkIcon, InfoIcon, LayoutPanelLeft, Users } from 'lucide-react'
+import { AlertTriangle, Briefcase, Building2, TrendingUp, Clock, Receipt, Pencil, Check, X, InfoIcon, LayoutPanelLeft, Users, Calendar, Filter } from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useCurrentUser } from '@/lib/userContext'
 import {ProjectViewerSheet, ActionCardViewerSheet} from '../components/viewers'
+import SearchInput from '@/components/SearchInput'
+import AttachmentPopover from '@/components/AttachmentPopover'
 import PartnerGraph from '../components/partnerGraphView'
 import MemberGraph from '../components/memberGraphView'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip'
@@ -16,11 +22,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { sumGrant } from '@/lib/utils'
 import CalendarHeatmap, { type ReactCalendarHeatmapValue } from 'react-calendar-heatmap'
 import 'react-calendar-heatmap/dist/styles.css'
+import { Checkbox } from '@/components/ui/checkbox'
+import {Input} from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from "../components/ui/dropdown-menu"
 import { Button } from "../components/ui/button"
 import {WIDGETS, WIDGET_IDS, type WidgetId} from '../lib/constants'
@@ -140,6 +149,509 @@ function ActionAlert({ card, daysLeft, onOpen }: {
     )
 }
 
+
+
+// --- Sous-composant : ligne d'un todo item ---
+
+function AddTodoRow({ onAdd }: { onAdd: (content: string) => void }) {
+    const [content, setContent] = useState('')
+
+    function submit(e: React.FormEvent) {
+        e.preventDefault()
+        const trimmed = content.trim()
+        if (!trimmed) return
+        setContent('')
+        onAdd(trimmed)
+    }
+
+    return (
+        <form onSubmit={submit} className="flex items-center gap-4 px-3 py-1.5 border-t">
+            <span className="w-4 shrink-0" />
+            <input
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                placeholder="Nouvelle tâche…"
+                className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+            />
+            <button
+                type="submit"
+                disabled={!content.trim()}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-30 transition-opacity"
+            >
+                <Check size={14} />
+            </button>
+        </form>
+    )
+}
+
+type TodoItemRowProps = {
+    item: ToDoItem
+    members: Member[]
+    lists: ToDoList[]
+    actions: ActionCardFull[]
+    actionToProjects: Map<number, Project[]>
+    onToggle: (item: ToDoItem) => void
+    onDelete: (item: ToDoItem) => void
+    onDueDateChange: (item: ToDoItem, due_date: string) => void
+    onContentChange: (item: ToDoItem, content: string) => void
+    onOwnerChange: (item: ToDoItem, ownerId: number | null) => void
+    onListChange: (item: ToDoItem, listId: number | null) => void
+    onListCreated: (list: ToDoList) => void
+}
+
+function TodoItemRow({ item, members, lists, actions, actionToProjects, onToggle, onDelete, onDueDateChange, onOwnerChange, onContentChange, onListChange, onListCreated }: TodoItemRowProps) {
+    const [editingDate,    setEditingDate]    = useState(false)
+    const [editingContent, setEditingContent] = useState(false)
+    const [editingOwner,   setEditingOwner]   = useState(false)
+    const [contentDraft,   setContentDraft]   = useState('')
+    const [confirmDelete,  setConfirmDelete]  = useState(false)
+    const done = item.status_id === 9
+    const today = new Date().toISOString().slice(0, 10)
+    const isOverdue = item.due_date && !done && item.due_date < today
+
+    function formatDate(iso: string) {
+        const [y, m, d] = iso.split('-')
+        return `${d}/${m}/${y}`
+    }
+
+    function startEditingContent(e: React.MouseEvent) {
+        e.preventDefault()
+        setContentDraft(item.content)
+        setEditingContent(true)
+    }
+
+    function commitContent() {
+        const trimmed = contentDraft.trim()
+        if (trimmed && trimmed !== item.content) onContentChange(item, trimmed)
+        setEditingContent(false)
+    }
+
+    const owner = item.owner_id != null ? members.find(m => m.id === item.owner_id) : null
+    const initials = owner ? `${owner.first_name[0]}${owner.last_name[0]}`.toUpperCase() : ''
+
+    const attachmentValue = (() => {
+        const list = lists.find(l => l.id === item.list_id)
+        const action = list ? actions.find(a => a.id === list.action_card_id) : null
+        if (!list || !action) return null
+        const projs = actionToProjects.get(action.id)
+        const projectTitle = projs?.length === 1 ? projs[0].title : null
+        return { projectTitle, actionTitle: action.title, listTitle: list.title }
+    })()
+
+    return (
+        <li className="flex items-center gap-4 px-3 py-2.5 rounded-lg hover:bg-muted/50 group border-b border-border/40 last:border-0">
+            {/* Checkbox */}
+            <Checkbox
+                checked={done}
+                onCheckedChange={() => onToggle(item)}
+                id={`todo-${item.id}`}
+                className="shrink-0"
+            />
+
+            {/* Tâche — flex-1 */}
+            {editingContent ? (
+                <input
+                    autoFocus
+                    value={contentDraft}
+                    onChange={e => setContentDraft(e.target.value)}
+                    onBlur={commitContent}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitContent() } if (e.key === 'Escape') setEditingContent(false) }}
+                    className="flex-1 min-w-0 text-sm bg-transparent border-b border-border outline-none"
+                />
+            ) : (
+                <label
+                    htmlFor={`todo-${item.id}`}
+                    onDoubleClick={startEditingContent}
+                    className={`flex-1 min-w-0 truncate text-sm cursor-pointer select-none ${done ? 'line-through text-muted-foreground' : 'font-medium'}`}
+                >
+                    {item.content}
+                </label>
+            )}
+
+            {/* Échéance — w-32 */}
+            <div className="w-32 shrink-0 flex items-center">
+                {item.due_date && !editingDate ? (
+                    <button
+                        onClick={e => { e.stopPropagation(); setEditingDate(true) }}
+                        className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors ${
+                            isOverdue
+                                ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
+                        }`}
+                    >
+                        {formatDate(item.due_date)}
+                    </button>
+                ) : editingDate ? (
+                    <input
+                        type="date"
+                        autoFocus
+                        value={item.due_date ?? ''}
+                        onChange={e => { onDueDateChange(item, e.target.value); setEditingDate(false) }}
+                        onBlur={() => setEditingDate(false)}
+                        onClick={e => e.stopPropagation()}
+                        className="text-xs w-32 border border-border rounded-md px-1.5 py-0.5 outline-none bg-background"
+                    />
+                ) : (
+                    <button
+                        onClick={e => { e.stopPropagation(); setEditingDate(true) }}
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                    >
+                        <Calendar size={12} />
+                    </button>
+                )}
+            </div>
+
+            {/* Rattachement — w-[480px] */}
+            <div className="w-[480px] shrink-0">
+                <AttachmentPopover
+                    actions={actions}
+                    lists={lists}
+                    value={attachmentValue}
+                    onSelect={listId => onListChange(item, listId)}
+                    onListCreated={onListCreated}
+                    actionToProjects={actionToProjects}
+                />
+            </div>
+
+            {/* Assigné — w-36 */}
+            <div className="w-36 shrink-0">
+                {owner && !editingOwner ? (
+                    <button
+                        onClick={() => setEditingOwner(true)}
+                        className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] bg-emerald-100 text-emerald-800 hover:bg-muted transition-colors"
+                    >
+                        <span className="w-5 h-5 rounded-full bg-emerald-700 text-white text-[9px] leading-none flex items-center justify-center font-bold shrink-0">
+                            {initials}
+                        </span>
+                        <span className="truncate">{owner.first_name} {owner.last_name}</span>
+                    </button>
+                ) : (
+                    <SearchInput
+                        data={members}
+                        onSelect={m => { onOwnerChange(item, m.id); setEditingOwner(false) }}
+                        getLabel={m => `${m.first_name} ${m.last_name}`}
+                        value={owner ? `${owner.first_name} ${owner.last_name}` : ''}
+                        placeholder="Assigner…"
+                        autoFocus={editingOwner}
+                        onClose={() => setEditingOwner(false)}
+                        portal
+                    />
+                )}
+            </div>
+
+            {/* Supprimer */}
+            {confirmDelete ? (
+                <button
+                    autoFocus
+                    onClick={() => { setConfirmDelete(false); onDelete(item) }}
+                    onBlur={() => setConfirmDelete(false)}
+                    className="shrink-0 text-[10px] font-medium text-destructive border border-destructive rounded px-1.5 py-0.5 hover:bg-destructive hover:text-white transition-colors"
+                >
+                    Confirmer
+                </button>
+            ) : (
+                <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                >
+                    <X size={12} />
+                </button>
+            )}
+        </li>
+    )
+}
+
+
+type MemberFilterProps = {
+    allMembers: Member[]
+    allPartners: Partner[]
+    selectedIds: number[]
+    onChangeIds: (ids: number[]) => void
+    taskCounts?: Map<number, number>
+}
+
+function MemberFilter({ allMembers, allPartners, selectedIds, onChangeIds, taskCounts }: MemberFilterProps) {
+    const [query, setQuery] = useState('')
+    const partnerMap = new Map(allPartners.map(p => [p.id, p]))
+
+    const filtered = query.trim() === ''
+        ? allMembers
+        : allMembers.filter(m =>
+            `${m.first_name} ${m.last_name}`.toLowerCase().includes(query.toLowerCase())
+        )
+
+    // Grouper par établissement
+    const groupMap = new Map<number, { partner: Partner; members: Member[] }>()
+    for (const m of filtered) {
+        const partner = partnerMap.get(m.partner_id)
+        if (!partner) continue
+        if (!groupMap.has(partner.id)) groupMap.set(partner.id, { partner, members: [] })
+        groupMap.get(partner.id)!.members.push(m)
+    }
+    const groups = Array.from(groupMap.values())
+
+    function toggle(id: number) {
+        onChangeIds(selectedIds.includes(id)
+            ? selectedIds.filter(i => i !== id)
+            : [...selectedIds, id]
+        )
+    }
+
+    function toggleGroup(members: Member[]) {
+        const ids = members.map(m => m.id)
+        const allChecked = ids.every(id => selectedIds.includes(id))
+        onChangeIds(allChecked
+            ? selectedIds.filter(id => !ids.includes(id))
+            : [...new Set([...selectedIds, ...ids])]
+        )
+    }
+
+    function groupState(members: Member[]): boolean | 'indeterminate' {
+        const count = members.filter(m => selectedIds.includes(m.id)).length
+        if (count === 0) return false
+        if (count === members.length) return true
+        return 'indeterminate'
+    }
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant={selectedIds.length > 0 ? 'default' : 'outline'}
+                    size="sm"
+                    className="gap-2 rounded-md"
+                >
+                    <Users size={14} />
+                    Membres
+                    {selectedIds.length > 0 && (
+                        <span className="text-xs opacity-75">{selectedIds.length}</span>
+                    )}
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-60">
+                <div className="px-2 py-1.5">
+                    <Input
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        onKeyDown={e => e.stopPropagation()}
+                        placeholder="Rechercher un membre..."
+                        className="h-7 text-xs"
+                    />
+                </div>
+                <DropdownMenuSeparator />
+                <div className="max-h-72 overflow-y-auto">
+                {groups.map((group, i) => {
+                    const state = groupState(group.members)
+                    return (
+                        <div key={group.partner.id}>
+                            {i > 0 && <DropdownMenuSeparator />}
+                            <DropdownMenuCheckboxItem
+                                checked={state === true}
+                                onCheckedChange={() => toggleGroup(group.members)}
+                                className="font-medium gap-2"
+                            >
+                                <span
+                                    className="w-2.5 h-2.5 rounded-full shrink-0 border border-border"
+                                    style={group.partner.color ? { backgroundColor: group.partner.color } : {}}
+                                />
+                                {group.partner.name}
+                            </DropdownMenuCheckboxItem>
+                            {group.members.map(m => (
+                                <DropdownMenuCheckboxItem
+                                    key={m.id}
+                                    checked={selectedIds.includes(m.id)}
+                                    onCheckedChange={() => toggle(m.id)}
+                                    className="pl-7"
+                                >
+                                    <span className="flex-1 truncate">{m.first_name} {m.last_name}</span>
+                                    {taskCounts?.get(m.id) != null && (
+                                        <span className="ml-2 shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                                            {taskCounts.get(m.id)}
+                                        </span>
+                                    )}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                        </div>
+                    )
+                })}
+                </div>
+                {selectedIds.length > 0 && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem checked={false} onCheckedChange={() => onChangeIds([])}>
+                            Tout effacer
+                        </DropdownMenuCheckboxItem>
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
+type StatusFilterValue = 'all' | 'todo' | 'done'
+function StatusFilter({ value, onChange }: { value: StatusFilterValue; onChange: (v: StatusFilterValue) => void }) {
+    const opts: { v: StatusFilterValue; label: string }[] = [
+        { v: 'all',  label: 'Tout' },
+        { v: 'todo', label: 'À faire' },
+        { v: 'done', label: 'Terminé' },
+    ]
+    return (
+        <div className="flex items-center rounded-md border border-border overflow-hidden text-[11px]">
+            {opts.map(o => (
+                <button
+                    key={o.v}
+                    onClick={() => onChange(o.v)}
+                    className={`px-2.5 py-1 transition-colors ${value === o.v ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}
+                >
+                    {o.label}
+                </button>
+            ))}
+        </div>
+    )
+}
+
+type ActionFilterProps = {
+    allActions: ActionCardFull[]
+    selectedIds: number[]
+    onChangeIds: (ids: number[]) => void
+    taskCounts?: Map<number, number>
+}
+function ActionFilter({ allActions, selectedIds, onChangeIds, taskCounts }: ActionFilterProps) {
+    const [query, setQuery] = useState('')
+    const filtered = query.trim() === ''
+        ? allActions
+        : allActions.filter(a => a.title.toLowerCase().includes(query.toLowerCase()))
+
+    function toggle(id: number) {
+        onChangeIds(selectedIds.includes(id)
+            ? selectedIds.filter(i => i !== id)
+            : [...selectedIds, id]
+        )
+    }
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant={selectedIds.length > 0 ? 'default' : 'outline'} size="sm" className="gap-2 rounded-md">
+                    <Filter size={14} />
+                    Actions
+                    {selectedIds.length > 0 && <span className="text-xs opacity-75">{selectedIds.length}</span>}
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+                <div className="px-2 py-1.5">
+                    <Input
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        onKeyDown={e => e.stopPropagation()}
+                        placeholder="Rechercher une action..."
+                        className="h-7 text-xs"
+                    />
+                </div>
+                <DropdownMenuSeparator />
+                <div className="max-h-72 overflow-y-auto">
+                    {filtered.length === 0 && (
+                        <div className="text-xs text-muted-foreground px-3 py-2">Aucune action</div>
+                    )}
+                    {filtered.map(a => (
+                        <DropdownMenuCheckboxItem
+                            key={a.id}
+                            checked={selectedIds.includes(a.id)}
+                            onCheckedChange={() => toggle(a.id)}
+                        >
+                            <span className="flex-1 truncate">{a.title}</span>
+                            {taskCounts?.get(a.id) != null && (
+                                <span className="ml-2 shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                                    {taskCounts.get(a.id)}
+                                </span>
+                            )}
+                        </DropdownMenuCheckboxItem>
+                    ))}
+                </div>
+                {selectedIds.length > 0 && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem checked={false} onCheckedChange={() => onChangeIds([])}>
+                            Tout effacer
+                        </DropdownMenuCheckboxItem>
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
+type ProjectFilterProps = {
+    allProjects: Project[]
+    selectedIds: number[]
+    onChangeIds: (ids: number[]) => void
+    taskCounts?: Map<number, number>
+}
+function ProjectFilter({ allProjects, selectedIds, onChangeIds, taskCounts }: ProjectFilterProps) {
+    const [query, setQuery] = useState('')
+    const filtered = query.trim() === ''
+        ? allProjects
+        : allProjects.filter(p => p.title.toLowerCase().includes(query.toLowerCase()))
+
+    function toggle(id: number) {
+        onChangeIds(selectedIds.includes(id)
+            ? selectedIds.filter(i => i !== id)
+            : [...selectedIds, id]
+        )
+    }
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant={selectedIds.length > 0 ? 'default' : 'outline'} size="sm" className="gap-2 rounded-md">
+                    <Briefcase size={14} />
+                    Projets
+                    {selectedIds.length > 0 && <span className="text-xs opacity-75">{selectedIds.length}</span>}
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+                <div className="px-2 py-1.5">
+                    <Input
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        onKeyDown={e => e.stopPropagation()}
+                        placeholder="Rechercher un projet..."
+                        className="h-7 text-xs"
+                    />
+                </div>
+                <DropdownMenuSeparator />
+                <div className="max-h-72 overflow-y-auto">
+                    {filtered.length === 0 && (
+                        <div className="text-xs text-muted-foreground px-3 py-2">Aucun projet</div>
+                    )}
+                    {filtered.map(p => (
+                        <DropdownMenuCheckboxItem
+                            key={p.id}
+                            checked={selectedIds.includes(p.id)}
+                            onCheckedChange={() => toggle(p.id)}
+                        >
+                            <span className="flex-1 truncate">{p.title}</span>
+                            {taskCounts?.get(p.id) != null && (
+                                <span className="ml-2 shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                                    {taskCounts.get(p.id)}
+                                </span>
+                            )}
+                        </DropdownMenuCheckboxItem>
+                    ))}
+                </div>
+                {selectedIds.length > 0 && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem checked={false} onCheckedChange={() => onChangeIds([])}>
+                            Tout effacer
+                        </DropdownMenuCheckboxItem>
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
 // --- Vue principale ---
 
 export default function Dashboard() {
@@ -164,7 +676,16 @@ export default function Dashboard() {
     const [budgetDetails,     setBudgetDetails]     = useState<BudgetDetail[]>([])
     const [editingFeeRate,    setEditingFeeRate]    = useState(false)
     const [feeRateDraft,      setFeeRateDraft]      = useState('')
+    const [toDoItems,       setToDoItems]   = useState<ToDoItem[]>([])
+    const [todoLists, setTodoLists] = useState<ToDoList[]>([])
     const [heatYear, setHeatYear] = useState(currentYear)
+    const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([])
+    const [selectedActionIds, setSelectedActionIds] = useState<number[]>([])
+    const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>([])
+    const [selectedStatusFilter, setSelectedStatusFilter] = useState<StatusFilterValue>('all')
+    const [myTasksOnly, setMyTasksOnly] = useState(false)
+    const [projectActionCards, setProjectActionCards] = useState<ProjectActionCard[]>([])
+    const currentUser = useCurrentUser()
 
     async function saveFeeRate() {
         if (!program) return
@@ -187,10 +708,15 @@ export default function Dashboard() {
             getExpanses(),
             getBudgetCategories(),
             getBudgetDetails(),
-        ]).then(([prog, proj, stat, part, memb, agr, pm, ac, exp, cats, details]) => {
+            getToDoItems(),
+            getToDoLists(),
+            getAllProjectActionCards(),
+        ]).then(([prog, proj, stat, part, memb, agr, pm, ac, exp, cats, details, todos, todolists, pacs]) => {
             const program = (prog as Program[])[0] ?? null
+           
             setProgram(program)
-            setWidgets(program?.widgets_preference ?? WIDGET_IDS)
+            const pref = program?.widgets_preference ?? WIDGET_IDS
+            setWidgets([...pref, ...WIDGET_IDS.filter(id => !pref.includes(id))])
             setProjects(proj as Project[])
             setStatuses(stat as Status[])
             setPartners(part as Partner[])
@@ -201,8 +727,84 @@ export default function Dashboard() {
             setExpanses(exp as Expanse[])
             setBudgetCategories(cats as BudgetCategory[])
             setBudgetDetails(details as BudgetDetail[])
+            setToDoItems(todos as ToDoItem[])
+            setTodoLists(todolists as ToDoList[])
+            setProjectActionCards(pacs as ProjectActionCard[])
         }).finally(() => setLoading(false))
     }, [])
+
+
+    const actionToProjects = useMemo(() => {
+        const m = new Map<number, Project[]>()
+        for (const pac of projectActionCards) {
+            const project = projects.find(p => p.id === pac.project_id)
+            if (!project) continue
+            const list = m.get(pac.action_card_id) ?? []
+            list.push(project)
+            m.set(pac.action_card_id, list)
+        }
+        return m
+    }, [projectActionCards, projects])
+
+    const taskCountByAction = useMemo(() => {
+        const m = new Map<number, number>()
+        for (const item of toDoItems) {
+            if (item.list_id == null) continue
+            const list = todoLists.find(l => l.id === item.list_id)
+            if (!list) continue
+            m.set(list.action_card_id, (m.get(list.action_card_id) ?? 0) + 1)
+        }
+        return m
+    }, [toDoItems, todoLists])
+
+    const taskCountByProject = useMemo(() => {
+        const m = new Map<number, number>()
+        for (const item of toDoItems) {
+            if (item.list_id == null) continue
+            const list = todoLists.find(l => l.id === item.list_id)
+            if (!list) continue
+            for (const pac of projectActionCards) {
+                if (pac.action_card_id === list.action_card_id)
+                    m.set(pac.project_id, (m.get(pac.project_id) ?? 0) + 1)
+            }
+        }
+        return m
+    }, [toDoItems, todoLists, projectActionCards])
+
+    const taskCountByMember = useMemo(() => {
+        const m = new Map<number, number>()
+        for (const item of toDoItems) {
+            if (item.owner_id == null) continue
+            m.set(item.owner_id, (m.get(item.owner_id) ?? 0) + 1)
+        }
+        return m
+    }, [toDoItems])
+
+    const filteredItems = useMemo(() => {
+        return toDoItems.filter(item => {
+            if (selectedStatusFilter === 'todo' && item.status_id === 9) return false
+            if (selectedStatusFilter === 'done' && item.status_id !== 9) return false
+            if (myTasksOnly && currentUser) {
+                if (item.owner_id !== currentUser.id) return false
+            }
+            if (selectedMemberIds.length > 0) {
+                if (!item.owner_id || !selectedMemberIds.includes(item.owner_id)) return false
+            }
+            if (selectedActionIds.length > 0) {
+                const list = todoLists.find(l => l.id === item.list_id)
+                if (!list || !selectedActionIds.includes(list.action_card_id)) return false
+            }
+            if (selectedProjectIds.length > 0) {
+                const list = todoLists.find(l => l.id === item.list_id)
+                if (!list) return false
+                const projIds = projectActionCards
+                    .filter(pac => pac.action_card_id === list.action_card_id)
+                    .map(pac => pac.project_id)
+                if (!projIds.some(id => selectedProjectIds.includes(id))) return false
+            }
+            return true
+        })
+    }, [toDoItems, selectedMemberIds, selectedStatusFilter, selectedActionIds, selectedProjectIds, todoLists, projectActionCards, myTasksOnly, currentUser])
 
     if (loading) {
         return (
@@ -285,6 +887,55 @@ export default function Dashboard() {
             count,
         }))
     })()
+
+    // --- Todos ---
+
+        function toggleTodo(item: ToDoItem) {
+            const newStatusId = item.status_id === 9 ? 8 : 9
+            updateToDoItem(item.id, { status_id: newStatusId })
+            setToDoItems(prev => prev.map(td =>
+                td.id !== item.id ? td : { ...td, status_id: newStatusId }
+            ))
+        }
+    
+        function deleteTodoItem(item: ToDoItem) {
+            deleteToDoItem(item.id)
+            setToDoItems(prev => prev.filter(i => i.id !== item.id))
+        }
+    
+        function updateDueDate(item: ToDoItem, due_date: string) {
+            updateToDoItem(item.id, { due_date })
+            setToDoItems(prev => prev.map(td =>
+                td.id !== item.id ? td : { ...td, due_date }
+            ))
+        }
+
+        function updateTodoContent(item: ToDoItem, content: string) {
+            updateToDoItem(item.id, { content })
+            setToDoItems(prev => prev.map(td =>
+                td.id !== item.id ? td : { ...td, content }
+            ))
+        }
+    
+        function updateTodoOwner(item: ToDoItem, owner_id: number | null) {
+            updateToDoItem(item.id, { owner_id })
+            setToDoItems(prev => prev.map(td =>
+                td.id !== item.id ? td : { ...td, owner_id: owner_id }
+            ))
+        }
+    
+        async function addTodoItem(content: string) {
+            if (!content.trim()) return
+            const newItem = await createToDoItem(content.trim())
+            setToDoItems(prev => [...prev, newItem])
+        }
+
+        function updateTodoList(item: ToDoItem, listId: number | null) {
+            updateToDoItem(item.id, { list_id: listId })
+            setToDoItems(prev => prev.map(td =>
+                td.id !== item.id ? td : { ...td, list_id: listId }
+            ))
+        }
 
 
 
@@ -416,6 +1067,7 @@ export default function Dashboard() {
         </div>
             
         <div className="m-5 flex flex-col gap-6 pb-10">
+
             {/* ── En-tête Programme ── */}
             {widgets.includes('header') && program && (
                
@@ -559,7 +1211,92 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* ── Graphiques ── */}
+            {widgets.includes('todos') && (
+            <div className="rounded-xl border bg-card overflow-hidden">
+                {/* Barre de filtres */}
+                <div className="flex items-center gap-2 px-3 py-2 border-b">
+                    <StatusFilter value={selectedStatusFilter} onChange={setSelectedStatusFilter} />
+                    <ActionFilter
+                        allActions={actionCards}
+                        selectedIds={selectedActionIds}
+                        onChangeIds={setSelectedActionIds}
+                        taskCounts={taskCountByAction}
+                    />
+                    <ProjectFilter
+                        allProjects={projects}
+                        selectedIds={selectedProjectIds}
+                        onChangeIds={setSelectedProjectIds}
+                        taskCounts={taskCountByProject}
+                    />
+                    <MemberFilter
+                        allMembers={members}
+                        allPartners={partners}
+                        selectedIds={selectedMemberIds}
+                        onChangeIds={setSelectedMemberIds}
+                        taskCounts={taskCountByMember}
+                    />
+                    {currentUser && (
+                        <Button
+                            variant={myTasksOnly ? 'default' : 'outline'}
+                            size="sm"
+                            className="gap-1.5 rounded-md"
+                            onClick={() => setMyTasksOnly(v => !v)}
+                        >
+                            <Avatar className="h-5 w-5 shrink-0">
+                                <AvatarImage src={currentUser.profile_image} />
+                                <AvatarFallback className="text-[10px]" style={{ backgroundColor: currentUser.partner?.color ?? '#E7E8E2' }}>
+                                    {currentUser.first_name[0]}{currentUser.last_name[0]}
+                                </AvatarFallback>
+                            </Avatar>
+                            Mes tâches
+                        </Button>
+                    )}
+                    <span className="ml-auto text-xs text-muted-foreground tabular-nums shrink-0">
+                        {filteredItems.length !== toDoItems.length
+                            ? `${filteredItems.length} / ${toDoItems.length}`
+                            : filteredItems.length}{' '}
+                        tâche{filteredItems.length !== 1 ? 's' : ''}
+                    </span>
+                </div>
+                {/* En-tête colonnes */}
+                <div className="flex items-center gap-4 px-3 py-1.5 border-b text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="w-4 shrink-0" />
+                    <div className="flex-1 min-w-0">Tâche</div>
+                    <div className="w-32 shrink-0">Échéance</div>
+                    <div className="w-[480px] shrink-0">Rattachement</div>
+                    <div className="w-36 shrink-0">Assigné à</div>
+                    <div className="w-4 shrink-0" />
+                </div>
+                <ul className="flex flex-col gap-0.5 p-1">
+                    {filteredItems.slice().sort((a, b) => {
+                        if (!a.due_date && !b.due_date) return 0
+                        if (!a.due_date) return 1
+                        if (!b.due_date) return -1
+                        return a.due_date.localeCompare(b.due_date)
+                    }).map(item => (
+                        <TodoItemRow
+                            key={item.id}
+                            members={members}
+                            lists={todoLists}
+                            actions={actionCards}
+                            actionToProjects={actionToProjects}
+                            item={item}
+                            onToggle={item => toggleTodo(item)}
+                            onDelete={item => deleteTodoItem(item)}
+                            onDueDateChange={(item, due_date) => updateDueDate(item, due_date)}
+                            onContentChange={(item, content) => updateTodoContent(item, content)}
+                            onOwnerChange={(item, ownerId) => updateTodoOwner(item, ownerId)}
+                            onListChange={(item, listId) => updateTodoList(item, listId)}
+                            onListCreated={list => setTodoLists(prev => prev.some(l => l.id === list.id) ? prev : [...prev, list])}
+                        />
+                    ))}
+                </ul>
+                {/* Ligne d'ajout */}
+                <AddTodoRow onAdd={addTodoItem} />
+            </div>
+            )}
+
+            {/* ── Finances ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
                 {/* ── Courbe cumulative des dépenses ── */}
                  {widgets.includes('expanses') && expanses.length > 0 && (() => {
@@ -595,7 +1332,7 @@ export default function Dashboard() {
                         const yTicks = [0, 0.5, 1].map(f => ({ value: maxCum * f, y: yOf(maxCum * f) }))
 
                         return (
-                            <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
+                            <div className="lg:col-span-2 flex flex-col gap-3 p-5 rounded-xl border bg-card">
                                 <div className="flex items-center justify-between">
                                     <p className="text-sm font-medium">Progression cumulée des dépenses</p>
                                     <span className="text-xs text-muted-foreground tabular-nums">Total : {fmt(maxCum)}</span>
@@ -725,9 +1462,12 @@ export default function Dashboard() {
                         }
                     </div>
                 )}
+            </div>
 
+            {/* ── Calendrier & Partenaires ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
                 {widgets.includes('heat_map') && (
-                    <div className="flex flex-col gap-3 p-5 rounded-xl border bg-card">
+                    <div className="lg:col-span-2 flex flex-col gap-3 p-5 rounded-xl border bg-card">
                         <style>{`
                             .react-calendar-heatmap .color-empty    { fill: #f5f3ff; }
                             .react-calendar-heatmap .color-scale-1  { fill: #ede9fe; }
@@ -823,59 +1563,33 @@ export default function Dashboard() {
                     }
                     </div>
 
-            {/* ── Graphes de relations ── */}
-            {widgets.includes('partner_graph') && (
-            <div className="flex flex-col gap-4">
-                
-                <p className="text-sm font-medium flex items-center gap-2">
-                    <NetworkIcon size={15} />
-                    Graph
-                </p>
-                <div className="flex flex-row gap-4">
-                    <div className="rounded-xl border bg-card p-5 flex-1 min-w-0">
-                        <div className='flex justify-between items-center mb-3'>
-                            <div>
-                                <p className="text-sm font-medium item-center">Réseau partenaires - {partners.length}</p>
-                            </div>
-
-                            <div>
-                                <Tooltip>
-                                    <TooltipTrigger>
-                                        <InfoIcon size={13}/>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        Modélise les relations entre partenaires en fonction des projets sur lesquels ils coopèrent. 
-                                    </TooltipContent>
-                                </Tooltip>
-                            </div>
-                        </div>
-                        <PartnerGraph />
+            {(widgets.includes('partner_graph') || widgets.includes('member_graph')) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {widgets.includes('partner_graph') && (
+                <div className="rounded-xl border bg-card p-5">
+                    <div className="flex justify-between items-center mb-3">
+                        <p className="text-sm font-medium">Réseau partenaires - {partners.length}</p>
+                        <Tooltip>
+                            <TooltipTrigger><InfoIcon size={13}/></TooltipTrigger>
+                            <TooltipContent>Modélise les relations entre partenaires en fonction des projets sur lesquels ils coopèrent.</TooltipContent>
+                        </Tooltip>
                     </div>
+                    <PartnerGraph />
                 </div>
-            </div>  
-            )}
-            {widgets.includes('member_graph') && (
-            <div className="flex flex-col gap-4">
-                
-                <p className="text-sm font-medium flex items-center gap-2">
-                    <NetworkIcon size={15} />
-                    Graph
-                </p>
-                 <div className="rounded-xl border bg-card p-5 flex-1 min-w-0">
-                        <div className='flex justify-between items-center mb-3'>
-                             <p className="text-sm font-medium">Réseau membres - {members.length}</p>
-                             <Tooltip>
-                                <TooltipTrigger>
-                                    <InfoIcon size={13}/>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    Modélise les relations entre membres en fonction des projets sur lesquels ils coopèrent. 
-                                </TooltipContent>
-                            </Tooltip>
-                        </div>
-                        <MemberGraph />
+                )}
+                {widgets.includes('member_graph') && (
+                <div className="rounded-xl border bg-card p-5">
+                    <div className="flex justify-between items-center mb-3">
+                        <p className="text-sm font-medium">Réseau membres - {members.length}</p>
+                        <Tooltip>
+                            <TooltipTrigger><InfoIcon size={13}/></TooltipTrigger>
+                            <TooltipContent>Modélise les relations entre membres en fonction des projets sur lesquels ils coopèrent.</TooltipContent>
+                        </Tooltip>
                     </div>
-            </div>  
+                    <MemberGraph />
+                </div>
+                )}
+            </div>
             )}
                 
             {widgets.includes('team') && staffWithProjects.length > 0 && (

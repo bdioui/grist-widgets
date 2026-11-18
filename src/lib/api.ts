@@ -513,7 +513,7 @@ export async function getBudgetDetails(): Promise<BudgetDetail[]> { return USE_M
 // --- To-do ---
 
 export async function getToDoLists(): Promise<ToDoList[]> { return USE_MOCK ? mockToDoLists : normalizeToDoLists(await fetchTable(T.to_do_list)) }
-export async function getToDoItems(): Promise<ToDoItem[]> { return USE_MOCK ? mockToDoItems : normalizeToDoItems(await fetchTable(T.to_do_item)) }
+export async function getToDoItems(): Promise<ToDoItem[]> { return USE_MOCK ? [...mockToDoItems] : normalizeToDoItems(await fetchTable(T.to_do_item)) }
 
 // --- Liens globaux (pour les filtres du kanban) ---
 
@@ -665,7 +665,16 @@ export async function getToDoListsWithItemsByCard(cardId: number): Promise<(ToDo
 
 // --- Mutations sur les éléments d'une ActionCard ---
 
-export async function updateToDoItem(id: number, patch: Partial<Pick<ToDoItem, 'content' | 'status_id' | 'start_date' | 'end_time' | 'due_date' | 'owner_id'>>): Promise<void> {
+export async function deleteToDoItem(id: number): Promise<void> {
+    if (USE_MOCK) {
+        const i = mockToDoItems.findIndex(item => item.id === id)
+        if (i !== -1) mockToDoItems.splice(i, 1)
+        return
+    }
+    await deleteRecord(T.to_do_item, id)
+}
+
+export async function updateToDoItem(id: number, patch: Partial<Pick<ToDoItem, 'content' | 'status_id' | 'start_date' | 'end_time' | 'due_date' | 'owner_id' | 'list_id'>>): Promise<void> {
     if (USE_MOCK) {
         const item = mockToDoItems.find(i => i.id === id)
         if (item) Object.assign(item, patch)
@@ -675,7 +684,18 @@ export async function updateToDoItem(id: number, patch: Partial<Pick<ToDoItem, '
     await updateRecord(T.to_do_item, id, fields)
 }
 
-export async function addToDoItemToList(listId: number, content: string, due_date = '', ownerId: number | null): Promise<ToDoItem> {
+export async function createToDoItem(content: string): Promise<ToDoItem> {
+    if (USE_MOCK) {
+        const id = Math.max(0, ...mockToDoItems.map(i => i.id)) + 1
+        const item: ToDoItem = { id, list_id: null, content, status_id: 8, start_date: '', end_time: '', due_date: '', owner_id: null }
+        mockToDoItems.push(item)
+        return item
+    }
+    const id = await addRecord(T.to_do_item, { content, status_id: 8, list_id: 0, owner_id: 0 })
+    return { id, list_id: null, content, status_id: 8, start_date: '', end_time: '', due_date: '', owner_id: null }
+}
+
+export async function addToDoItemToList(listId: number, content: string, due_date = '', ownerId: number | null = null): Promise<ToDoItem> {
     if (USE_MOCK) {
         const newId = Math.max(0, ...mockToDoItems.map(i => i.id)) + 1
         const item: ToDoItem = { id: newId, list_id: listId, content, status_id: 8, start_date: '', end_time: '', due_date, owner_id: ownerId }

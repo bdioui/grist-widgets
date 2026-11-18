@@ -1,5 +1,5 @@
 import type { Partner } from './types'
-import { LayoutDashboard, Gauge, Wallet, PieChart, CalendarDays, Handshake, Network, Users, Bell } from 'lucide-react'
+import { LayoutDashboard, Gauge, Wallet, PieChart, CalendarDays, Handshake, Network, Users, Bell, CheckSquare } from 'lucide-react'
 
 export const PARTNER_TYPES = [
     'Université et grandes écoles', 'Entreprise privée', 'Association',
@@ -48,6 +48,7 @@ export const PALETTE = [
 export const WIDGETS = {
     header: { label: 'En-tête', icon: LayoutDashboard },
     kpis: { label: 'Indicateurs', icon: Gauge },
+    todos: { label: 'Tâches', icon: CheckSquare },
     expanses: { label: 'Dépenses', icon: Wallet },
     budget: { label: 'Budget', icon: PieChart },
     heat_map: { label: 'Calendrier', icon: CalendarDays },

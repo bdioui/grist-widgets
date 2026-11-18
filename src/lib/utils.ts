@@ -181,7 +181,7 @@ export function participantsByCard(memberLinks: MemberActionCard[], lists: ToDoL
 
     for (const i of items) {
         if (i.owner_id === null) continue
-        const cardId = listToCard.get(i.list_id)
+        const cardId = i.list_id != null ? listToCard.get(i.list_id) : undefined
         if (!cardId) continue
         const participantList = participantByCard.get(cardId) ?? new Set<number>()
         participantList.add(i.owner_id)

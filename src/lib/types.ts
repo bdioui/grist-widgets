@@ -290,7 +290,7 @@ export type ToDoList = {
 
 export type ToDoItem = {
     id: number
-    list_id: number
+    list_id: number | null
     content: string
     status_id: number
     start_date?: string
