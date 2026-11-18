@@ -95,7 +95,7 @@ export default function AttachmentPopover({ actions, lists, value, onSelect, onL
                     <button className="flex items-center gap-0.5 w-full overflow-hidden rounded-full bg-violet-100 hover:bg-violet-200 transition-colors px-1 py-0.5 text-[11px]">
                         {value.projectTitle && (
                             <>
-                                <span className="shrink-0 px-1.5 text-violet-400 font-normal truncate max-w-[150px]">{value.projectTitle}</span>
+                                <span className="flex-1 min-w-0 px-1.5 text-violet-400 font-normal truncate">{value.projectTitle}</span>
                                 <ChevronRight size={9} className="shrink-0 text-violet-300" />
                             </>
                         )}

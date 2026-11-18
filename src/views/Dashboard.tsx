@@ -184,12 +184,15 @@ function AddTodoRow({ onAdd }: { onAdd: (content: string) => void }) {
     )
 }
 
+type ColWidths = { date: number; rattachement: number; owner: number }
+
 type TodoItemRowProps = {
     item: ToDoItem
     members: Member[]
     lists: ToDoList[]
     actions: ActionCardFull[]
     actionToProjects: Map<number, Project[]>
+    colWidths: ColWidths
     onToggle: (item: ToDoItem) => void
     onDelete: (item: ToDoItem) => void
     onDueDateChange: (item: ToDoItem, due_date: string) => void
@@ -199,7 +202,7 @@ type TodoItemRowProps = {
     onListCreated: (list: ToDoList) => void
 }
 
-function TodoItemRow({ item, members, lists, actions, actionToProjects, onToggle, onDelete, onDueDateChange, onOwnerChange, onContentChange, onListChange, onListCreated }: TodoItemRowProps) {
+function TodoItemRow({ item, members, lists, actions, actionToProjects, colWidths, onToggle, onDelete, onDueDateChange, onOwnerChange, onContentChange, onListChange, onListCreated }: TodoItemRowProps) {
     const [editingDate,    setEditingDate]    = useState(false)
     const [editingContent, setEditingContent] = useState(false)
     const [editingOwner,   setEditingOwner]   = useState(false)
@@ -268,8 +271,8 @@ function TodoItemRow({ item, members, lists, actions, actionToProjects, onToggle
                 </label>
             )}
 
-            {/* Échéance — w-32 */}
-            <div className="w-32 shrink-0 flex items-center">
+            {/* Échéance */}
+            <div style={{ width: colWidths.date }} className="shrink-0 flex items-center">
                 {item.due_date && !editingDate ? (
                     <button
                         onClick={e => { e.stopPropagation(); setEditingDate(true) }}
@@ -301,8 +304,8 @@ function TodoItemRow({ item, members, lists, actions, actionToProjects, onToggle
                 )}
             </div>
 
-            {/* Rattachement — w-[480px] */}
-            <div className="w-[480px] shrink-0">
+            {/* Rattachement */}
+            <div style={{ width: colWidths.rattachement }} className="shrink-0">
                 <AttachmentPopover
                     actions={actions}
                     lists={lists}
@@ -313,8 +316,8 @@ function TodoItemRow({ item, members, lists, actions, actionToProjects, onToggle
                 />
             </div>
 
-            {/* Assigné — w-36 */}
-            <div className="w-36 shrink-0">
+            {/* Assigné */}
+            <div style={{ width: colWidths.owner }} className="shrink-0">
                 {owner && !editingOwner ? (
                     <button
                         onClick={() => setEditingOwner(true)}
@@ -685,7 +688,25 @@ export default function Dashboard() {
     const [selectedStatusFilter, setSelectedStatusFilter] = useState<StatusFilterValue>('all')
     const [myTasksOnly, setMyTasksOnly] = useState(false)
     const [projectActionCards, setProjectActionCards] = useState<ProjectActionCard[]>([])
+    const [colWidths, setColWidths] = useState<ColWidths>({ date: 128, rattachement: 480, owner: 144 })
     const currentUser = useCurrentUser()
+
+    function startResize(col: keyof ColWidths, dir: 'left' | 'right', e: React.MouseEvent) {
+        e.preventDefault()
+        const startX = e.clientX
+        const startW = colWidths[col]
+        function onMove(ev: MouseEvent) {
+            const delta = ev.clientX - startX
+            const newW = dir === 'right' ? startW + delta : startW - delta
+            setColWidths(prev => ({ ...prev, [col]: Math.max(80, newW) }))
+        }
+        function onUp() {
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('mouseup', onUp)
+        }
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('mouseup', onUp)
+    }
 
     async function saveFeeRate() {
         if (!program) return
@@ -1259,12 +1280,25 @@ export default function Dashboard() {
                     </span>
                 </div>
                 {/* En-tête colonnes */}
-                <div className="flex items-center gap-4 px-3 py-1.5 border-b text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <div className="flex items-center gap-4 px-3 py-1.5 border-b text-[10px] font-medium uppercase tracking-wide text-muted-foreground select-none">
                     <div className="w-4 shrink-0" />
                     <div className="flex-1 min-w-0">Tâche</div>
-                    <div className="w-32 shrink-0">Échéance</div>
-                    <div className="w-[480px] shrink-0">Rattachement</div>
-                    <div className="w-36 shrink-0">Assigné à</div>
+                    {(['date', 'rattachement', 'owner'] as const).map(col => (
+                        <div key={col} style={{ width: colWidths[col] }} className="shrink-0 relative group/col flex items-center gap-2">
+                            <div
+                                onMouseDown={e => startResize(col, 'left', e)}
+                                className="shrink-0 cursor-col-resize flex flex-col gap-[3px] py-0.5"
+                            >
+                                {[0,1,2].map(i => (
+                                    <div key={i} className="flex gap-[3px]">
+                                        <div className="w-[3px] h-[3px] rounded-full bg-border group-hover/col:bg-muted-foreground/50 transition-colors" />
+                                        <div className="w-[3px] h-[3px] rounded-full bg-border group-hover/col:bg-muted-foreground/50 transition-colors" />
+                                    </div>
+                                ))}
+                            </div>
+                            {{ date: 'Échéance', rattachement: 'Rattachement', owner: 'Assigné à' }[col]}
+                        </div>
+                    ))}
                     <div className="w-4 shrink-0" />
                 </div>
                 <ul className="flex flex-col gap-0.5 p-1 max-h-[480px] overflow-y-auto">
@@ -1280,6 +1314,7 @@ export default function Dashboard() {
                             lists={todoLists}
                             actions={actionCards}
                             actionToProjects={actionToProjects}
+                            colWidths={colWidths}
                             item={item}
                             onToggle={item => toggleTodo(item)}
                             onDelete={item => deleteTodoItem(item)}
