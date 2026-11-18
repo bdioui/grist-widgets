@@ -1267,7 +1267,7 @@ export default function Dashboard() {
                     <div className="w-36 shrink-0">Assigné à</div>
                     <div className="w-4 shrink-0" />
                 </div>
-                <ul className="flex flex-col gap-0.5 p-1">
+                <ul className="flex flex-col gap-0.5 p-1 max-h-[480px] overflow-y-auto">
                     {filteredItems.slice().sort((a, b) => {
                         if (!a.due_date && !b.due_date) return 0
                         if (!a.due_date) return 1
